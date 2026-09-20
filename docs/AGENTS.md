@@ -1,8 +1,9 @@
-# Documentation instructions
+# 文档规则
 
-- `architecture.md` describes the current architecture and dependency direction.
-- `decisions/` records accepted architecture decisions. Do not rewrite an accepted decision; add a successor that marks it superseded.
-- Decision records state context, decision, consequences, and rejected alternatives without conversation history.
-- Update documentation in the same change as the behavior it describes.
-- Keep prose focused on behavior, ownership, failure, timing, and replacement seams.
-- Run `pnpm run gate:docs` after documentation changes.
+- `architecture.md` 描述当前架构与依赖方向。
+- `decisions/` 记录已经接受的架构决定。不得改写已接受的决定；新增后继决定并标记被取代关系。
+- 决定记录包含背景、决策、后果和放弃的方案，不保留对话过程。
+- 行为变更必须同时更新文档。
+- 文档聚焦行为、所有权、失败、时序与替换接缝。
+- 解释性内容使用中文；代码标识符、包名、协议字段和必要错误码保留英文。
+- 修改文档后运行 `pnpm run gate:docs`。

@@ -27,6 +27,9 @@ const forbidden = {
 const failures = []
 for (const [owner, manifest] of manifests) {
   if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`)
+  if (manifest.name !== `@agent-harness/${owner}`) {
+    failures.push(`${owner}: package name must be @agent-harness/${owner}`)
+  }
   const dependencies = {
     ...manifest.dependencies,
     ...manifest.peerDependencies,
@@ -34,6 +37,9 @@ for (const [owner, manifest] of manifests) {
   for (const dependency of Object.keys(dependencies)) {
     const match = /^@agent-harness\/(.+)$/.exec(dependency)
     if (match === null) continue
+    if (!manifests.some(([name]) => name === match[1])) {
+      failures.push(`${owner}: unknown workspace dependency ${dependency}`)
+    }
     if (forbidden[owner]?.has(match[1])) {
       failures.push(`${owner}: forbidden dependency on ${match[1]}`)
     }
@@ -44,5 +50,5 @@ if (failures.length > 0) {
   process.stderr.write(`${failures.join('\n')}\n`)
   process.exitCode = 1
 } else {
-  process.stdout.write(`architecture gate passed for ${manifests.length} packages\n`)
+  process.stdout.write(`架构 gate 已通过，共检查 ${manifests.length} 个 package\n`)
 }

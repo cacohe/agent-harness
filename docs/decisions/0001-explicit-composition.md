@@ -1,23 +1,23 @@
-# ADR 0001: Explicit composition without a general plugin context
+# ADR 0001：不使用通用插件上下文的显式组合
 
-Status: accepted
+状态：已接受
 
-## Context
+## 背景
 
-The project needs replaceable model, tool, session, prompt, and host components while remaining small enough to study. A general plugin context would combine dependency discovery, event routing, configuration, lifecycle, and scoping before the agent loop itself is understood.
+项目需要可替换的模型、工具、会话、prompt 和 host 组件，同时必须足够精简，便于学习。通用插件上下文会在理解 Agent loop 本身之前就把依赖发现、事件路由、配置、生命周期和 scope 混合起来。
 
-## Decision
+## 决策
 
-Use typed capability interfaces and explicit constructor injection. Compose the complete runtime in `packages/runtime` or a host. Registries are immutable after startup in the initial implementation. Resource-owning components use explicit `start` and `stop` methods, with reverse-order cleanup after partial startup failure.
+使用类型化 capability 接口和显式构造函数注入。在 `packages/runtime` 或 host 中组合完整运行时。初始实现中的 registry 在启动后不可变。拥有资源的组件使用显式 `start` 和 `stop` 方法；部分启动失败时按相反顺序清理。
 
-Use small, purpose-specific mechanisms: registries for keyed providers, around-middleware for operations that may be replaced or rejected, and failure-isolated observers for notifications.
+使用小而专用的机制：registry 负责按 key 选择 provider，around middleware 负责可能被替换或拒绝的操作，失败隔离的 observer 负责通知。
 
-## Consequences
+## 后果
 
-Dependencies remain visible and ordinary TypeScript tests can construct every component. Runtime replacement requires building another composition rather than patching a live plugin tree. Hot reload and arbitrary plugin unloading are outside the initial scope. If future requirements demonstrate a need for dynamic composition, a later decision may add it without changing domain events or capability interfaces.
+依赖保持可见，普通 TypeScript 测试可以构造所有组件。替换运行时需要构造另一套组合，而不是修改正在运行的插件树。初始范围不包含热重载和任意插件卸载。若未来需求证明确实需要动态组合，可以在不改变领域事件或 capability 接口的前提下新增后续决定。
 
-## Rejected alternatives
+## 放弃的方案
 
-- Forking Cordis would shift the project toward framework maintenance before the agent lifecycle is implemented.
-- A global service locator would hide dependencies and make scoped tests harder to construct.
-- Direct imports of concrete adapters would make replacement require edits to core packages.
+- Fork Cordis 会让项目在实现 Agent 生命周期前转向框架维护。
+- 全局服务定位器会隐藏依赖，使 scope 测试更难构造。
+- 直接导入具体 adapter 会要求每次替换都修改 core package。
