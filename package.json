@@ -1,0 +1,23 @@
+{
+  "name": "agent-harness-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check": "pnpm run gate:architecture && pnpm run gate:docs && pnpm run typecheck && pnpm run test",
+    "gate:architecture": "node scripts/verify-architecture.mjs",
+    "gate:docs": "node scripts/verify-docs.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
