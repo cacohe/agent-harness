@@ -694,10 +694,10 @@ function parseToolResult(value: unknown): ToolResult {
   } else if (value.status === 'failure') {
     assertExactObject(value, ['status', 'callId', 'error'], 'tool result')
     parseSerializedError(value.error)
-  } else if (value.status === 'cancelled') {
+  } else if (value.status === 'cancelled' || value.status === 'unknown') {
     assertExactObject(value, ['status', 'callId', 'reason'], 'tool result')
     if (typeof value.reason !== 'string') {
-      throw new SessionCorruptionError('取消原因必须是字符串')
+      throw new SessionCorruptionError('工具结果原因必须是字符串')
     }
   } else {
     throw new SessionCorruptionError('未知工具结果状态')
@@ -755,7 +755,12 @@ function assertId(value: unknown, label: string): asserts value is string {
 }
 
 function assertOutcome(value: unknown): void {
-  if (value !== 'completed' && value !== 'failed' && value !== 'cancelled') {
+  if (
+    value !== 'completed'
+    && value !== 'failed'
+    && value !== 'cancelled'
+    && value !== 'interrupted'
+  ) {
     throw new SessionCorruptionError('生命周期 outcome 无效')
   }
 }

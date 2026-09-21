@@ -55,18 +55,50 @@ export interface AgentOptions {
   readonly maxSteps: number
   readonly settlementSignals: SettlementSignalFactory
   readonly observers?: readonly AgentObserver[]
+  /** 初始化恢复历史已经占用的各类 ID；Agent 会继续保留实时 reservation。 */
+  readonly reservedIds?: AgentIdReservationSeed
+}
+
+/** 表示 Agent 已停止接纳新的 run。 */
+export class AgentClosedError extends Error {
+  override readonly name = 'AgentClosedError'
+}
+
+/** 初始化 Agent 实例内统一标识符 reservation 的不可变快照。 */
+export interface AgentIdReservationSeed {
+  readonly turnIds: readonly TurnId[]
+  readonly stepIds: readonly StepId[]
+  readonly attemptIds: readonly AttemptId[]
+  readonly messageIds: readonly MessageId[]
+  readonly toolCallIds: readonly ToolCallId[]
+}
+
+/** 表示实时路径准备持久化的 ID 已在历史或当前 Agent 中占用。 */
+export class AgentIdCollisionError extends Error {
+  override readonly name = 'AgentIdCollisionError'
+  readonly kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall'
+  readonly value: string
+
+  constructor(
+    kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall',
+    value: string,
+  ) {
+    super(`${kind} 标识符与会话历史或当前 Agent 已保留的值冲突：${value}`)
+    this.kind = kind
+    this.value = value
+  }
 }
 
 /** 同时保留原始运行结果和 terminal settlement 持久化失败。 */
 export class SettlementPersistenceError extends Error {
   readonly originalError: unknown
   readonly persistenceError: unknown
-  readonly outcome: Exclude<TurnOutcome, 'completed'>
+  readonly outcome: RuntimeFailureOutcome
 
   constructor(
     originalError: unknown,
     persistenceError: unknown,
-    outcome: Exclude<TurnOutcome, 'completed'>,
+    outcome: RuntimeFailureOutcome,
   ) {
     super(`failed to persist ${outcome} terminal settlement`, {
       cause: persistenceError,
@@ -104,9 +136,13 @@ export class Agent {
   readonly #maxSteps: number
   readonly #settlementSignals: SettlementSignalFactory
   readonly #observers: readonly AgentObserver[]
+  readonly #reservations: AgentIdReservations
   readonly #inbox = new AgentInbox()
   #phase: AgentPhase = { kind: 'idle' }
   #controller: AbortController | undefined
+  #accepting = true
+  #idle: Promise<void> = Promise.resolve()
+  #resolveIdle: (() => void) | undefined
 
   constructor(options: AgentOptions) {
     if (!Number.isInteger(options.maxSteps) || options.maxSteps < 1) {
@@ -119,6 +155,7 @@ export class Agent {
     this.#maxSteps = options.maxSteps
     this.#settlementSignals = options.settlementSignals
     this.#observers = options.observers ?? []
+    this.#reservations = new AgentIdReservations(options.reservedIds)
   }
 
   get phase(): AgentPhase {
@@ -133,17 +170,33 @@ export class Agent {
     this.#controller?.abort(reason)
   }
 
+  /** 永久停止接纳新 run，并取消当前活动。重复调用安全。 */
+  stop(reason: unknown = new Error('agent stopped')): void {
+    this.#accepting = false
+    this.cancel(reason)
+  }
+
+  /** 等待当前活动彻底离开 Agent 状态机。 */
+  whenIdle(): Promise<void> {
+    return this.#idle
+  }
+
   async run(
     message: UserMessage,
     externalSignal: AbortSignal = new AbortController().signal,
   ): Promise<AssistantMessage> {
+    if (!this.#accepting) throw new AgentClosedError('Agent 已停止接纳新的 run')
     if (this.#phase.kind !== 'idle') throw new Error('agent is already running')
+
+    const turnId = this.#reservations.turn(this.#ids.turn())
+    this.#idle = new Promise<void>(resolve => {
+      this.#resolveIdle = resolve
+    })
 
     this.#inbox.enqueue(message)
     const admitted = this.#inbox.claim()
     if (admitted === undefined) throw new Error('agent inbox unexpectedly empty')
 
-    const turnId = this.#ids.turn()
     const controller = new AbortController()
     this.#controller = controller
     const signal = AbortSignal.any([externalSignal, controller.signal])
@@ -155,6 +208,7 @@ export class Agent {
     try {
       await this.#session.append([{ type: 'turn.started', turnId }], { signal })
       turnStarted = true
+      this.#reservations.message(admitted.id)
       await this.#session.append(
         [{ type: 'user.message', message: admitted }],
         { signal },
@@ -162,7 +216,7 @@ export class Agent {
 
       for (let stepNumber = 1; stepNumber <= this.#maxSteps; stepNumber += 1) {
         throwIfAborted(signal)
-        const stepId = this.#ids.step()
+        const stepId = this.#reservations.step(this.#ids.step())
         activeStep = createStepLifecycle(stepId)
         this.#phase = { kind: 'running', turnId, stepId }
         const messageFromStep = await this.#runStep(turnId, activeStep, signal)
@@ -206,6 +260,8 @@ export class Agent {
     } finally {
       this.#controller = undefined
       this.#phase = { kind: 'idle' }
+      this.#resolveIdle?.()
+      this.#resolveIdle = undefined
     }
   }
 
@@ -228,7 +284,7 @@ export class Agent {
     const prepared = await this.#model.prepare(signal)
     throwIfAborted(signal)
     const attempt: AttemptLifecycle = {
-      attemptId: this.#ids.attempt(),
+      attemptId: this.#reservations.attempt(this.#ids.attempt()),
       partialText: '',
       observedToolCalls: [],
       settlementPersisted: false,
@@ -245,6 +301,7 @@ export class Agent {
           attempt.partialText += event.text
           break
         case 'tool.call':
+          this.#reservations.toolCall(event.call.id)
           attempt.observedToolCalls.push(event.call)
           break
         case 'usage':
@@ -256,7 +313,7 @@ export class Agent {
     throwIfAborted(signal)
 
     const assistantMessage: AssistantMessage = {
-      id: this.#ids.message(),
+      id: this.#reservations.message(this.#ids.message()),
       role: 'assistant',
       content: attempt.partialText,
       toolCalls: attempt.observedToolCalls,
@@ -326,7 +383,7 @@ function createStepLifecycle(stepId: StepId): StepLifecycle {
 
 function buildTerminalEvents(options: {
   readonly error: unknown
-  readonly outcome: Exclude<TurnOutcome, 'completed'>
+  readonly outcome: RuntimeFailureOutcome
   readonly turnId: TurnId
   readonly turnStarted: boolean
   readonly turnEnded: boolean
@@ -385,7 +442,7 @@ function buildTerminalEvents(options: {
 
 function failedAttemptSettlement(
   attempt: AttemptLifecycle,
-  outcome: Exclude<TurnOutcome, 'completed'>,
+  outcome: RuntimeFailureOutcome,
   error: unknown,
 ): AssistantSettlement {
   if (outcome === 'cancelled') {
@@ -408,7 +465,7 @@ function failedAttemptSettlement(
 
 function unexecutedToolResult(
   call: ToolCall,
-  outcome: Exclude<TurnOutcome, 'completed'>,
+  outcome: RuntimeFailureOutcome,
   error: unknown,
 ): ToolResult {
   if (outcome === 'cancelled') {
@@ -421,6 +478,54 @@ function unexecutedToolResult(
       name: 'ToolNotExecutedError',
       message: `tool was not executed because the step failed: ${errorMessage(error)}`,
     },
+  }
+}
+
+type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>
+
+class AgentIdReservations {
+  readonly #turnIds: Set<string>
+  readonly #stepIds: Set<string>
+  readonly #attemptIds: Set<string>
+  readonly #messageIds: Set<string>
+  readonly #toolCallIds: Set<string>
+
+  constructor(seed: AgentIdReservationSeed | undefined) {
+    this.#turnIds = new Set(seed?.turnIds)
+    this.#stepIds = new Set(seed?.stepIds)
+    this.#attemptIds = new Set(seed?.attemptIds)
+    this.#messageIds = new Set(seed?.messageIds)
+    this.#toolCallIds = new Set(seed?.toolCallIds)
+  }
+
+  turn(value: TurnId): TurnId {
+    return this.#reserve('turn', this.#turnIds, value)
+  }
+
+  step(value: StepId): StepId {
+    return this.#reserve('step', this.#stepIds, value)
+  }
+
+  attempt(value: AttemptId): AttemptId {
+    return this.#reserve('attempt', this.#attemptIds, value)
+  }
+
+  message(value: MessageId): MessageId {
+    return this.#reserve('message', this.#messageIds, value)
+  }
+
+  toolCall(value: ToolCallId): ToolCallId {
+    return this.#reserve('toolCall', this.#toolCallIds, value)
+  }
+
+  #reserve<T extends string>(
+    kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall',
+    values: Set<string>,
+    value: T,
+  ): T {
+    if (values.has(value)) throw new AgentIdCollisionError(kind, value)
+    values.add(value)
+    return value
   }
 }
 

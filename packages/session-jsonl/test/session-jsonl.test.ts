@@ -9,6 +9,8 @@ import {
   type SessionBatchId,
   type SessionEvent,
   type SessionId,
+  type StepId,
+  type ToolCallId,
   type TurnId,
 } from '@agent-harness/domain'
 import {
@@ -154,6 +156,32 @@ describe('JsonlSessionRepository', () => {
       expectedSequence: 0,
       envelopes: [{ sequence: 1 }, { sequence: 2 }],
     })
+  })
+
+  it('往返保存 unknown 工具结果和 interrupted 生命周期', async () => {
+    const id = sessionId('recovery-events')
+    const repository = repositoryAt(root)
+    const writer = await repository.create(id, { signal: signal() })
+    const turnId = brandId<'TurnId'>('recovery-turn') as TurnId
+    const stepId = brandId<'StepId'>('recovery-step') as StepId
+    const callId = brandId<'ToolCallId'>('recovery-call') as ToolCallId
+    const events: readonly SessionEvent[] = [
+      {
+        type: 'tool.completed',
+        turnId,
+        stepId,
+        result: { status: 'unknown', callId, reason: '副作用状态未知' },
+      },
+      { type: 'step.ended', turnId, stepId, outcome: 'interrupted' },
+      { type: 'turn.ended', turnId, outcome: 'interrupted' },
+    ]
+
+    const appended = await writer.append(events, { signal: signal() })
+    await writer.close({ signal: signal() })
+    const reader = await repository.open(id, { mode: 'read', signal: signal() })
+
+    await expect(reader.read({ signal: signal() })).resolves.toEqual(appended)
+    await reader.close({ signal: signal() })
   })
 
   it('跨 repository 实例阻止第二个 writer，并在关闭后释放', async () => {

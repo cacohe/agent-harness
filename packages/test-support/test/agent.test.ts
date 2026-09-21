@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { Agent, SettlementPersistenceError } from '@agent-harness/agent'
+import {
+  Agent,
+  AgentIdCollisionError,
+  SettlementPersistenceError,
+} from '@agent-harness/agent'
 import {
   brandId,
   type EventEnvelope,
@@ -8,7 +12,11 @@ import {
   type ToolCallId,
   type UserMessage,
 } from '@agent-harness/domain'
-import { InMemorySessionLog, type SessionLog } from '@agent-harness/session'
+import {
+  analyzeSessionLifecycle,
+  InMemorySessionLog,
+  type SessionLog,
+} from '@agent-harness/session'
 import {
   ScriptedModelProvider,
   ScriptedToolCapability,
@@ -163,6 +171,80 @@ describe('Agent', () => {
     })
     expect(executed).toEqual(['custom'])
     expectClosed(await readEvents(session))
+  })
+
+  it('同一 Agent 重复接纳 user message ID 时在持久化前拒绝', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([
+      { events: [{ type: 'text.delta', text: 'first' }] },
+      { events: [{ type: 'text.delta', text: '不应调用' }] },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+    })
+    await agent.run(user('first'))
+
+    await expect(agent.run(user('duplicate'))).rejects.toMatchObject({
+      name: 'AgentIdCollisionError',
+      kind: 'message',
+      value: 'user-1',
+    })
+
+    expect(model.requests).toHaveLength(1)
+    const events = await readEvents(session)
+    expect(() => analyzeSessionLifecycle(events)).not.toThrow()
+  })
+
+  it('跨 turn 重复模型 tool call ID 时在 settlement 前拒绝', async () => {
+    const callId = brandId<'ToolCallId'>('repeated-call') as ToolCallId
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([
+      {
+        events: [{
+          type: 'tool.call',
+          call: { id: callId, name: 'missing', input: {} },
+        }],
+      },
+      { events: [{ type: 'text.delta', text: 'first complete' }] },
+      {
+        events: [{
+          type: 'tool.call',
+          call: { id: callId, name: 'missing', input: {} },
+        }],
+      },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+    })
+    await agent.run({
+      id: brandId<'MessageId'>('first-user') as MessageId,
+      role: 'user',
+      content: 'first',
+    })
+
+    await expect(agent.run({
+      id: brandId<'MessageId'>('second-user') as MessageId,
+      role: 'user',
+      content: 'second',
+    })).rejects.toBeInstanceOf(AgentIdCollisionError)
+
+    const events = await readEvents(session)
+    expect(events.filter(envelope =>
+      envelope.event.type === 'assistant.settled'
+      && envelope.event.settlement.status === 'completed'
+      && envelope.event.settlement.message.toolCalls.some(call => call.id === callId),
+    )).toHaveLength(1)
+    expect(() => analyzeSessionLifecycle(events)).not.toThrow()
   })
 
   it('持久化模型流失败及其已经输出的文本', async () => {

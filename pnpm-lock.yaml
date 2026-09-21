@@ -41,6 +41,31 @@ importers:
         specifier: workspace:*
         version: link:../domain
 
+  packages/runtime:
+    dependencies:
+      '@agent-harness/agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@agent-harness/model':
+        specifier: workspace:*
+        version: link:../model
+      '@agent-harness/session':
+        specifier: workspace:*
+        version: link:../session
+      '@agent-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+    devDependencies:
+      '@agent-harness/session-jsonl':
+        specifier: workspace:*
+        version: link:../session-jsonl
+      '@agent-harness/test-support':
+        specifier: workspace:*
+        version: link:../test-support
+
   packages/session:
     dependencies:
       '@agent-harness/domain':

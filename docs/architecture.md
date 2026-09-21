@@ -47,6 +47,14 @@ JSONL repository 在每次创建或打开前逐层建立根目录；每创建一
 
 Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已经启动的文件 I/O 必须先完成，随后才能检查取消并决定是否回滚，避免回滚与未完成写入竞争。若 append 写入失败且回滚也失败，writer 永久进入 poisoned 状态；之后 append、read 与 flush 拒绝执行，只有 close 继续关闭文件并释放 lease。Close 调用方可以取消等待，但资源释放在后台继续完成。
 
+`session` 使用纯生命周期分析验证恢复历史。分析要求 turn 与 step 正确嵌套，事件标识符与当前生命周期一致，assistant settlement 和 tool result 合法关联，已经闭合的生命周期不再追加所属事件。只有成功完成且产生工具调用的 step 才能继续下一 step；工具结果必须严格构成 assistant tool call 顺序的连续前缀。结构矛盾直接拒绝恢复。日志尾部的活动 step 会为该前缀之后的缺失结果补写 `unknown`，再以 `interrupted` 闭合 step 和 turn；活动 turn 只补写 `turn.ended: interrupted`。这些修复使用读取时的末尾 sequence，在暴露 Agent 前作为一个原子 batch 提交。`unknown` 表示工具可能已经执行且外部副作用无法确认，并会进入后续模型消息投影。分析同时返回历史已使用的 turn、step、attempt、message 和 tool call ID 不可变快照。
+
+`runtime` 是显式组合根，接收 repository、model、tools、运行限制、observer 和可选标识符 factory。`create` 创建新 writer；`resume` 取得 writer、读取并校验历史、原子修复后才构造 Agent。生产标识符使用随机 UUID，测试可以替换 factory。Runtime 把历史 ID 快照传入 Agent，不复制实时 reservation。Runtime 不包含 registry、服务定位器或动态插件装载。
+
+每个 Agent 拥有统一 ID reservation，分别覆盖 turn、step、attempt、message 和 tool call 命名空间。框架生成 ID、调用方提供的 user message ID 和模型提供的 tool call ID 都必须在对应持久事件写入前保留；与历史或当前 Agent 已接纳值冲突时立即失败。直接构造 Agent 从空 reservation 开始，也执行同一规则。
+
 ## 生命周期
 
 拥有资源的组件通过显式 `start` 和 `stop` 操作管理生命周期。运行时按顺序启动；部分启动失败时，以相反顺序停止已经成功启动的组件。关闭过程停止接纳输入，按 host 策略取消或排空活动，刷新会话 writer，最后释放外部资源。普通会话 I/O 使用 run signal；失败或取消后的 terminal settlement 使用组合方注入的独立总 deadline signal。同一结算链共享一个 signal，并优先以单个原子 batch 持久化尚未提交的 terminal events。
+
+Agent 提供 `stop` 与 `whenIdle`，保持直接 `run` 接口。Runtime handle 关闭时停止接纳新 run、取消活动、等待 Agent idle，再用新建的有界生命周期信号刷新并关闭 writer。调用方可以取消本次关闭等待，但后台清理继续；重复关闭共享同一清理过程。Handle 只有在清理成功后才从 Runtime 所有权集合移除，失败 promise 会被保留，使 Runtime 后续关闭仍能观察并聚合后台错误。Runtime 关闭会取消尚未完成的会话建立，并关闭其拥有的全部 handle。每个 run 的 terminal settlement 和每条关闭链各自获得新的 deadline，不能跨操作共享超时预算。

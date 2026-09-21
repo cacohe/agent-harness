@@ -64,7 +64,14 @@ export interface ToolCancelled {
   readonly reason: string
 }
 
-export type ToolResult = ToolSuccess | ToolFailure | ToolCancelled
+/** 表示崩溃恢复无法确认工具是否完成及是否已经产生副作用。 */
+export interface ToolUnknown {
+  readonly status: 'unknown'
+  readonly callId: ToolCallId
+  readonly reason: string
+}
+
+export type ToolResult = ToolSuccess | ToolFailure | ToolCancelled | ToolUnknown
 
 export interface SerializedError {
   readonly name: string
@@ -101,8 +108,8 @@ export type AssistantSettlement =
       readonly reason: string
     }
 
-export type StepOutcome = 'completed' | 'failed' | 'cancelled'
-export type TurnOutcome = 'completed' | 'failed' | 'cancelled'
+export type StepOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted'
+export type TurnOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
 export type SessionEvent =
   | { readonly type: 'turn.started'; readonly turnId: TurnId }

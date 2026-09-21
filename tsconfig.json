@@ -7,6 +7,7 @@
     { "path": "packages/model" },
     { "path": "packages/tools" },
     { "path": "packages/agent" },
+    { "path": "packages/runtime" },
     { "path": "packages/test-support" }
   ]
 }
