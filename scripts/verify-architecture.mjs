@@ -1,17 +1,14 @@
 import { readFile, readdir } from 'node:fs/promises'
 
 const packagesDir = new URL('../packages/', import.meta.url)
-const entries = await readdir(packagesDir, { withFileTypes: true })
+const entries = await readdir(packagesDir, { recursive: true, withFileTypes: true })
 const manifests = []
 
 for (const entry of entries) {
-  if (!entry.isDirectory()) continue
-  const path = new URL(`../packages/${entry.name}/package.json`, import.meta.url)
-  try {
-    manifests.push([entry.name, JSON.parse(await readFile(path, 'utf8'))])
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error
-  }
+  if (!entry.isFile() || entry.name !== 'package.json') continue
+  const parentPath = entry.parentPath.replace(/^.*\/packages\/?/, '')
+  const path = new URL(`../packages/${parentPath}/${entry.name}`, import.meta.url)
+  manifests.push([parentPath, JSON.parse(await readFile(path, 'utf8'))])
 }
 
 const forbidden = {
@@ -25,13 +22,17 @@ const forbidden = {
 }
 
 const failures = []
-const adapterPackages = new Set(
-  manifests.map(([name]) => name).filter(name => name.endsWith('-jsonl')),
-)
+const adapterDependencies = new Map([
+  ['session-jsonl', new Set(['domain', 'session'])],
+  ['adapters/openai-compatible', new Set(['domain', 'model'])],
+])
+const adapterPackages = new Set(adapterDependencies.keys())
+const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]))
 for (const [owner, manifest] of manifests) {
   if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`)
-  if (manifest.name !== `@agent-harness/${owner}`) {
-    failures.push(`${owner}: package name must be @agent-harness/${owner}`)
+  const packageName = owner.split('/').at(-1)
+  if (manifest.name !== `@agent-harness/${packageName}`) {
+    failures.push(`${owner}: package name must be @agent-harness/${packageName}`)
   }
   const dependencies = {
     ...manifest.dependencies,
@@ -40,23 +41,25 @@ for (const [owner, manifest] of manifests) {
   for (const dependency of Object.keys(dependencies)) {
     const match = /^@agent-harness\/(.+)$/.exec(dependency)
     if (match === null) continue
-    if (!manifests.some(([name]) => name === match[1])) {
+    const dependencyPath = packageByName.get(dependency)
+    if (dependencyPath === undefined) {
       failures.push(`${owner}: unknown workspace dependency ${dependency}`)
+      continue
     }
-    if (forbidden[owner]?.has(match[1])) {
+    if (forbidden[owner]?.has(match[1]) || forbidden[owner]?.has(dependencyPath)) {
       failures.push(`${owner}: forbidden dependency on ${match[1]}`)
     }
     if (
       ['domain', 'session', 'model', 'tools', 'agent'].includes(owner)
-      && adapterPackages.has(match[1])
+      && adapterPackages.has(dependencyPath)
     ) {
       failures.push(`${owner}: core package must not depend on adapter ${match[1]}`)
     }
     if (
       adapterPackages.has(owner)
-      && !['domain', 'session'].includes(match[1])
+      && !adapterDependencies.get(owner)?.has(dependencyPath)
     ) {
-      failures.push(`${owner}: JSONL adapter may depend only on domain and session`)
+      failures.push(`${owner}: adapter has forbidden dependency on ${match[1]}`)
     }
   }
 }

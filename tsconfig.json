@@ -5,6 +5,7 @@
     { "path": "packages/session" },
     { "path": "packages/session-jsonl" },
     { "path": "packages/model" },
+    { "path": "packages/adapters/openai-compatible" },
     { "path": "packages/tools" },
     { "path": "packages/agent" },
     { "path": "packages/runtime" },

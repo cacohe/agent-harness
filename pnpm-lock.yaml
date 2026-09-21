@@ -18,6 +18,15 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@24.13.6)
 
+  packages/adapters/openai-compatible:
+    dependencies:
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/model':
+        specifier: workspace:*
+        version: link:../../model
+
   packages/agent:
     dependencies:
       '@agent-harness/domain':

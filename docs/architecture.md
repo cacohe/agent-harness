@@ -37,7 +37,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。
 
-第一阶段内核由 `domain`、`session`、`model`、`tools`、`agent` 和 `test-support` 组成。内存会话实现 sequence 分配，纯投影重建模型消息；Agent 按顺序执行工具，并在开始下一 step 前持久化全部结果。真实模型、HTTP 和动态插件系统不属于第一阶段。
+第一阶段内核由 `domain`、`session`、`model`、`tools`、`agent` 和 `test-support` 组成。内存会话实现 sequence 分配，纯投影重建模型消息；Agent 按顺序执行工具，并在开始下一 step 前持久化全部结果。真实模型与 HTTP 集成由后续 adapter 提供，动态插件系统仍不属于当前范围。
 
 `session` 拥有 reader、writer、repository 与 writer lease capability。`session-jsonl` 是独立 adapter，只依赖 `session` 和 `domain`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
 
@@ -50,6 +50,8 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 `session` 使用纯生命周期分析验证恢复历史。分析要求 turn 与 step 正确嵌套，事件标识符与当前生命周期一致，assistant settlement 和 tool result 合法关联，已经闭合的生命周期不再追加所属事件。只有成功完成且产生工具调用的 step 才能继续下一 step；工具结果必须严格构成 assistant tool call 顺序的连续前缀。结构矛盾直接拒绝恢复。日志尾部的活动 step 会为该前缀之后的缺失结果补写 `unknown`，再以 `interrupted` 闭合 step 和 turn；活动 turn 只补写 `turn.ended: interrupted`。这些修复使用读取时的末尾 sequence，在暴露 Agent 前作为一个原子 batch 提交。`unknown` 表示工具可能已经执行且外部副作用无法确认，并会进入后续模型消息投影。分析同时返回历史已使用的 turn、step、attempt、message 和 tool call ID 不可变快照。
 
 `runtime` 是显式组合根，接收 repository、model、tools、运行限制、observer 和可选标识符 factory。`create` 创建新 writer；`resume` 取得 writer、读取并校验历史、原子修复后才构造 Agent。生产标识符使用随机 UUID，测试可以替换 factory。Runtime 把历史 ID 快照传入 Agent，不复制实时 reservation。Runtime 不包含 registry、服务定位器或动态插件装载。
+
+`adapters/openai-compatible` 实现首个真实模型 provider。它只依赖 `domain` 与 `model`，使用组合方显式传入的 URL、API key、模型名和可选 `fetch` 实现调用 OpenAI-compatible `/v1/chat/completions`。它把 ModelRequest 映射为 Chat Completions 的 user、assistant、tool 与 function tools 字段，并把 SSE 文本、usage 与完整 tool call 映射回模型 capability。适配器在流结束并收到 `[DONE]` 后才发布 tool call；缺少 `[DONE]`、无效 UTF-8/JSON、字段类型错误、冲突的 tool fragment 或不能解析为 JSON 的 arguments 都终止本次 stream。它不支持 OpenAI Responses、Anthropic Messages 或 Gemini 协议，也不负责重试、超时、回退或供应商选择。
 
 每个 Agent 拥有统一 ID reservation，分别覆盖 turn、step、attempt、message 和 tool call 命名空间。框架生成 ID、调用方提供的 user message ID 和模型提供的 tool call ID 都必须在对应持久事件写入前保留；与历史或当前 Agent 已接纳值冲突时立即失败。直接构造 Agent 从空 reservation 开始，也执行同一规则。
 
