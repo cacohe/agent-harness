@@ -1,8 +1,10 @@
 import {
+  assertJsonValue,
   isAbortError,
   serializeError,
   type ToolCall,
   type ToolResult,
+  type JsonValue,
 } from '@agent-harness/domain'
 import type { ModelToolDefinition } from '@agent-harness/model'
 
@@ -15,7 +17,7 @@ export interface ToolDefinition {
   readonly description: string
   readonly inputSchema: Readonly<Record<string, unknown>>
 
-  execute(input: unknown, context: ToolExecutionContext): Promise<unknown>
+  execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>
 }
 
 /** 向模型公开当前可用工具，不暴露具体注册方式。 */
@@ -72,6 +74,7 @@ export class ToolRegistry implements ToolCapability {
     try {
       const output = await definition.execute(call.input, { signal })
       if (signal.aborted) return cancelledResult(call, signal.reason)
+      assertJsonValue(output)
       return { status: 'success', callId: call.id, output }
     } catch (error) {
       if (signal.aborted || isAbortError(error)) {

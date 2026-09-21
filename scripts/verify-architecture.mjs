@@ -25,6 +25,9 @@ const forbidden = {
 }
 
 const failures = []
+const adapterPackages = new Set(
+  manifests.map(([name]) => name).filter(name => name.endsWith('-jsonl')),
+)
 for (const [owner, manifest] of manifests) {
   if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`)
   if (manifest.name !== `@agent-harness/${owner}`) {
@@ -42,6 +45,18 @@ for (const [owner, manifest] of manifests) {
     }
     if (forbidden[owner]?.has(match[1])) {
       failures.push(`${owner}: forbidden dependency on ${match[1]}`)
+    }
+    if (
+      ['domain', 'session', 'model', 'tools', 'agent'].includes(owner)
+      && adapterPackages.has(match[1])
+    ) {
+      failures.push(`${owner}: core package must not depend on adapter ${match[1]}`)
+    }
+    if (
+      adapterPackages.has(owner)
+      && !['domain', 'session'].includes(match[1])
+    ) {
+      failures.push(`${owner}: JSONL adapter may depend only on domain and session`)
     }
   }
 }

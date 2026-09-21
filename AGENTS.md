@@ -32,6 +32,7 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 学习实现。代码�
 docs/                 架构与决定
 packages/domain/      纯标识符、事件、消息与错误
 packages/session/     事件日志、投影与持久化接口
+packages/session-jsonl/ JSONL 会话存储 adapter
 packages/model/       模型 provider 接口与流事件词汇
 packages/tools/       工具定义、注册与调度
 packages/agent/       Inbox 与 Agent 状态机

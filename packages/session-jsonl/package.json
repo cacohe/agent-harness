@@ -1,0 +1,14 @@
+{
+  "name": "@agent-harness/session-jsonl",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.js",
+    "./testing": "./lib/testing.js"
+  },
+  "dependencies": {
+    "@agent-harness/domain": "workspace:*",
+    "@agent-harness/session": "workspace:*"
+  }
+}

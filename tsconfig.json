@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/domain" },
     { "path": "packages/session" },
+    { "path": "packages/session-jsonl" },
     { "path": "packages/model" },
     { "path": "packages/tools" },
     { "path": "packages/agent" },

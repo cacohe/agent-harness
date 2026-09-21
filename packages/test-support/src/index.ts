@@ -6,6 +6,7 @@ import {
   brandId,
   type AttemptId,
   type EventEnvelope,
+  type JsonValue,
   type MessageId,
   type SessionEvent,
   type SessionId,
@@ -190,9 +191,9 @@ export class ScriptedToolCapability implements ToolCapability {
 /** 创建可记录调用并由测试回调控制行为的工具。 */
 export function fakeTool(
   name: string,
-  execute: (input: unknown, context: ToolExecutionContext) => Promise<unknown>,
-): ToolDefinition & { readonly calls: unknown[] } {
-  const calls: unknown[] = []
+  execute: (input: JsonValue, context: ToolExecutionContext) => Promise<JsonValue>,
+): ToolDefinition & { readonly calls: JsonValue[] } {
+  const calls: JsonValue[] = []
   return {
     name,
     description: `${name} test tool`,
