@@ -173,22 +173,22 @@ node packages/hosts/cli/lib/index.js resume \
 
 | 目标             | 落点                                                         |
 | -------------- | ---------------------------------------------------------- |
-| 领域事件 / 消息形状    | `packages/domain`，并更新投影与恢复逻辑                               |
-| 会话读写 / 恢复分析    | `packages/session`；持久化实现放 `session-jsonl` 或新 adapter       |
-| 模型协议           | 接口在 `packages/model`；实现在 `packages/adapters/*`             |
-| 工具             | 接口与 `ToolRegistry` 在 `packages/tools`；在 host/runtime 组合时注入 |
-| Agent 循环 / 结算  | `packages/agent`                                           |
-| 组合与 resume     | `packages/runtime`                                         |
-| 进程协议（CLI/HTTP） | `packages/hosts/*`                                         |
+| 领域事件 / 消息形状    | `packages/domain`，并更新投影与恢复逻辑 |
+| 会话读写 / 恢复分析    | `packages/session/session`；持久化实现放 `packages/session/session-jsonl` |
+| 模型协议           | 接口在 `packages/llm/model`；实现在 `packages/llm/*` |
+| 工具             | 接口与 `ToolRegistry` 在 `packages/core/tools`；在 host/runtime 组合时注入 |
+| Agent 循环 / 结算  | `packages/core/agent` |
+| 组合与 resume     | `packages/runtime` |
+| 进程协议（CLI/HTTP） | `packages/hosts/*` |
 
 
-新增或替换 capability 时，可遵循 `[.agents/skills/add-capability/SKILL.md](.agents/skills/add-capability/SKILL.md)`：明确 owner / provider / consumer，接口放消费方 core package，外部实现放 adapters，构造放 runtime 或 host；需要按 key 选择实现前不要加 registry。
+新增或替换 capability 时，可遵循 `[.agents/skills/add-capability/SKILL.md](.agents/skills/add-capability/SKILL.md)`：明确 owner / provider / consumer，接口放消费方 capability 包，外部实现放对应能力域目录（如 `llm/`、`session/`），构造放 runtime 或 host；需要按 key 选择实现前不要加 registry。
 
 ### 依赖方向（不可违反）
 
 ```text
-hosts → runtime → agent / tools / model / session → domain
-                 → adapters → capability 所属 package → domain
+hosts → runtime → core|llm|session capability 包 → domain
+               → llm|session adapters → capability 所属 package → domain
 ```
 
 `domain` 无 workspace 依赖。Core 不依赖具体 adapter。修改依赖后跑 `pnpm run gate:architecture`。
