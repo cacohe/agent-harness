@@ -9,6 +9,7 @@
     { "path": "packages/tools" },
     { "path": "packages/agent" },
     { "path": "packages/runtime" },
+    { "path": "packages/hosts/cli" },
     { "path": "packages/test-support" }
   ]
 }

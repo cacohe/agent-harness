@@ -53,6 +53,8 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 
 `adapters/openai-compatible` 实现首个真实模型 provider。它只依赖 `domain` 与 `model`，使用组合方显式传入的 URL、API key、模型名和可选 `fetch` 实现调用 OpenAI-compatible `/v1/chat/completions`。它把 ModelRequest 映射为 Chat Completions 的 user、assistant、tool 与 function tools 字段，并把 SSE 文本、usage 与完整 tool call 映射回模型 capability。适配器在流结束并收到 `[DONE]` 后才发布 tool call；缺少 `[DONE]`、无效 UTF-8/JSON、字段类型错误、冲突的 tool fragment 或不能解析为 JSON 的 arguments 都终止本次 stream。它不支持 OpenAI Responses、Anthropic Messages 或 Gemini 协议，也不负责重试、超时、回退或供应商选择。
 
+`hosts/cli` 是单进程 JSON 配置入口。它只接受绝对 `--config` 路径及 `run`、`resume`、`--session`、`--message` 参数，显式组合 JSONL repository、OpenAI-compatible provider、空 ToolRegistry 和 Runtime。API key 只能由配置指定的环境变量名读取；stdout 只输出 JSONL stream/result/error，usage 与不含密钥的诊断写入 stderr。SIGINT 和 SIGTERM 取消当前 run，finally 中关闭 handle 与 Runtime。
+
 每个 Agent 拥有统一 ID reservation，分别覆盖 turn、step、attempt、message 和 tool call 命名空间。框架生成 ID、调用方提供的 user message ID 和模型提供的 tool call ID 都必须在对应持久事件写入前保留；与历史或当前 Agent 已接纳值冲突时立即失败。直接构造 Agent 从空 reservation 开始，也执行同一规则。
 
 ## 生命周期

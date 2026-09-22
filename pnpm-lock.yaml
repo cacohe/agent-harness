@@ -44,6 +44,24 @@ importers:
 
   packages/domain: {}
 
+  packages/hosts/cli:
+    dependencies:
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/openai-compatible':
+        specifier: workspace:*
+        version: link:../../adapters/openai-compatible
+      '@agent-harness/runtime':
+        specifier: workspace:*
+        version: link:../../runtime
+      '@agent-harness/session-jsonl':
+        specifier: workspace:*
+        version: link:../../session-jsonl
+      '@agent-harness/tools':
+        specifier: workspace:*
+        version: link:../../tools
+
   packages/model:
     dependencies:
       '@agent-harness/domain':

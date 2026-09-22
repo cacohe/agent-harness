@@ -1,0 +1,15 @@
+{
+  "name": "@agent-harness/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "agent-harness": "./lib/index.js" },
+  "exports": { ".": "./lib/index.js" },
+  "dependencies": {
+    "@agent-harness/domain": "workspace:*",
+    "@agent-harness/openai-compatible": "workspace:*",
+    "@agent-harness/runtime": "workspace:*",
+    "@agent-harness/session-jsonl": "workspace:*",
+    "@agent-harness/tools": "workspace:*"
+  }
+}
