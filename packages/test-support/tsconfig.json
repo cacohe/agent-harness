@@ -3,10 +3,10 @@
   "compilerOptions": { "outDir": "lib", "rootDir": "src" },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../agent" },
+    { "path": "../core/agent" },
     { "path": "../domain" },
-    { "path": "../model" },
-    { "path": "../session" },
-    { "path": "../tools" }
+    { "path": "../llm/model" },
+    { "path": "../session/session" },
+    { "path": "../core/tools" }
   ]
 }

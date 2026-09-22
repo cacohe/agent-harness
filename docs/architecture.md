@@ -4,7 +4,7 @@ Agent Harness Lab 使用 append-only 会话事件日志和显式 Agent 状态机
 
 ## 依赖层次
 
-`domain` 定义稳定值类型和事件。`session`、`model`、`tools` 与 `agent` 拥有核心行为和 capability 接口。`adapters` 实现外部存储、模型、工具和进程集成。`runtime` 校验并组合完整应用。`hosts` 通过进程协议暴露应用。
+`domain` 定义稳定值类型和事件。`session/session`、`llm/model`、`core/tools` 与 `core/agent` 拥有核心行为和 capability 接口。各能力域下的 adapter（如 `session/session-jsonl`、`llm/openai-compatible`）实现外部存储、模型、工具和进程集成。`runtime` 校验并组合完整应用。`hosts` 通过进程协议暴露应用。
 
 依赖向内指向。模型 provider 实现 `model` 拥有的接口；会话存储实现 `session` 拥有的接口。Agent loop 只依赖这些接口。
 
@@ -39,7 +39,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 第一阶段内核由 `domain`、`session`、`model`、`tools`、`agent` 和 `test-support` 组成。内存会话实现 sequence 分配，纯投影重建模型消息；Agent 按顺序执行工具，并在开始下一 step 前持久化全部结果。真实模型与 HTTP 集成由后续 adapter 提供，动态插件系统仍不属于当前范围。
 
-`session` 拥有 reader、writer、repository 与 writer lease capability。`session-jsonl` 是独立 adapter，只依赖 `session` 和 `domain`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
+`session/session` 拥有 reader、writer、repository 与 writer lease capability。`session/session-jsonl` 是独立 adapter，只依赖 `session/session` 和 `domain`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
 
 JSONL repository 在每次创建或打开前逐层建立根目录；每创建一层都同步其父目录项和新目录，再解析根目录的真实路径并验证结果仍为目录。文件布局与 lease key 都使用该规范路径，避免符号链接别名绕过进程内互斥。Session ID 按 UTF-16 code unit 单射编码为路径段。Writer lease 当前只保证同一 Node.js 进程内、跨 repository 实例的单 writer 所有权。跨进程互斥属于后续可替换实现，当前 adapter 不使用带超时的 lockfile，也不承诺多进程安全。
 
@@ -51,7 +51,7 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 
 `runtime` 是显式组合根，接收 repository、model、tools、运行限制、observer 和可选标识符 factory。`create` 创建新 writer；`resume` 取得 writer、读取并校验历史、原子修复后才构造 Agent。生产标识符使用随机 UUID，测试可以替换 factory。Runtime 把历史 ID 快照传入 Agent，不复制实时 reservation。Runtime 不包含 registry、服务定位器或动态插件装载。
 
-`adapters/openai-compatible` 实现首个真实模型 provider。它只依赖 `domain` 与 `model`，使用组合方显式传入的 URL、API key、模型名和可选 `fetch` 实现调用 OpenAI-compatible `/v1/chat/completions`。它把 ModelRequest 映射为 Chat Completions 的 user、assistant、tool 与 function tools 字段，并把 SSE 文本、usage 与完整 tool call 映射回模型 capability。适配器在流结束并收到 `[DONE]` 后才发布 tool call；缺少 `[DONE]`、无效 UTF-8/JSON、字段类型错误、冲突的 tool fragment 或不能解析为 JSON 的 arguments 都终止本次 stream。它不支持 OpenAI Responses、Anthropic Messages 或 Gemini 协议，也不负责重试、超时、回退或供应商选择。
+`llm/openai-compatible` 实现首个真实模型 provider。它只依赖 `domain` 与 `llm/model`，使用组合方显式传入的 URL、API key、模型名和可选 `fetch` 实现调用 OpenAI-compatible `/v1/chat/completions`。它把 ModelRequest 映射为 Chat Completions 的 user、assistant、tool 与 function tools 字段，并把 SSE 文本、usage 与完整 tool call 映射回模型 capability。适配器在流结束并收到 `[DONE]` 后才发布 tool call；缺少 `[DONE]`、无效 UTF-8/JSON、字段类型错误、冲突的 tool fragment 或不能解析为 JSON 的 arguments 都终止本次 stream。它不支持 OpenAI Responses、Anthropic Messages 或 Gemini 协议，也不负责重试、超时、回退或供应商选择。
 
 `hosts/cli` 是单进程 JSON 配置入口。它只接受绝对 `--config` 路径及 `run`、`resume`、`--session`、`--message` 参数，显式组合 JSONL repository、OpenAI-compatible provider、空 ToolRegistry 和 Runtime。API key 只能由配置指定的环境变量名读取；stdout 只输出 JSONL stream/result/error，usage 与不含密钥的诊断写入 stderr。SIGINT 和 SIGTERM 取消当前 run，finally 中关闭 handle 与 Runtime。
 

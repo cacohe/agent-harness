@@ -29,19 +29,19 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 ## 仓库结构
 
 ```text
-docs/                 架构与决定
-packages/domain/      纯标识符、事件、消息与错误
-packages/session/     事件日志、投影与持久化接口
-packages/session-jsonl/ JSONL 会话存储 adapter
-packages/model/       模型 provider 接口与流事件词汇
-packages/tools/       工具定义、注册与调度
-packages/agent/       Inbox 与 Agent 状态机
-packages/runtime/     显式组合与生命周期
-packages/adapters/    外部实现
-packages/hosts/       CLI、JSON-RPC、HTTP 等进程入口
+docs/ 架构与决定
+packages/domain/ 纯标识符、事件、消息与错误
+packages/core/agent/ Inbox 与 Agent 状态机
+packages/core/tools/ 工具定义、注册与调度
+packages/llm/model/ 模型 provider 接口与流事件词汇
+packages/llm/openai-compatible/ OpenAI-compatible 模型 adapter
+packages/session/session/ 事件日志、投影与持久化接口
+packages/session/session-jsonl/ JSONL 会话存储 adapter
+packages/runtime/ 显式组合与生命周期
+packages/hosts/ CLI、JSON-RPC、HTTP 等进程入口
 packages/test-support/ 确定性 fake 与 fixture
-scripts/              可执行仓库 gate
-.agents/skills/       可复用仓库工作流
+scripts/ 可执行仓库 gate
+.agents/skills/ 可复用仓库工作流
 ```
 
 目录内更具体的 `AGENTS.md` 规则优先适用。

@@ -4,9 +4,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../domain" },
-    { "path": "../session" },
-    { "path": "../model" },
-    { "path": "../tools" },
-    { "path": "../agent" }
+    { "path": "../session/session" },
+    { "path": "../llm/model" },
+    { "path": "../core/tools" },
+    { "path": "../core/agent" }
   ]
 }

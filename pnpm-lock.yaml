@@ -18,29 +18,29 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@24.13.6)
 
-  packages/adapters/openai-compatible:
+  packages/core/agent:
     dependencies:
       '@agent-harness/domain':
         specifier: workspace:*
         version: link:../../domain
       '@agent-harness/model':
         specifier: workspace:*
-        version: link:../../model
-
-  packages/agent:
-    dependencies:
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../model
+        version: link:../../llm/model
       '@agent-harness/session':
         specifier: workspace:*
-        version: link:../session
+        version: link:../../session/session
       '@agent-harness/tools':
         specifier: workspace:*
         version: link:../tools
+
+  packages/core/tools:
+    dependencies:
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/model':
+        specifier: workspace:*
+        version: link:../../llm/model
 
   packages/domain: {}
 
@@ -51,59 +51,68 @@ importers:
         version: link:../../domain
       '@agent-harness/openai-compatible':
         specifier: workspace:*
-        version: link:../../adapters/openai-compatible
+        version: link:../../llm/openai-compatible
       '@agent-harness/runtime':
         specifier: workspace:*
         version: link:../../runtime
       '@agent-harness/session-jsonl':
         specifier: workspace:*
-        version: link:../../session-jsonl
+        version: link:../../session/session-jsonl
       '@agent-harness/tools':
         specifier: workspace:*
-        version: link:../../tools
+        version: link:../../core/tools
 
-  packages/model:
+  packages/llm/model:
     dependencies:
       '@agent-harness/domain':
         specifier: workspace:*
-        version: link:../domain
+        version: link:../../domain
+
+  packages/llm/openai-compatible:
+    dependencies:
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/model':
+        specifier: workspace:*
+        version: link:../model
 
   packages/runtime:
     dependencies:
       '@agent-harness/agent':
         specifier: workspace:*
-        version: link:../agent
+        version: link:../core/agent
       '@agent-harness/domain':
         specifier: workspace:*
         version: link:../domain
       '@agent-harness/model':
         specifier: workspace:*
-        version: link:../model
+        version: link:../llm/model
       '@agent-harness/session':
         specifier: workspace:*
-        version: link:../session
+        version: link:../session/session
       '@agent-harness/tools':
         specifier: workspace:*
-        version: link:../tools
+        version: link:../core/tools
     devDependencies:
       '@agent-harness/session-jsonl':
         specifier: workspace:*
-        version: link:../session-jsonl
+        version: link:../session/session-jsonl
       '@agent-harness/test-support':
         specifier: workspace:*
         version: link:../test-support
 
-  packages/session:
+  packages/session/session:
     dependencies:
       '@agent-harness/domain':
         specifier: workspace:*
-        version: link:../domain
+        version: link:../../domain
 
-  packages/session-jsonl:
+  packages/session/session-jsonl:
     dependencies:
       '@agent-harness/domain':
         specifier: workspace:*
-        version: link:../domain
+        version: link:../../domain
       '@agent-harness/session':
         specifier: workspace:*
         version: link:../session
@@ -112,28 +121,19 @@ importers:
     dependencies:
       '@agent-harness/agent':
         specifier: workspace:*
-        version: link:../agent
+        version: link:../core/agent
       '@agent-harness/domain':
         specifier: workspace:*
         version: link:../domain
       '@agent-harness/model':
         specifier: workspace:*
-        version: link:../model
+        version: link:../llm/model
       '@agent-harness/session':
         specifier: workspace:*
-        version: link:../session
+        version: link:../session/session
       '@agent-harness/tools':
         specifier: workspace:*
-        version: link:../tools
-
-  packages/tools:
-    dependencies:
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../model
+        version: link:../core/tools
 
 packages:
 

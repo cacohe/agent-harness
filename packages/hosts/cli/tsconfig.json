@@ -4,9 +4,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../../domain" },
-    { "path": "../../adapters/openai-compatible" },
+    { "path": "../../llm/openai-compatible" },
     { "path": "../../runtime" },
-    { "path": "../../session-jsonl" },
-    { "path": "../../tools" }
+    { "path": "../../session/session-jsonl" },
+    { "path": "../../core/tools" }
   ]
 }

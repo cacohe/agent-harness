@@ -7,12 +7,12 @@
 允许的依赖方向如下：
 
 ```text
-hosts -> runtime -> agent/tools/model/session -> domain
-                  -> adapters -> capability 所属 package -> domain
+hosts -> runtime -> core/agent|tools、llm/model、session/session -> domain
+                  -> llm|session 下的 adapter -> capability 所属 package -> domain
 test-support -> 测试使用的任意 package
 ```
 
-`domain` 没有 workspace 依赖。拥有 capability 的 package 不得导入 adapter 或 host。Adapter 不得导入 runtime 或 host。Runtime 与 host 是仅有的组合根。
+`domain` 没有 workspace 依赖。拥有 capability 的 package 不得导入 adapter 或 host。Adapter 落在对应能力域分组（如 `llm/`、`session/`），不得导入 runtime 或 host。Runtime 与 host 是仅有的组合根。
 
 增加或修改 workspace 依赖后运行 `pnpm run gate:architecture`。该 gate 是机械检查规则的权威实现。
 
