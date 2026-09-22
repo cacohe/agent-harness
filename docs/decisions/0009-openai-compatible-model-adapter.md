@@ -22,7 +22,7 @@ Chat Completions 的兼容范围是显式限制。供应商若只支持 Response
 
 ## 放弃的方案
 
-- 使用 OpenAI、Vercel AI SDK 或 LangChain 会让学习仓库依赖第三方的请求、流和工具调用策略，降低协议边界的可见性。
+- 使用 OpenAI、Vercel AI SDK 或 LangChain 会让本仓库依赖第三方的请求、流和工具调用策略，降低协议边界的可见性。
 - 直接在 `model` 或 `agent` package 中调用 fetch 会反转 core 对 adapter 的依赖方向。
 - 接受 EOF 作为成功结束会在传输截断时把不完整 tool call 当成安全调用。
 - 在 adapter 内读取环境变量、选择供应商或重试会隐藏部署策略和密钥所有权。

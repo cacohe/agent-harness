@@ -30,4 +30,4 @@ Agent 可以通过稳定的 `session` capability 使用内存或 JSONL 存储。
 - 每个事件单独占一行无法保留 terminal settlement 等批次的全有或全无语义。
 - 把没有换行的末尾残片视为损坏会让可恢复的进程崩溃变成永久故障。
 - 使用带租期或超时的 lockfile 会在暂停、时钟跳变或长时间 I/O 时错误抢占活跃 writer。
-- 依赖 DSH 的 native lock 实现会使学习仓库反向耦合参考项目。
+- 依赖 DSH 的 native lock 实现会使本仓库反向耦合参考项目。
