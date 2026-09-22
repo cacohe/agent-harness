@@ -23,6 +23,7 @@ import type {
 import { deriveModelMessages, type SessionLog } from '@agent-harness/session'
 import type { ToolCapability } from '@agent-harness/tools'
 
+/** Agent 对外可见的阶段：空闲，或正在执行某个 turn/step。 */
 export type AgentPhase =
   | { readonly kind: 'idle' }
   | {
@@ -31,6 +32,7 @@ export type AgentPhase =
       readonly stepId?: StepId
     }
 
+/** 为 turn、step、attempt、message 生成新标识符；冲突检查由 Agent 统一 reservation 负责。 */
 export interface AgentIdGenerator {
   turn(): TurnId
   step(): StepId
@@ -38,6 +40,7 @@ export interface AgentIdGenerator {
   message(): MessageId
 }
 
+/** 接收瞬态模型流事件；失败不得影响 Agent 生命周期。 */
 export interface AgentObserver {
   onStream?(event: ModelStreamEvent): void | Promise<void>
 }
@@ -47,6 +50,7 @@ export interface SettlementSignalFactory {
   create(): AbortSignal
 }
 
+/** 构造 Agent 所需的全部显式依赖与运行限制。 */
 export interface AgentOptions {
   readonly model: ModelProvider
   readonly session: SessionLog
@@ -127,7 +131,10 @@ export class AgentInbox {
   }
 }
 
-/** 只依赖 capability 接口的可重放 Agent 内核。 */
+/**
+ * 只依赖 capability 接口的可重放 Agent 内核。
+ * 同一时刻至多一个活动 turn；已打开的 turn/step 在成功、失败与取消路径上恰好结算一次。
+ */
 export class Agent {
   readonly #model: ModelProvider
   readonly #session: SessionLog
@@ -166,6 +173,7 @@ export class Agent {
     return this.#inbox
   }
 
+  /** 取消当前活动 run；不影响是否继续接纳新的 run。 */
   cancel(reason: unknown = new Error('agent run cancelled')): void {
     this.#controller?.abort(reason)
   }
@@ -181,6 +189,10 @@ export class Agent {
     return this.#idle
   }
 
+  /**
+   * 执行一次 turn：写入用户消息，循环 step，直至无工具调用或触及步数上限。
+   * 失败或取消时用独立结算信号补写尚未闭合的 turn/step 事件，再重新抛出原错误。
+   */
   async run(
     message: UserMessage,
     externalSignal: AbortSignal = new AbortController().signal,
@@ -265,6 +277,10 @@ export class Agent {
     }
   }
 
+  /**
+   * 执行单个 step：组装请求、流式模型、持久化 assistant 结算、顺序执行工具并闭合 step。
+   * 流式 chunk 只通知 observer；持久事实写入会话事件。
+   */
   async #runStep(
     turnId: TurnId,
     lifecycle: StepLifecycle,
@@ -349,6 +365,7 @@ export class Agent {
     return assistantMessage
   }
 
+  /** 向 observer 派发流事件；同步与异步失败均被隔离。 */
   #notifyStream(event: ModelStreamEvent): void {
     for (const observer of this.#observers) {
       try {
@@ -360,6 +377,7 @@ export class Agent {
   }
 }
 
+/** 跟踪单次模型 attempt 的流式累积、结算与工具结果，供失败路径补写事件。 */
 interface AttemptLifecycle {
   readonly attemptId: AttemptId
   partialText: string
@@ -370,6 +388,7 @@ interface AttemptLifecycle {
   readonly persistedToolResults: Set<ToolCallId>
 }
 
+/** 跟踪 step 是否已开始/结束，以及其中的 attempt，供 terminal settlement 使用。 */
 interface StepLifecycle {
   readonly stepId: StepId
   started: boolean
@@ -381,6 +400,10 @@ function createStepLifecycle(stepId: StepId): StepLifecycle {
   return { stepId, started: false, ended: false }
 }
 
+/**
+ * 为失败或取消路径构造尚未写入的 terminal 事件。
+ * 保证已打开的 step/turn 补齐 assistant 结算、缺失工具结果与 ended 事件。
+ */
 function buildTerminalEvents(options: {
   readonly error: unknown
   readonly outcome: RuntimeFailureOutcome
@@ -440,6 +463,7 @@ function buildTerminalEvents(options: {
   return events
 }
 
+/** 根据失败或取消结果，从部分流式输出构造 assistant settlement。 */
 function failedAttemptSettlement(
   attempt: AttemptLifecycle,
   outcome: RuntimeFailureOutcome,
@@ -463,6 +487,7 @@ function failedAttemptSettlement(
   }
 }
 
+/** 为结算时尚未执行的工具调用补写 cancelled 或 failure 结果。 */
 function unexecutedToolResult(
   call: ToolCall,
   outcome: RuntimeFailureOutcome,
@@ -481,8 +506,10 @@ function unexecutedToolResult(
   }
 }
 
+/** 运行时失败结算只区分 failed 与 cancelled。 */
 type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>
 
+/** 统一保留历史与实时路径上的各类 ID，写入事件前检测冲突。 */
 class AgentIdReservations {
   readonly #turnIds: Set<string>
   readonly #stepIds: Set<string>
@@ -529,10 +556,12 @@ class AgentIdReservations {
   }
 }
 
+/** 若信号已中止则抛出 AbortError。 */
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw cancellationError(signal)
 }
 
+/** 将 AbortSignal 的 reason 规范化为名为 AbortError 的 Error。 */
 function cancellationError(signal: AbortSignal): Error {
   const reason = signal.reason
   const message = reason instanceof Error

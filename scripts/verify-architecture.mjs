@@ -7,7 +7,7 @@ const manifests = []
 
 for (const entry of entries) {
   if (!entry.isFile() || entry.name !== 'package.json') continue
-  const parentPath = entry.parentPath.replace(/^.*\/packages\/?/, '')
+  const parentPath = entry.parentPath.replaceAll('\\', '/').replace(/^.*\/packages\/?/, '')
   const path = new URL(`../packages/${parentPath}/${entry.name}`, import.meta.url)
   manifests.push([parentPath, JSON.parse(await readFile(path, 'utf8'))])
 }

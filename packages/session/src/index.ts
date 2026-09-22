@@ -6,12 +6,13 @@ import {
   type AssistantSettlement,
   type MessageId,
   type ModelMessage,
-  type SessionEvent,
   type SessionBatchId,
+  type SessionEvent,
   type SessionId,
-  type StepOutcome,
   type StepId,
+  type StepOutcome,
   type ToolCallId,
+  type ToolMessage,
   type TurnId,
 } from '@agent-harness/domain'
 
@@ -253,13 +254,15 @@ export function deriveModelMessages(
           messages.push(envelope.event.settlement.message)
         }
         break
-      case 'tool.completed':
-        messages.push({
+      case 'tool.completed': {
+        const toolMessage: ToolMessage = {
           role: 'tool',
           callId: envelope.event.result.callId,
           result: envelope.event.result,
-        })
+        }
+        messages.push(toolMessage)
         break
+      }
       case 'turn.started':
       case 'step.started':
       case 'step.ended':

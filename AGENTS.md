@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Agent Harness Lab 是面向生产设计的 Agent Harness 学习实现。代码应足够精简、便于理解，同时保留可靠运行时所需的失败、取消、持久化和组件替换接缝。
+Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足够精简、便于理解，同时保留可靠运行时所需的失败、取消、持久化和组件替换接缝。
 
 ## 必需工作流
 

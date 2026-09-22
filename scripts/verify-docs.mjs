@@ -42,7 +42,7 @@ const packageEntries = await readdir(new URL('../packages/', import.meta.url), {
 })
 for (const entry of packageEntries) {
   if (!entry.isFile() || !entry.name.endsWith('.ts')) continue
-  const path = new URL(`../packages/${entry.parentPath.replace(/^.*\/packages\/?/, '')}/${entry.name}`, import.meta.url)
+  const path = new URL(`../packages/${entry.parentPath.replaceAll('\\', '/').replace(/^.*\/packages\/?/, '')}/${entry.name}`, import.meta.url)
   const text = await readFile(path, 'utf8')
   for (const comment of text.matchAll(/\/\*\*[\s\S]*?\*\//g)) {
     if (!/\p{Script=Han}/u.test(comment[0])) {

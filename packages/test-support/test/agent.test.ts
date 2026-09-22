@@ -539,6 +539,88 @@ describe('Agent', () => {
     })
     expect(settlementSignals.created).toHaveLength(1)
   })
+
+  it('触及 maxSteps 时失败并闭合已打开的生命周期', async () => {
+    const callId = brandId<'ToolCallId'>('call-max') as ToolCallId
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([
+      {
+        events: [
+          {
+            type: 'tool.call',
+            call: { id: callId, name: 'lookup', input: {} },
+          },
+        ],
+      },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([
+        fakeTool('lookup', async () => ({ ok: true })),
+      ]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 1,
+      settlementSignals: new TestSettlementSignals(),
+    })
+
+    await expect(agent.run(user())).rejects.toThrow('agent exceeded maxSteps (1)')
+
+    const events = await readEvents(session)
+    expect(eventTypes(events)).toEqual([
+      'turn.started',
+      'user.message',
+      'step.started',
+      'assistant.settled',
+      'tool.completed',
+      'step.ended',
+      'turn.ended',
+    ])
+    expect(events.at(-2)?.event).toMatchObject({
+      type: 'step.ended',
+      outcome: 'completed',
+    })
+    expect(events.at(-1)?.event).toMatchObject({
+      type: 'turn.ended',
+      outcome: 'failed',
+    })
+    expectClosed(events)
+  })
+
+  it('observer 同步与异步失败不影响 Agent 成功完成', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([
+      { events: [{ type: 'text.delta', text: 'ok' }] },
+    ])
+    const seen: string[] = []
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      observers: [
+        {
+          onStream() {
+            throw new Error('sync observer failed')
+          },
+        },
+        {
+          async onStream(event) {
+            seen.push(event.type)
+            throw new Error('async observer failed')
+          },
+        },
+      ],
+    })
+
+    const response = await agent.run(user())
+
+    expect(response.content).toBe('ok')
+    expect(seen).toContain('text.delta')
+    expectClosed(await readEvents(session))
+  })
 })
 
 function rejectWhenAborted(signal: AbortSignal): Promise<never> {
