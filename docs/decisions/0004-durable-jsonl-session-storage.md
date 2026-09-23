@@ -8,7 +8,7 @@
 
 ## 决策
 
-`session` package 拥有 `SessionReader`、`SessionLog`、`SessionRepository` 和 `SessionWriteLeaseProvider` 接口；独立的 `session-jsonl` adapter 实现文件存储。根目录必须由组合方提供绝对路径。Session ID 使用 UTF-8 的 base64url 无碰撞编码形成单个目录段，物理文件为 `<root>/<encoded-id>/session.v1.jsonl`。
+`session` package（现目录 `packages/session/session`，见 ADR 0011）拥有 `SessionReader`、`SessionLog`、`SessionRepository` 和 `SessionWriteLeaseProvider` 接口；独立的 `session-jsonl` adapter（现目录 `packages/session/session-jsonl`）实现文件存储。根目录必须由组合方提供绝对路径。Session ID 使用 UTF-8 的 base64url 无碰撞编码形成单个目录段，物理文件为 `<root>/<encoded-id>/session.v1.jsonl`。
 
 文件首行是带格式版本和 Session ID 的 header。后续每个原子 append batch 独占一行，包含 `batchId`、追加前的 `expectedSequence` 和完整事件信封数组。每条完整记录严格校验字段集合、事件联合类型、JSON 值、Session ID、sequence 与 batch 连续性。工具输入和成功输出限定为递归 JSON 值。
 

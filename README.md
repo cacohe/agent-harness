@@ -9,21 +9,21 @@
 依赖向内：
 
 ```text
-hosts  →  runtime  →  agent / session / model / tools
-                ↑           ↑
-     llm|session adapters   （capability 包）
+hosts  →  runtime  →  core/agent|tools · llm/model · session/session
+                ↑                              ↑
+     llm/* · session/* adapters          （capability 包）
                 ↓
              domain
 ```
 
 
-| 层次                                      | 职责                               |
-| --------------------------------------- | -------------------------------- |
-| `domain`                                | 稳定标识符、事件、消息与错误                   |
-| `session` / `model` / `tools` / `agent` | 核心行为与 capability 接口              |
-| `session-jsonl` / `openai-compatible`   | 把文件系统、HTTP 等转为接口实现               |
-| `runtime`                               | 显式组合根：`create` / `resume` / 生命周期 |
-| `hosts`                                 | 进程入口：配置、信号、stdout/stderr         |
+| 层次 | 目录落点 | 职责 |
+|------|----------|------|
+| 领域词汇 | `packages/domain` | 稳定标识符、事件、消息与错误 |
+| Capability | `core/*`、`llm/model`、`session/session` | 核心行为与接口 |
+| Adapter | `llm/openai-compatible`、`session/session-jsonl` | 外部系统实现 |
+| 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
+| 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
 
 
 执行模型：
@@ -92,63 +92,60 @@ pnpm run build
 
 ## 本地启动 Agent
 
-当前最小可运行入口是 `@agent-harness/cli`：组合 JSONL 会话、OpenAI-compatible 模型、空工具表与 Runtime。
+当前最小可运行入口是 `@agent-harness/cli`：组合 JSONL 会话、OpenAI-compatible 模型、空工具表与 Runtime。仓库提供示例配置与启动包装，避免手写绝对路径。
 
-### 1. 准备配置文件
+### 1. 准备示例环境
 
-`--config` **必须是绝对路径**。配置中不写 API key，只写环境变量名：
-
-```json
-{
-  "sessionRoot": "/绝对路径/sessions",
-  "maxSteps": 8,
-  "settlementTimeoutMs": 30000,
-  "model": {
-    "id": "openai-compatible",
-    "baseUrl": "https://api.deepseek.com/v1",
-    "model": "deepseek-chat",
-    "apiKeyEnv": "DEEPSEEK_API_KEY"
-  }
-}
+```bash
+cp examples/cli/.env.example examples/cli/.env
+# Windows PowerShell: Copy-Item examples/cli/.env.example examples/cli/.env
+# 编辑 examples/cli/.env，填入 DEEPSEEK_API_KEY
+pnpm run build
 ```
 
-Windows 示例：`sessionRoot` 可为 `F:/data/agent-sessions`，配置文件用 `F:/path/to/config.json`。
+示例文件：
 
-字段说明：
+| 文件 | 作用 |
+|------|------|
+| `examples/cli/config.example.json` | 配置模板（不含密钥） |
+| `examples/cli/.env.example` | 环境变量模板 |
+| `examples/cli/.env` | 本地密钥（已 gitignore，需自行复制） |
+| `examples/cli/config.json` | 首次 `pnpm agent` 时自动生成，`sessionRoot` 指向仓库内绝对路径 |
 
-- `sessionRoot`：JSONL 会话根目录（绝对路径）
+配置字段：
+
+- `sessionRoot`：JSONL 会话根目录（必须绝对路径；包装脚本会自动写入）
 - `maxSteps`：单次 turn 内最大 step 数
 - `settlementTimeoutMs`：失败/取消路径上 terminal settlement 的超时
 - `model.baseUrl`：OpenAI-compatible API 根（通常以 `/v1` 结尾）
-- `model.apiKeyEnv`：存放 API key 的环境变量名
+- `model.apiKeyEnv`：存放 API key 的环境变量名（默认 `DEEPSEEK_API_KEY`）
+- `shell`（可选）：`enabled`、`cwd`（绝对路径）、`timeoutMs`、`maxOutputBytes`；控制本机 `run_shell` 工具
 
-### 2. 设置密钥并运行
+密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 以当前用户权限执行命令，无沙箱，仅适合本地实验。
+
+### 2. 运行
 
 ```bash
-# Unix
-export DEEPSEEK_API_KEY=sk-...
-pnpm run build
-node packages/hosts/cli/lib/index.js run \
-  --config /绝对路径/config.json \
-  --session demo-1 \
-  --message "你好，介绍一下你自己"
-
-# Windows PowerShell
-$env:DEEPSEEK_API_KEY = "sk-..."
-pnpm run build
-node packages/hosts/cli/lib/index.js run `
-  --config F:/path/to/config.json `
-  --session demo-1 `
-  --message "你好，介绍一下你自己"
+# run：创建新会话（同一 session id 只能成功一次）
+pnpm agent run --session demo-1 --message "你好，介绍一下你自己"
+# resume：打开已有会话继续对话
+pnpm agent resume --session demo-1 --message "继续上一次的话题"
+# chat：同一进程多轮交互（会话不存在则创建，已存在则恢复）
+pnpm agent chat --session demo-1 --message "你好"
 ```
 
-恢复已有会话：
+`chat` 模式下在 stderr 提示后循环读取输入；输入 `/exit` 或 `/quit` 结束。默认注册本机 `run_shell` 工具（可通过配置 `shell.enabled: false` 关闭）。
+
+包装脚本会：
+
+1. 若缺少 `examples/cli/config.json`，从 example 生成并把 `sessionRoot` 设为 `examples/cli/data/sessions`
+2. 用 Node `--env-file=examples/cli/.env` 注入环境变量
+3. 为 `run` / `resume` 自动补上绝对路径的 `--config`
+
+自定义配置时仍可显式传入：
 
 ```bash
-node packages/hosts/cli/lib/index.js resume \
-  --config /绝对路径/config.json \
-  --session demo-1 \
-  --message "继续上一次的话题"
+pnpm agent run --config /绝对路径/config.json --session demo-1 --message "你好"
 ```
 
 ### 3. 输出约定
@@ -157,7 +154,7 @@ node packages/hosts/cli/lib/index.js resume \
 - **stderr**：usage 与不含密钥的诊断
 - **SIGINT / SIGTERM**：取消当前 run，并在 finally 中关闭资源
 
-首个 CLI 尚未注册业务工具；需要工具时请在 Host 组合点接入 `ToolRegistry`（见下节）。
+首个 CLI 提供多轮 `chat` 与可选 `run_shell`；更多工具可在 Host 组合点接入 `ToolRegistry`。
 
 ## 如何开发新功能
 
@@ -191,7 +188,7 @@ hosts → runtime → core|llm|session capability 包 → domain
                → llm|session adapters → capability 所属 package → domain
 ```
 
-`domain` 无 workspace 依赖。Core 不依赖具体 adapter。修改依赖后跑 `pnpm run gate:architecture`。
+`domain` 无 workspace 依赖。Capability 包不依赖具体 adapter。修改依赖后跑 `pnpm run gate:architecture`。
 
 ### 测试约定
 

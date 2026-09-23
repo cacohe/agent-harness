@@ -116,6 +116,9 @@ export class JsonlSessionRepositoryImplementation implements SessionRepository {
       await writeFully(file, header, 0, options.signal)
       await runIo(options.signal, () => file!.datasync())
       await syncDirectory(this.#io, stagingDirectory, options.signal)
+      // Windows 不允许在目录内仍有打开句柄时 rename；发布前必须关闭。
+      await file.close()
+      file = undefined
 
       options.signal.throwIfAborted()
       try {
@@ -127,6 +130,8 @@ export class JsonlSessionRepositoryImplementation implements SessionRepository {
         throw error
       }
       published = true
+      // 发布已完成：即使 signal 已取消也必须重新打开并返回 writer。
+      file = await this.#io.open(paths.file, 'r+')
       try {
         await syncDirectoryWithoutSignal(this.#io, root)
       } catch (error) {
@@ -790,6 +795,9 @@ async function syncDirectory(
   const directory = await openFile(io, path, 'r', signal)
   try {
     await runIo(signal, () => directory.sync())
+  } catch (error) {
+    // Windows 常对目录 fd 拒绝 fsync；目录项持久化不保证，文件仍走 datasync。
+    if (!isIgnorableDirectorySyncError(error)) throw error
   } finally {
     await directory.close()
   }
@@ -799,9 +807,22 @@ async function syncDirectoryWithoutSignal(io: JsonlIo, path: string): Promise<vo
   const directory = await io.open(path, 'r')
   try {
     await directory.sync()
+  } catch (error) {
+    if (!isIgnorableDirectorySyncError(error)) throw error
   } finally {
     await directory.close()
   }
+}
+
+function isIgnorableDirectorySyncError(error: unknown): boolean {
+  return (
+    process.platform === 'win32'
+    && error instanceof Error
+    && 'code' in error
+    && error.code === 'EPERM'
+    && 'syscall' in error
+    && error.syscall === 'fsync'
+  )
 }
 
 /** 逐层创建目录，并在每次创建后同步父目录项与新目录。 */

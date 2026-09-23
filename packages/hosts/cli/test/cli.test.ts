@@ -14,8 +14,44 @@ class Signals implements CliSignals {
 }
 
 async function root(): Promise<string> { const value = await mkdtemp(join(tmpdir(), 'agent-cli-')); roots.push(value); return value }
-function config(sessionRoot: string): string { return JSON.stringify({ sessionRoot, maxSteps: 2, settlementTimeoutMs: 1000, model: { id: 'test', baseUrl: 'https://example.test/v1', model: 'test-model', apiKeyEnv: 'TEST_KEY' } }) }
-function sse(text: string): Response { return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(`data: {"choices":[{"index":0,"delta":{"content":"${text}"}}]}\n\ndata: [DONE]\n\n`)); controller.close() } })) }
+function config(sessionRoot: string, shell?: Record<string, unknown>): string {
+  return JSON.stringify({
+    sessionRoot,
+    maxSteps: 4,
+    settlementTimeoutMs: 1000,
+    model: { id: 'test', baseUrl: 'https://example.test/v1', model: 'test-model', apiKeyEnv: 'TEST_KEY' },
+    ...(shell === undefined ? {} : { shell }),
+  })
+}
+function sse(text: string): Response {
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: {"choices":[{"index":0,"delta":{"content":"${text}"}}]}\n\ndata: [DONE]\n\n`))
+      controller.close()
+    },
+  }))
+}
+function toolCallSse(): Response {
+  const payload = JSON.stringify({
+    choices: [{
+      index: 0,
+      delta: {
+        tool_calls: [{
+          index: 0,
+          id: 'call-shell',
+          type: 'function',
+          function: { name: 'run_shell', arguments: '{"command":"echo hi"}' },
+        }],
+      },
+    }],
+  })
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: ${payload}\n\ndata: [DONE]\n\n`))
+      controller.close()
+    },
+  }))
+}
 
 describe('CLI Host', () => {
   it('显式组合 run，并把 stream 和结果写为 stdout JSONL', async () => {
@@ -68,5 +104,189 @@ describe('CLI Host', () => {
     ])
     expect(calls).toEqual(['handle', 'runtime'])
     expect(errors).toHaveLength(2)
+  })
+
+  it('对已存在会话的 run 提示改用 resume', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const first = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'dup', '--message', 'one'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => config(sessionRoot),
+      fetch: async () => sse('ok'),
+    })
+    expect(first).toBe(0)
+    const second = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'dup', '--message', 'two'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => config(sessionRoot),
+      fetch: async () => sse('ok'),
+    })
+    expect(second).toBe(1)
+    expect(errors.at(-1)).toContain('已有会话请改用 resume')
+  })
+
+  it('chat 在同一进程内处理多轮输入并自动打开已有会话', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const cwd = await root()
+    const replies = ['first-reply', 'second-reply']
+    let call = 0
+    const first = await runCli({
+      argv: ['chat', '--config', '/config.json', '--session', 'chat-1', '--message', 'hello'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      cwd,
+      readFile: async () => config(sessionRoot, { enabled: true, cwd, timeoutMs: 5000, maxOutputBytes: 1024 }),
+      fetch: async () => sse(replies[call++] ?? 'extra'),
+      lines: (async function* () {
+        yield 'again'
+        yield '/exit'
+      })(),
+    })
+    expect(first).toBe(0)
+    expect(output).toEqual([])
+    expect(errors.join('')).toContain('你: hello')
+    expect(errors.join('')).toContain('助手:\nfirst-reply')
+    expect(errors.join('')).toContain('助手:\nsecond-reply')
+
+    const resumeChat = await runCli({
+      argv: ['chat', '--config', '/config.json', '--session', 'chat-1'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      cwd,
+      readFile: async () => config(sessionRoot, { enabled: false }),
+      fetch: async () => sse('resumed'),
+      lines: (async function* () {
+        yield 'third'
+        yield '/quit'
+      })(),
+    })
+    expect(resumeChat).toBe(0)
+    expect(output).toEqual([])
+    expect(errors.join('')).toContain('助手:\nresumed')
+  })
+
+  it('chat 空闲时 SIGINT 结束交互并关闭行迭代器', async () => {
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const signals = new Signals()
+    let waiting: (() => void) | undefined
+    const startedWaiting = new Promise<void>(resolve => { waiting = resolve })
+    let closed = false
+    let resolveNext: ((value: IteratorResult<string>) => void) | undefined
+    const lines: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            waiting?.()
+            return new Promise(resolve => {
+              resolveNext = resolve
+            })
+          },
+          async return() {
+            closed = true
+            resolveNext?.({ done: true, value: undefined })
+            return { done: true, value: undefined }
+          },
+        }
+      },
+    }
+    const running = runCli({
+      argv: ['chat', '--config', '/config.json', '--session', 'chat-sigint'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write() {} },
+      stderr: { write: value => errors.push(value) },
+      signals,
+      readFile: async () => config(sessionRoot, { enabled: false }),
+      fetch: async () => sse('should-not-run'),
+      lines,
+    })
+    await startedWaiting
+    signals.listeners.get('SIGINT')?.()
+    await expect(running).resolves.toBe(0)
+    expect(closed).toBe(true)
+    expect(errors.join('')).not.toContain('助手:')
+    expect(signals.listeners).toEqual(new Map())
+  })
+
+  it('chat 在读取到行后若进程已取消则不开始新回合', async () => {
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const signals = new Signals()
+    let fetchCount = 0
+    const lines: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        let delivered = false
+        return {
+          next() {
+            if (delivered) return Promise.resolve({ done: true as const, value: undefined })
+            delivered = true
+            signals.listeners.get('SIGINT')?.()
+            return Promise.resolve({ done: false as const, value: 'should-skip' })
+          },
+          async return() {
+            return { done: true, value: undefined }
+          },
+        }
+      },
+    }
+    const code = await runCli({
+      argv: ['chat', '--config', '/config.json', '--session', 'chat-skip'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write() {} },
+      stderr: { write: value => errors.push(value) },
+      signals,
+      readFile: async () => config(sessionRoot, { enabled: false }),
+      fetch: async () => {
+        fetchCount += 1
+        return sse('nope')
+      },
+      lines,
+    })
+    expect(code).toBe(0)
+    expect(fetchCount).toBe(0)
+    expect(errors.join('')).not.toContain('助手:')
+  })
+
+  it('注册 run_shell 后可完成工具调用回合', async () => {
+    const output: string[] = []
+    const sessionRoot = await root()
+    const cwd = await root()
+    let step = 0
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'shell-1', '--message', 'run echo'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write() {} },
+      signals: new Signals(),
+      cwd,
+      readFile: async () => config(sessionRoot, { enabled: true, cwd, timeoutMs: 10_000, maxOutputBytes: 4096 }),
+      fetch: async () => {
+        step += 1
+        if (step === 1) return toolCallSse()
+        return sse('shell-done')
+      },
+    })
+    expect(code).toBe(0)
+    const events = output.map(line => JSON.parse(line))
+    expect(events.some(event => event.type === 'stream' && event.event?.type === 'tool.call')).toBe(true)
+    expect(events.at(-1)).toMatchObject({
+      type: 'result',
+      sessionId: 'shell-1',
+      message: { content: 'shell-done' },
+    })
   })
 })

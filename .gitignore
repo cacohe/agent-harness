@@ -3,3 +3,7 @@ lib/
 coverage/
 .DS_Store
 *.tsbuildinfo
+.env
+**/.env
+examples/cli/config.json
+examples/cli/data/

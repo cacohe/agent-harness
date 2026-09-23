@@ -99,6 +99,37 @@ describe('OpenAiCompatibleModelProvider', () => {
     })
   })
 
+  it('省略空 tools 与空 tool_calls，避免供应商 HTTP 400', async () => {
+    let body: Record<string, unknown> | undefined
+    const model = provider(async (_input, init) => {
+      body = JSON.parse(init?.body as string) as Record<string, unknown>
+      return response(['data: [DONE]\n\n'])
+    })
+    const call = await model.prepare(new AbortController().signal)
+    await Array.fromAsync(call.stream({
+      messages: [
+        { id: brandId<'MessageId'>('u') as MessageId, role: 'user', content: 'hi' },
+        {
+          id: brandId<'MessageId'>('a') as MessageId,
+          role: 'assistant',
+          content: 'hello',
+          toolCalls: [],
+        },
+      ],
+      tools: [],
+    }, new AbortController().signal))
+    expect(body).toEqual({
+      model: 'deepseek-chat',
+      stream: true,
+      messages: [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: 'hello' },
+      ],
+    })
+    expect(body).not.toHaveProperty('tools')
+    expect((body?.messages as unknown[])[1]).not.toHaveProperty('tool_calls')
+  })
+
   it('增量解析文本、usage、跨字节 SSE 与分段 tool arguments', async () => {
     const model = provider(async () => response([
       'data: {"choices":[{"index":0,"delta":{"content":"你"}}]}\n\n',

@@ -8,7 +8,7 @@ Agent Harness Lab 已有稳定的 `ModelProvider` capability，但此前只有�
 
 ## 决策
 
-新增 `packages/adapters/openai-compatible`，包名为 `@agent-harness/openai-compatible`。它仅依赖 `domain` 和 `model`，通过 Node.js 24 原生 `fetch` 实现 OpenAI-compatible `/v1/chat/completions` 的 streaming Chat Completions 协议。组合方显式提供 provider 标识、绝对 API 根路径（例如 `/v1`，不是完整 endpoint）、API key、模型名、可选额外请求头和可测试的 fetch 实现；adapter 不读取环境变量。额外请求头不能覆盖 `Authorization`、`Content-Type` 或 `Accept`。
+新增 `packages/adapters/openai-compatible`（目录后由 ADR 0011 调整为 `packages/llm/openai-compatible`），包名为 `@agent-harness/openai-compatible`。它仅依赖 `domain` 和 `model`，通过 Node.js 24 原生 `fetch` 实现 OpenAI-compatible `/v1/chat/completions` 的 streaming Chat Completions 协议。组合方显式提供 provider 标识、绝对 API 根路径（例如 `/v1`，不是完整 endpoint）、API key、模型名、可选额外请求头和可测试的 fetch 实现；adapter 不读取环境变量。额外请求头不能覆盖 `Authorization`、`Content-Type` 或 `Accept`。
 
 适配器把现有 user、assistant 与 tool 模型消息映射为 Chat Completions 消息，并以键排序的稳定 JSON 表示 assistant tool arguments 与 tool result。工具 schema 映射为 function tool。请求不强制 `stream_options.include_usage`，以免拒绝不支持该扩展字段的兼容网关；服务端提供 usage 时仍会映射。响应使用增量 UTF-8 SSE 解析器；`text.delta` 与 usage 可在读取时发布，tool call fragment 按从零连续的 index 聚合，只有收到 `[DONE]` 后验证 id、name、跨 index 的 id 唯一性与完整 JSON arguments 才按 index 顺序发布。
 

@@ -198,7 +198,11 @@ describe('JsonlSessionRepository', () => {
     await reopened.close({ signal: signal() })
   })
 
-  it('真实根路径与 symlink 别名共享 writer lease key', async () => {
+  it('真实根路径与 symlink 别名共享 writer lease key', async ({ skip }) => {
+    if (process.platform === 'win32') {
+      skip()
+      return
+    }
     const id = sessionId('symlink-owned')
     const alias = join(root, 'root-alias')
     await symlink(root, alias, 'dir')
@@ -215,7 +219,8 @@ describe('JsonlSessionRepository', () => {
     await writer.close({ signal: signal() })
 
     const path = filePath(root, id)
-    expect(path.startsWith(`${root}/s-`)).toBe(true)
+    expect(path.startsWith(join(root, 's-'))).toBe(true)
+    expect(path.includes('..')).toBe(false)
     await expect(stat(path)).resolves.toMatchObject({ isFile: expect.any(Function) })
   })
 

@@ -1,0 +1,16 @@
+{
+  "sessionRoot": "SESSION_ROOT_PLACEHOLDER",
+  "maxSteps": 8,
+  "settlementTimeoutMs": 30000,
+  "model": {
+    "id": "openai-compatible",
+    "baseUrl": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat",
+    "apiKeyEnv": "DEEPSEEK_API_KEY"
+  },
+  "shell": {
+    "enabled": true,
+    "timeoutMs": 30000,
+    "maxOutputBytes": 65536
+  }
+}

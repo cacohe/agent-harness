@@ -267,36 +267,46 @@ function requireNonEmpty(value: string, name: string): string {
 function toChatCompletionsRequest(model: string, request: ModelRequest) {
   return {
     model,
-    stream: true,
+    stream: true as const,
     messages: request.messages.map(toChatMessage),
-    tools: request.tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema,
-      },
-    })),
+    // 部分供应商拒绝空 tools；无工具时省略该字段。
+    ...(request.tools.length === 0
+      ? {}
+      : {
+          tools: request.tools.map(tool => ({
+            type: 'function' as const,
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.inputSchema,
+            },
+          })),
+        }),
   }
 }
 
-function toChatMessage(message: ModelMessage): JsonObject {
+function toChatMessage(message: ModelMessage) {
   switch (message.role) {
     case 'user':
-      return { role: 'user', content: message.content }
+      return { role: 'user' as const, content: message.content }
     case 'assistant':
       return {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: message.content,
-        tool_calls: message.toolCalls.map(call => ({
-          id: call.id,
-          type: 'function',
-          function: { name: call.name, arguments: stableJson(call.input) },
-        })),
+        // 部分供应商拒绝空 tool_calls；无调用时省略该字段。
+        ...(message.toolCalls.length === 0
+          ? {}
+          : {
+              tool_calls: message.toolCalls.map(call => ({
+                id: call.id,
+                type: 'function' as const,
+                function: { name: call.name, arguments: stableJson(call.input) },
+              })),
+            }),
       }
     case 'tool':
       return {
-        role: 'tool',
+        role: 'tool' as const,
         tool_call_id: message.callId,
         content: stableJson(message.result),
       }

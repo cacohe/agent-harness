@@ -16,8 +16,8 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 - 依赖通过构造函数或函数参数显式传入，不得引入服务定位器或进程全局运行时。
 - 模型可见状态从 append-only 会话事件日志重建。
 - Domain 代码不得导入运行时、adapter、host、文件系统、网络、进程或模型 SDK 模块。
-- Core package 只依赖 capability 接口，不依赖具体 adapter。
-- Adapter 把外部系统转换为 core capability 接口。
+- Capability 所属 package 只依赖 capability 接口与 `domain`，不依赖具体 adapter。
+- Adapter 把外部系统转换为 capability 接口，并放在对应能力域目录（如 `llm/`、`session/`）。
 - Host 组合运行时并拥有进程生命周期。
 - 每个已经开始的 turn 和 step 必须在取消与失败路径上也恰好结算一次。
 - 流式通知是临时数据；持久化的 assistant 结算必须写入会话事件。
@@ -28,20 +28,26 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 
 ## 仓库结构
 
+workspace 按能力域分组（ADR 0011）；npm 包名为 `@agent-harness/<目录叶名>`。
+
 ```text
-docs/ 架构与决定
-packages/domain/ 纯标识符、事件、消息与错误
-packages/core/agent/ Inbox 与 Agent 状态机
-packages/core/tools/ 工具定义、注册与调度
-packages/llm/model/ 模型 provider 接口与流事件词汇
-packages/llm/openai-compatible/ OpenAI-compatible 模型 adapter
-packages/session/session/ 事件日志、投影与持久化接口
-packages/session/session-jsonl/ JSONL 会话存储 adapter
-packages/runtime/ 显式组合与生命周期
-packages/hosts/ CLI、JSON-RPC、HTTP 等进程入口
-packages/test-support/ 确定性 fake 与 fixture
-scripts/ 可执行仓库 gate
-.agents/skills/ 可复用仓库工作流
+docs/                              架构与决定
+packages/
+  domain/                          纯标识符、事件、消息与错误
+  core/
+    agent/                         Inbox 与 Agent 状态机
+    tools/                         工具定义、注册与调度
+  llm/
+    model/                         模型 provider 接口与流事件词汇
+    openai-compatible/             OpenAI-compatible 模型 adapter
+  session/
+    session/                       事件日志、投影与持久化接口
+    session-jsonl/                 JSONL 会话存储 adapter
+  runtime/                         显式组合与生命周期
+  hosts/cli/                       CLI 等进程入口
+  test-support/                    确定性 fake 与 fixture
+scripts/                           可执行仓库 gate
+.agents/skills/                    可复用仓库工作流
 ```
 
 目录内更具体的 `AGENTS.md` 规则优先适用。
