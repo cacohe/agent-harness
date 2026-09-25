@@ -117,11 +117,14 @@ pnpm run build
 - `sessionRoot`：JSONL 会话根目录（必须绝对路径；包装脚本会自动写入）
 - `maxSteps`：单次 turn 内最大 step 数
 - `settlementTimeoutMs`：失败/取消路径上 terminal settlement 的超时
+- `runTimeoutMs`：单个 turn 的总执行时限，默认 120 秒
+- `maxModelOutputBytes`、`maxInputBytes`：模型输出与输入上下文的字节预算，默认各 1 MiB
+- `systemPrompt`（可选）：不写入会话事件的静态 system 指令
 - `model.baseUrl`：OpenAI-compatible API 根（通常以 `/v1` 结尾）
 - `model.apiKeyEnv`：存放 API key 的环境变量名（默认 `DEEPSEEK_API_KEY`）
 - `shell`（可选）：`enabled`、`cwd`（绝对路径）、`timeoutMs`、`maxOutputBytes`；控制本机 `run_shell` 工具
 
-密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 以当前用户权限执行命令，无沙箱，仅适合本地实验。
+密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 默认关闭；显式启用后仍以当前用户权限执行命令，无沙箱，仅适合本地实验。
 
 ### 2. 运行
 
@@ -134,7 +137,7 @@ pnpm agent resume --session demo-1 --message "继续上一次的话题"
 pnpm agent chat --session demo-1 --message "你好"
 ```
 
-`chat` 模式下在 stderr 提示后循环读取输入；输入 `/exit` 或 `/quit` 结束。默认注册本机 `run_shell` 工具（可通过配置 `shell.enabled: false` 关闭）。
+`chat` 模式下在 stderr 提示后循环读取输入；输入 `/exit` 或 `/quit` 结束。可通过 `shell.enabled: true` 显式注册本机 `run_shell` 工具。
 
 包装脚本会：
 
@@ -202,4 +205,3 @@ hosts → runtime → core|llm|session capability 包 → domain
 - `[docs/architecture.md](docs/architecture.md)` — 当前架构
 - `[docs/decisions/](docs/decisions/)` — 已接受的架构决定
 - `[packages/hosts/cli/README.md](packages/hosts/cli/README.md)` — CLI 简要说明
-
