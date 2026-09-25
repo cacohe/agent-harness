@@ -22,7 +22,7 @@ function fakeSpawn(handlers: {
   readonly stderr?: Buffer
   readonly exitCode?: number
   readonly delayMs?: number
-  readonly onKill?: () => void
+  readonly onKill?: (signal: NodeJS.Signals | number | undefined) => void
   /** true 时 kill 不触发 close，用于验证强制结算。 */
   readonly hangAfterKill?: boolean
 }): ShellSpawn {
@@ -32,8 +32,8 @@ function fakeSpawn(handlers: {
     const stderr = new EventEmitter()
     child.stdout = stdout as ChildProcess['stdout']
     child.stderr = stderr as ChildProcess['stderr']
-    child.kill = (() => {
-      handlers.onKill?.()
+    child.kill = ((signal?: NodeJS.Signals | number) => {
+      handlers.onKill?.(signal)
       if (!handlers.hangAfterKill) {
         queueMicrotask(() => child.emit('close', null))
       }
@@ -83,25 +83,25 @@ describe('createShellTool', () => {
   it('取消时终止子进程并抛出', async () => {
     const cwd = await workspace()
     const controller = new AbortController()
-    let killed = false
+    const signals: Array<NodeJS.Signals | number | undefined> = []
     const tool = createShellTool({
       cwd,
       timeoutMs: 5000,
       maxOutputBytes: 1024,
       spawn: fakeSpawn({
         delayMs: 200,
-        onKill: () => { killed = true },
+        onKill: signal => { signals.push(signal) },
       }),
     })
     const running = tool.execute({ command: 'sleep' }, { signal: controller.signal })
     controller.abort(new DOMException('stop', 'AbortError'))
     await expect(running).rejects.toMatchObject({ name: 'AbortError' })
-    expect(killed).toBe(true)
+    expect(signals).toContain('SIGTERM')
   })
 
   it('超时后若子进程不 close 仍强制结束等待', async () => {
     const cwd = await workspace()
-    let killed = false
+    const signals: Array<NodeJS.Signals | number | undefined> = []
     const tool = createShellTool({
       cwd,
       timeoutMs: 20,
@@ -109,11 +109,12 @@ describe('createShellTool', () => {
       maxOutputBytes: 1024,
       spawn: fakeSpawn({
         hangAfterKill: true,
-        onKill: () => { killed = true },
+        onKill: signal => { signals.push(signal) },
       }),
     })
     const output = await tool.execute({ command: 'hang' }, { signal: new AbortController().signal })
-    expect(killed).toBe(true)
+    expect(signals).toContain('SIGTERM')
+    expect(signals).toContain('SIGKILL')
     expect(output).toMatchObject({
       exitCode: null,
       timedOut: true,

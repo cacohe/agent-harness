@@ -109,6 +109,7 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
         baseUrl: config.model.baseUrl,
         apiKey,
         model: config.model.model,
+        maxResponseBytes: config.maxModelOutputBytes,
         ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
       }),
       tools: new ToolRegistry(buildTools(config)),

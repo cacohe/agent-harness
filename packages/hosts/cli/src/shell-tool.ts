@@ -181,6 +181,7 @@ async function runShellCommand(
   const armForceSettle = (): void => {
     if (forceTimer !== undefined || waitSettled) return
     forceTimer = setTimeout(() => {
+      killProcessTree(child, options.platform, 'SIGKILL')
       destroyStream(child.stdout)
       destroyStream(child.stderr)
       settleWait(null)
@@ -189,7 +190,7 @@ async function runShellCommand(
 
   const killChild = (): void => {
     if (waitSettled) return
-    killProcessTree(child, options.platform)
+    killProcessTree(child, options.platform, 'SIGTERM')
     armForceSettle()
   }
 
@@ -285,15 +286,19 @@ function safeShellEnvironment(env: NodeJS.ProcessEnv, platform: NodeJS.Platform)
 }
 
 /** Unix 以独立进程组启动，取消时终止整组；Windows 仍由 Job Object/沙箱承担生产隔离。 */
-function killProcessTree(child: ChildProcess, platform: NodeJS.Platform): void {
+function killProcessTree(
+  child: ChildProcess,
+  platform: NodeJS.Platform,
+  signal: NodeJS.Signals,
+): void {
   if (platform !== 'win32' && typeof child.pid === 'number') {
     try {
-      process.kill(-child.pid, 'SIGTERM')
+      process.kill(-child.pid, signal)
       return
     } catch {
       // 进程可能已退出，退回对子进程本身的 best-effort kill。
     }
   }
-  child.kill('SIGTERM')
-  if (platform === 'win32') child.kill()
+  child.kill(signal)
+  if (platform === 'win32' && signal === 'SIGTERM') child.kill()
 }

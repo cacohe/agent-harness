@@ -30,6 +30,8 @@ export interface OpenAiCompatibleModelProviderOptions {
   readonly fetch?: FetchImplementation
   /** 单个尚未完成 SSE 行的最大 UTF-8 字节数。 */
   readonly maxSseBufferBytes?: number
+  /** 一次模型 HTTP 流允许接收的最大 UTF-8 字节数。 */
+  readonly maxResponseBytes?: number
 }
 
 /** 配置在构造阶段不满足协议前提时抛出。 */
@@ -69,6 +71,7 @@ export class OpenAiCompatibleModelProvider implements ModelProvider {
   readonly #headers: Readonly<Record<string, string>>
   readonly #fetch: FetchImplementation
   readonly #maxSseBufferBytes: number
+  readonly #maxResponseBytes: number
 
   constructor(options: OpenAiCompatibleModelProviderOptions) {
     this.id = requireNonEmpty(options.id, 'provider id')
@@ -81,6 +84,10 @@ export class OpenAiCompatibleModelProvider implements ModelProvider {
     if (!Number.isSafeInteger(this.#maxSseBufferBytes) || this.#maxSseBufferBytes < 1) {
       throw new OpenAiCompatibleConfigurationError('maxSseBufferBytes 必须是正整数')
     }
+    this.#maxResponseBytes = options.maxResponseBytes ?? 1_048_576
+    if (!Number.isSafeInteger(this.#maxResponseBytes) || this.#maxResponseBytes < 1) {
+      throw new OpenAiCompatibleConfigurationError('maxResponseBytes 必须是正整数')
+    }
   }
 
   async prepare(signal: AbortSignal): Promise<PreparedModelCall> {
@@ -91,6 +98,7 @@ export class OpenAiCompatibleModelProvider implements ModelProvider {
       this.#headers,
       this.#fetch,
       this.#maxSseBufferBytes,
+      this.#maxResponseBytes,
     )
   }
 }
@@ -101,6 +109,7 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
   readonly #headers: Readonly<Record<string, string>>
   readonly #fetch: FetchImplementation
   readonly #maxSseBufferBytes: number
+  readonly #maxResponseBytes: number
 
   constructor(
     endpoint: URL,
@@ -108,12 +117,14 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
     headers: Readonly<Record<string, string>>,
     fetchImplementation: FetchImplementation,
     maxSseBufferBytes: number,
+    maxResponseBytes: number,
   ) {
     this.#endpoint = endpoint
     this.#model = model
     this.#headers = headers
     this.#fetch = fetchImplementation
     this.#maxSseBufferBytes = maxSseBufferBytes
+    this.#maxResponseBytes = maxResponseBytes
   }
 
   async *stream(
@@ -141,6 +152,7 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
     let lineBuffer = ''
     let dataLines: string[] = []
     let dataBytes = 0
+    let responseBytes = 0
     let receivedDone = false
     let streamFinished = false
 
@@ -188,6 +200,10 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
           decoded = decoder.decode(read.value, { stream: true })
         } catch (error) {
           throw new OpenAiCompatibleProtocolError(`SSE 不是有效 UTF-8：${errorMessage(error)}`)
+        }
+        responseBytes += Buffer.byteLength(decoded, 'utf8')
+        if (responseBytes > this.#maxResponseBytes) {
+          throw new OpenAiCompatibleProtocolError('SSE 响应超过 maxResponseBytes')
         }
         lineBuffer += decoded
         if (Buffer.byteLength(lineBuffer, 'utf8') > this.#maxSseBufferBytes) {

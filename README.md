@@ -117,7 +117,7 @@ pnpm run build
 - `sessionRoot`：JSONL 会话根目录（必须绝对路径；包装脚本会自动写入）
 - `maxSteps`：单次 turn 内最大 step 数
 - `settlementTimeoutMs`：失败/取消路径上 terminal settlement 的超时
-- `runTimeoutMs`：单个 turn 的总执行时限，默认 120 秒
+- `runTimeoutMs`：单个 turn 的协作式执行期限，默认 120 秒；provider 与工具必须响应 `AbortSignal`
 - `maxModelOutputBytes`、`maxInputBytes`：模型输出与输入上下文的字节预算，默认各 1 MiB
 - `systemPrompt`（可选）：不写入会话事件的静态 system 指令
 - `model.baseUrl`：OpenAI-compatible API 根（通常以 `/v1` 结尾）

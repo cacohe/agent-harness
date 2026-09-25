@@ -83,6 +83,15 @@ describe('OpenAiCompatibleModelProvider', () => {
     await expect(events(model)).rejects.toThrow('SSE 行超过 maxSseBufferBytes')
   })
 
+  it('限制跨多个 SSE 事件累积的响应字节', async () => {
+    const model = new OpenAiCompatibleModelProvider({
+      id: 'deepseek', baseUrl: 'https://example.test/v1', apiKey: 'secret', model: 'deepseek',
+      maxSseBufferBytes: 1024, maxResponseBytes: 30,
+      fetch: async () => response(['data: {"choices":[]}\n\n', 'data: {"choices":[]}\n\n']),
+    })
+    await expect(events(model)).rejects.toThrow('SSE 响应超过 maxResponseBytes')
+  })
+
   it('映射请求、固定鉴权头和稳定工具 JSON', async () => {
     let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
     const model = provider(async (input, init) => {

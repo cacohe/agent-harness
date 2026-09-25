@@ -10,7 +10,7 @@ Agent 会把不可信模型输出交给工具，并将会话历史送回模型�
 
 `agent` 拥有 `PromptAssembler` capability。它从 append-only 事件快照和当前工具目录构造 `ModelRequest`；默认实现支持静态 system prompt、完整 turn 边界裁剪和输入字节预算。超过预算而无法保留最新完整用户 turn 时失败，不发送不完整工具上下文。
 
-Runtime 向 Agent 注入每个 turn 的总 deadline 和模型输出预算。Agent 把总 deadline 传给模型与工具，并在累计文本和工具调用 JSON 超过预算时取消本 turn。OpenAI-compatible adapter 另外限制尚未形成 SSE 行的缓存，避免恶意或故障上游无限占用内存。
+Runtime 向 Agent 注入每个 turn 的总 deadline 和模型输出预算。Agent 把总 deadline 传给模型与工具；累计文本和工具调用 JSON 超过预算时以失败结算该 turn。OpenAI-compatible adapter 另外限制未形成完整事件的缓存和整个响应字节数，避免恶意或故障上游无限占用内存。
 
 Host 侧 `run_shell` 默认不注册。显式启用时仅继承最小运行环境，并在 Unix 中以独立进程组启动和终止整组进程。它仍是本地实验能力，不能作为多租户隔离边界。
 
