@@ -53,6 +53,10 @@ interface CliConfig {
   readonly sessionRoot: string
   readonly maxSteps: number
   readonly settlementTimeoutMs: number
+  readonly runTimeoutMs: number
+  readonly maxModelOutputBytes: number
+  readonly maxInputBytes: number
+  readonly systemPrompt?: string
   readonly model: {
     readonly id: string
     readonly baseUrl: string
@@ -110,6 +114,10 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       tools: new ToolRegistry(buildTools(config)),
       maxSteps: config.maxSteps,
       settlementTimeoutMs: config.settlementTimeoutMs,
+      runTimeoutMs: config.runTimeoutMs,
+      maxModelOutputBytes: config.maxModelOutputBytes,
+      maxInputBytes: config.maxInputBytes,
+      ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
       // chat 仅展示最终回复；run/resume 保持 JSONL stream。
       observers: command.mode === 'chat'
         ? []
@@ -347,7 +355,7 @@ async function readConfig(
   let value: unknown
   try { value = JSON.parse(await readFile(path, 'utf8')) } catch { throw new CliUsageError('配置文件必须是可解析的 JSON') }
   const root = object(value, '配置')
-  exact(root, ['sessionRoot', 'maxSteps', 'settlementTimeoutMs', 'model'], '配置', ['shell'])
+  exact(root, ['sessionRoot', 'maxSteps', 'settlementTimeoutMs', 'model'], '配置', ['shell', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt'])
   const model = object(root.model, 'model 配置')
   exact(model, ['id', 'baseUrl', 'model', 'apiKeyEnv'], 'model 配置')
   const sessionRoot = text(root.sessionRoot, 'sessionRoot')
@@ -358,6 +366,10 @@ async function readConfig(
     sessionRoot,
     maxSteps: positive(root.maxSteps, 'maxSteps'),
     settlementTimeoutMs: positive(root.settlementTimeoutMs, 'settlementTimeoutMs'),
+    runTimeoutMs: root.runTimeoutMs === undefined ? 120_000 : positive(root.runTimeoutMs, 'runTimeoutMs'),
+    maxModelOutputBytes: root.maxModelOutputBytes === undefined ? 1_048_576 : positive(root.maxModelOutputBytes, 'maxModelOutputBytes'),
+    maxInputBytes: root.maxInputBytes === undefined ? 1_048_576 : positive(root.maxInputBytes, 'maxInputBytes'),
+    ...(root.systemPrompt === undefined ? {} : { systemPrompt: text(root.systemPrompt, 'systemPrompt') }),
     model: modelConfig(model, apiKeyEnv),
     shell: readShellConfig(root.shell, defaultCwd),
   }
@@ -366,7 +378,7 @@ async function readConfig(
 function readShellConfig(value: unknown, defaultCwd: string): ShellConfig {
   if (value === undefined) {
     return {
-      enabled: true,
+      enabled: false,
       cwd: resolve(defaultCwd),
       timeoutMs: 30_000,
       maxOutputBytes: 64 * 1024,
@@ -374,7 +386,7 @@ function readShellConfig(value: unknown, defaultCwd: string): ShellConfig {
   }
   const shell = object(value, 'shell 配置')
   exact(shell, [], 'shell 配置', ['enabled', 'cwd', 'timeoutMs', 'maxOutputBytes'])
-  const enabled = shell.enabled === undefined ? true : boolean(shell.enabled, 'shell.enabled')
+  const enabled = shell.enabled === undefined ? false : boolean(shell.enabled, 'shell.enabled')
   const cwd = shell.cwd === undefined ? resolve(defaultCwd) : text(shell.cwd, 'shell.cwd')
   if (!isAbsolute(cwd)) throw new CliUsageError('shell.cwd 必须是绝对路径')
   return {

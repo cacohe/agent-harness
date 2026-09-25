@@ -7,6 +7,7 @@ import {
   type AttemptId,
   type MessageId,
   type SessionEvent,
+  type EventEnvelope,
   type StepId,
   type ToolCall,
   type ToolCallId,
@@ -14,11 +15,13 @@ import {
   type TurnId,
   type TurnOutcome,
   type UserMessage,
+  type ModelMessage,
 } from '@agent-harness/domain'
 import type {
   ModelProvider,
   ModelRequest,
   ModelStreamEvent,
+  ModelToolDefinition,
 } from '@agent-harness/model'
 import { deriveModelMessages, type SessionLog } from '@agent-harness/session'
 import type { ToolCapability } from '@agent-harness/tools'
@@ -50,6 +53,55 @@ export interface SettlementSignalFactory {
   create(): AbortSignal
 }
 
+/** 将持久会话事实和当前工具表组装为一次模型请求。 */
+export interface PromptAssembler {
+  assemble(
+    events: readonly EventEnvelope[],
+    tools: readonly ModelToolDefinition[],
+  ): ModelRequest
+}
+
+/** 默认上下文策略：保留完整的最近用户 turn，并限制模型输入字节数。 */
+export class BoundedPromptAssembler implements PromptAssembler {
+  readonly #systemPrompt: string | undefined
+  readonly #maxInputBytes: number
+
+  constructor(options: { readonly maxInputBytes: number, readonly systemPrompt?: string }) {
+    if (!Number.isSafeInteger(options.maxInputBytes) || options.maxInputBytes < 1) {
+      throw new TypeError('maxInputBytes 必须是正整数')
+    }
+    if (options.systemPrompt !== undefined && options.systemPrompt.length === 0) {
+      throw new TypeError('systemPrompt 若提供则必须是非空字符串')
+    }
+    this.#maxInputBytes = options.maxInputBytes
+    this.#systemPrompt = options.systemPrompt
+  }
+
+  assemble(events: readonly EventEnvelope[], tools: readonly ModelToolDefinition[]): ModelRequest {
+    const history = deriveModelMessages(events)
+    const start = this.#findStart(history, tools)
+    const messages: readonly ModelMessage[] = this.#systemPrompt === undefined
+      ? history.slice(start)
+      : [{ role: 'system', content: this.#systemPrompt }, ...history.slice(start)]
+    return { messages, tools }
+  }
+
+  #findStart(messages: readonly ModelMessage[], tools: readonly ModelToolDefinition[]): number {
+    const systemBytes = this.#systemPrompt === undefined ? 0 : Buffer.byteLength(this.#systemPrompt, 'utf8')
+    let bytes = systemBytes + Buffer.byteLength(JSON.stringify(tools), 'utf8')
+    let start = messages.length
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      bytes += Buffer.byteLength(JSON.stringify(messages[index]), 'utf8')
+      if (bytes > this.#maxInputBytes) break
+      if (messages[index]?.role === 'user') start = index
+    }
+    if (start === messages.length && messages.length > 0) {
+      throw new Error('最新完整用户 turn 超过 maxInputBytes')
+    }
+    return start
+  }
+}
+
 /** 构造 Agent 所需的全部显式依赖与运行限制。 */
 export interface AgentOptions {
   readonly model: ModelProvider
@@ -58,6 +110,9 @@ export interface AgentOptions {
   readonly ids: AgentIdGenerator
   readonly maxSteps: number
   readonly settlementSignals: SettlementSignalFactory
+  readonly prompts?: PromptAssembler
+  readonly runTimeoutMs?: number
+  readonly maxModelOutputBytes?: number
   readonly observers?: readonly AgentObserver[]
   /** 初始化恢复历史已经占用的各类 ID；Agent 会继续保留实时 reservation。 */
   readonly reservedIds?: AgentIdReservationSeed
@@ -115,7 +170,7 @@ export class SettlementPersistenceError extends Error {
 }
 
 /** 保持尚未纳入 turn 的用户输入，并确保每条输入至多领取一次。 */
-export class AgentInbox {
+class AgentInbox {
   readonly #messages: UserMessage[] = []
 
   enqueue(message: UserMessage): void {
@@ -142,6 +197,9 @@ export class Agent {
   readonly #ids: AgentIdGenerator
   readonly #maxSteps: number
   readonly #settlementSignals: SettlementSignalFactory
+  readonly #prompts: PromptAssembler
+  readonly #runTimeoutMs: number | undefined
+  readonly #maxModelOutputBytes: number | undefined
   readonly #observers: readonly AgentObserver[]
   readonly #reservations: AgentIdReservations
   readonly #inbox = new AgentInbox()
@@ -155,22 +213,27 @@ export class Agent {
     if (!Number.isInteger(options.maxSteps) || options.maxSteps < 1) {
       throw new Error('maxSteps must be a positive integer')
     }
+    if (options.runTimeoutMs !== undefined && (!Number.isSafeInteger(options.runTimeoutMs) || options.runTimeoutMs < 1)) {
+      throw new TypeError('runTimeoutMs 必须是正整数')
+    }
+    if (options.maxModelOutputBytes !== undefined && (!Number.isSafeInteger(options.maxModelOutputBytes) || options.maxModelOutputBytes < 1)) {
+      throw new TypeError('maxModelOutputBytes 必须是正整数')
+    }
     this.#model = options.model
     this.#session = options.session
     this.#tools = options.tools
     this.#ids = options.ids
     this.#maxSteps = options.maxSteps
     this.#settlementSignals = options.settlementSignals
+    this.#prompts = options.prompts ?? new BoundedPromptAssembler({ maxInputBytes: Number.MAX_SAFE_INTEGER })
+    this.#runTimeoutMs = options.runTimeoutMs
+    this.#maxModelOutputBytes = options.maxModelOutputBytes
     this.#observers = options.observers ?? []
     this.#reservations = new AgentIdReservations(options.reservedIds)
   }
 
   get phase(): AgentPhase {
     return this.#phase
-  }
-
-  get inbox(): AgentInbox {
-    return this.#inbox
   }
 
   /** 取消当前活动 run；不影响是否继续接纳新的 run。 */
@@ -211,7 +274,8 @@ export class Agent {
 
     const controller = new AbortController()
     this.#controller = controller
-    const signal = AbortSignal.any([externalSignal, controller.signal])
+    const timeoutSignal = this.#runTimeoutMs === undefined ? undefined : AbortSignal.timeout(this.#runTimeoutMs)
+    const signal = AbortSignal.any([externalSignal, controller.signal, ...(timeoutSignal === undefined ? [] : [timeoutSignal])])
     this.#phase = { kind: 'running', turnId }
     let turnStarted = false
     let turnEnded = false
@@ -293,10 +357,7 @@ export class Agent {
     lifecycle.started = true
     throwIfAborted(signal)
 
-    const request: ModelRequest = {
-      messages: deriveModelMessages(await this.#session.read({ signal })),
-      tools: this.#tools.list(),
-    }
+    const request = this.#prompts.assemble(await this.#session.read({ signal }), this.#tools.list())
     const prepared = await this.#model.prepare(signal)
     throwIfAborted(signal)
     const attempt: AttemptLifecycle = {
@@ -308,15 +369,20 @@ export class Agent {
       persistedToolResults: new Set(),
     }
     lifecycle.attempt = attempt
+    let outputBytes = 0
 
     for await (const event of prepared.stream(request, signal)) {
       throwIfAborted(signal)
       this.#notifyStream(event)
       switch (event.type) {
         case 'text.delta':
+          outputBytes += Buffer.byteLength(event.text, 'utf8')
+          this.#assertOutputBudget(outputBytes)
           attempt.partialText += event.text
           break
         case 'tool.call':
+          outputBytes += Buffer.byteLength(JSON.stringify(event.call), 'utf8')
+          this.#assertOutputBudget(outputBytes)
           this.#reservations.toolCall(event.call.id)
           attempt.observedToolCalls.push(event.call)
           break
@@ -363,6 +429,12 @@ export class Agent {
     ], { signal })
     lifecycle.ended = true
     return assistantMessage
+  }
+
+  #assertOutputBudget(bytes: number): void {
+    if (this.#maxModelOutputBytes !== undefined && bytes > this.#maxModelOutputBytes) {
+      throw new Error(`模型输出超过 maxModelOutputBytes (${this.#maxModelOutputBytes})`)
+    }
   }
 
   /** 向 observer 派发流事件；同步与异步失败均被隔离。 */

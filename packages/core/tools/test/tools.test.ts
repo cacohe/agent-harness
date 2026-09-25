@@ -16,6 +16,7 @@ describe('ToolRegistry', () => {
       name: 'lookup',
       description: '查询',
       inputSchema: { type: 'object' },
+      parseInput: input => input,
       execute: async () => ({ ok: true }),
     }
     expect(() => new ToolRegistry([definition, definition])).toThrow(
@@ -29,6 +30,7 @@ describe('ToolRegistry', () => {
         name: 'lookup',
         description: '查询',
         inputSchema: { type: 'object' },
+        parseInput: input => input,
         execute: async () => ({ ok: true }),
       },
     ])
@@ -48,6 +50,7 @@ describe('ToolRegistry', () => {
         name: 'lookup',
         description: '查询',
         inputSchema: { type: 'object' },
+        parseInput: input => input,
         execute: async input => ({ echoed: input }),
       },
     ])
@@ -67,6 +70,7 @@ describe('ToolRegistry', () => {
         name: 'lookup',
         description: '查询',
         inputSchema: { type: 'object' },
+        parseInput: input => input,
         execute: async () => {
           throw new Error('boom')
         },
@@ -85,12 +89,33 @@ describe('ToolRegistry', () => {
     })
   })
 
+  it('在执行副作用前拒绝未通过输入解析的模型 JSON', async () => {
+    let executed = false
+    const registry = new ToolRegistry([{
+      name: 'lookup',
+      description: '查询',
+      inputSchema: { type: 'object' },
+      parseInput: () => { throw new TypeError('q 必须是字符串') },
+      execute: async () => {
+        executed = true
+        return { ok: true }
+      },
+    }])
+
+    await expect(registry.execute(call('lookup'), new AbortController().signal)).resolves.toMatchObject({
+      status: 'failure',
+      error: { name: 'TypeError', message: 'q 必须是字符串' },
+    })
+    expect(executed).toBe(false)
+  })
+
   it('拒绝非 JSON 输出', async () => {
     const registry = new ToolRegistry([
       {
         name: 'lookup',
         description: '查询',
         inputSchema: { type: 'object' },
+        parseInput: input => input,
         execute: async () => () => undefined,
       },
     ])
@@ -110,6 +135,7 @@ describe('ToolRegistry', () => {
         name: 'lookup',
         description: '查询',
         inputSchema: { type: 'object' },
+        parseInput: input => input,
         async execute() {
           controller.abort(new Error('stop'))
           return { ok: true }

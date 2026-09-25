@@ -69,6 +69,20 @@ async function events(
 }
 
 describe('OpenAiCompatibleModelProvider', () => {
+  it('拒绝无界或无效的 SSE 缓冲配置', () => {
+    expect(() => new OpenAiCompatibleModelProvider({
+      id: 'deepseek', baseUrl: 'https://example.test/v1', apiKey: 'secret', model: 'deepseek', maxSseBufferBytes: 0,
+    })).toThrow(OpenAiCompatibleConfigurationError)
+  })
+
+  it('拒绝超过 SSE 缓冲上限的未完成行', async () => {
+    const model = new OpenAiCompatibleModelProvider({
+      id: 'deepseek', baseUrl: 'https://example.test/v1', apiKey: 'secret', model: 'deepseek', maxSseBufferBytes: 8,
+      fetch: async () => response(['data: 123456789']),
+    })
+    await expect(events(model)).rejects.toThrow('SSE 行超过 maxSseBufferBytes')
+  })
+
   it('映射请求、固定鉴权头和稳定工具 JSON', async () => {
     let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
     const model = provider(async (input, init) => {

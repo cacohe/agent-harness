@@ -198,6 +198,7 @@ export function fakeTool(
     name,
     description: `${name} test tool`,
     inputSchema: { type: 'object' },
+    parseInput: input => input,
     calls,
     async execute(input, context) {
       calls.push(input)

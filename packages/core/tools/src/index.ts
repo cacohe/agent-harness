@@ -17,6 +17,8 @@ export interface ToolDefinition {
   readonly description: string
   readonly inputSchema: Readonly<Record<string, unknown>>
 
+  /** 在任何副作用前把不可信模型 JSON 解析为已验证输入。 */
+  parseInput(input: JsonValue): JsonValue
   execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>
 }
 
@@ -72,7 +74,8 @@ export class ToolRegistry implements ToolCapability {
     }
 
     try {
-      const output = await definition.execute(call.input, { signal })
+      const input = definition.parseInput(call.input)
+      const output = await definition.execute(input, { signal })
       if (signal.aborted) return cancelledResult(call, signal.reason)
       assertJsonValue(output)
       return { status: 'success', callId: call.id, output }

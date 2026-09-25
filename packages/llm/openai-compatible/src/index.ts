@@ -28,6 +28,8 @@ export interface OpenAiCompatibleModelProviderOptions {
   readonly model: string
   readonly headers?: Readonly<Record<string, string>>
   readonly fetch?: FetchImplementation
+  /** 单个尚未完成 SSE 行的最大 UTF-8 字节数。 */
+  readonly maxSseBufferBytes?: number
 }
 
 /** 配置在构造阶段不满足协议前提时抛出。 */
@@ -66,6 +68,7 @@ export class OpenAiCompatibleModelProvider implements ModelProvider {
   readonly #model: string
   readonly #headers: Readonly<Record<string, string>>
   readonly #fetch: FetchImplementation
+  readonly #maxSseBufferBytes: number
 
   constructor(options: OpenAiCompatibleModelProviderOptions) {
     this.id = requireNonEmpty(options.id, 'provider id')
@@ -74,6 +77,10 @@ export class OpenAiCompatibleModelProvider implements ModelProvider {
     const apiKey = requireNonEmpty(options.apiKey, 'API key')
     this.#headers = buildHeaders(apiKey, options.headers)
     this.#fetch = options.fetch ?? fetch
+    this.#maxSseBufferBytes = options.maxSseBufferBytes ?? 1_048_576
+    if (!Number.isSafeInteger(this.#maxSseBufferBytes) || this.#maxSseBufferBytes < 1) {
+      throw new OpenAiCompatibleConfigurationError('maxSseBufferBytes 必须是正整数')
+    }
   }
 
   async prepare(signal: AbortSignal): Promise<PreparedModelCall> {
@@ -83,6 +90,7 @@ export class OpenAiCompatibleModelProvider implements ModelProvider {
       this.#model,
       this.#headers,
       this.#fetch,
+      this.#maxSseBufferBytes,
     )
   }
 }
@@ -92,17 +100,20 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
   readonly #model: string
   readonly #headers: Readonly<Record<string, string>>
   readonly #fetch: FetchImplementation
+  readonly #maxSseBufferBytes: number
 
   constructor(
     endpoint: URL,
     model: string,
     headers: Readonly<Record<string, string>>,
     fetchImplementation: FetchImplementation,
+    maxSseBufferBytes: number,
   ) {
     this.#endpoint = endpoint
     this.#model = model
     this.#headers = headers
     this.#fetch = fetchImplementation
+    this.#maxSseBufferBytes = maxSseBufferBytes
   }
 
   async *stream(
@@ -129,6 +140,7 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
     const fragments = new ToolCallFragments()
     let lineBuffer = ''
     let dataLines: string[] = []
+    let dataBytes = 0
     let receivedDone = false
     let streamFinished = false
 
@@ -137,6 +149,7 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
         if (dataLines.length === 0) return undefined
         const payload = dataLines.join('\n')
         dataLines = []
+        dataBytes = 0
         return payload
       }
       if (line.startsWith(':')) return undefined
@@ -144,7 +157,13 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
       const field = separator === -1 ? line : line.slice(0, separator)
       let value = separator === -1 ? '' : line.slice(separator + 1)
       if (value.startsWith(' ')) value = value.slice(1)
-      if (field === 'data') dataLines.push(value)
+      if (field === 'data') {
+        dataBytes += Buffer.byteLength(value, 'utf8') + 1
+        if (dataBytes > this.#maxSseBufferBytes) {
+          throw new OpenAiCompatibleProtocolError('SSE data 事件超过 maxSseBufferBytes')
+        }
+        dataLines.push(value)
+      }
       return undefined
     }
 
@@ -171,6 +190,9 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
           throw new OpenAiCompatibleProtocolError(`SSE 不是有效 UTF-8：${errorMessage(error)}`)
         }
         lineBuffer += decoded
+        if (Buffer.byteLength(lineBuffer, 'utf8') > this.#maxSseBufferBytes) {
+          throw new OpenAiCompatibleProtocolError('SSE 行超过 maxSseBufferBytes')
+        }
         for (let newline = lineBuffer.indexOf('\n'); newline !== -1; newline = lineBuffer.indexOf('\n')) {
           const rawLine = lineBuffer.slice(0, newline)
           lineBuffer = lineBuffer.slice(newline + 1)
@@ -287,6 +309,8 @@ function toChatCompletionsRequest(model: string, request: ModelRequest) {
 
 function toChatMessage(message: ModelMessage) {
   switch (message.role) {
+    case 'system':
+      return { role: 'system' as const, content: message.content }
     case 'user':
       return { role: 'user' as const, content: message.content }
     case 'assistant':

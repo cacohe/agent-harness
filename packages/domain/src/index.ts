@@ -120,6 +120,12 @@ export interface UserMessage {
   readonly content: string
 }
 
+/** 由组合方提供、不会写入会话历史的 system 指令。 */
+export interface SystemMessage {
+  readonly role: 'system'
+  readonly content: string
+}
+
 /** 模型请求的一次工具调用 */
 export interface ToolCall {
   readonly id: ToolCallId
@@ -174,7 +180,7 @@ export interface ToolMessage {
 }
 
 /** 投影给模型的消息序列成员 */
-export type ModelMessage = UserMessage | AssistantMessage | ToolMessage
+export type ModelMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
 // ------------------------------------------------------------
 // LLM 调用结果

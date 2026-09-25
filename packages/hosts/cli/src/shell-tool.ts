@@ -14,6 +14,7 @@ export type ShellSpawn = (
     readonly cwd: string
     readonly env: NodeJS.ProcessEnv
     readonly windowsHide: boolean
+    readonly detached: boolean
   },
 ) => ChildProcess
 
@@ -46,7 +47,7 @@ export function createShellTool(options: ShellToolOptions): ToolDefinition {
 
   const spawnImpl = options.spawn ?? defaultSpawn
   const platform = options.platform ?? process.platform
-  const env = options.env ?? process.env
+  const env = options.env ?? safeShellEnvironment(process.env, platform)
 
   return {
     name: 'run_shell',
@@ -62,6 +63,10 @@ export function createShellTool(options: ShellToolOptions): ToolDefinition {
           description: '交给系统 shell 执行的完整命令字符串',
         },
       },
+    },
+    parseInput(input): JsonValue {
+      readCommand(input)
+      return input
     },
     async execute(input, context): Promise<JsonValue> {
       const command = readCommand(input)
@@ -113,6 +118,7 @@ async function runShellCommand(
     cwd: options.cwd,
     env: options.env,
     windowsHide: true,
+    detached: options.platform !== 'win32',
   })
   if (child.stdout === null || child.stderr === null) {
     throw new Error('run_shell 需要 stdout/stderr 管道')
@@ -183,9 +189,7 @@ async function runShellCommand(
 
   const killChild = (): void => {
     if (waitSettled) return
-    child.kill('SIGTERM')
-    // Windows 上 SIGTERM 可能无效；再尝试强制结束。
-    if (options.platform === 'win32') child.kill()
+    killProcessTree(child, options.platform)
     armForceSettle()
   }
 
@@ -257,12 +261,39 @@ function defaultSpawn(
     readonly cwd: string
     readonly env: NodeJS.ProcessEnv
     readonly windowsHide: boolean
+    readonly detached: boolean
   },
 ): ChildProcess {
   return spawn(file, [...args], {
     cwd: options.cwd,
     env: options.env,
     windowsHide: options.windowsHide,
+    detached: options.detached,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+}
+
+/** 仅保留 shell 运行所需变量，避免把宿主机密钥交给模型控制的进程。 */
+function safeShellEnvironment(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): NodeJS.ProcessEnv {
+  const names = platform === 'win32'
+    ? ['ComSpec', 'SystemRoot', 'WINDIR', 'PATH', 'Path', 'PATHEXT', 'TEMP', 'TMP']
+    : ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR']
+  return Object.fromEntries(names.flatMap(name => {
+    const value = env[name]
+    return value === undefined ? [] : [[name, value]]
+  }))
+}
+
+/** Unix 以独立进程组启动，取消时终止整组；Windows 仍由 Job Object/沙箱承担生产隔离。 */
+function killProcessTree(child: ChildProcess, platform: NodeJS.Platform): void {
+  if (platform !== 'win32' && typeof child.pid === 'number') {
+    try {
+      process.kill(-child.pid, 'SIGTERM')
+      return
+    } catch {
+      // 进程可能已退出，退回对子进程本身的 best-effort kill。
+    }
+  }
+  child.kill('SIGTERM')
+  if (platform === 'win32') child.kill()
 }

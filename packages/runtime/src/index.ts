@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import {
   Agent,
+  BoundedPromptAssembler,
   type AgentIdGenerator,
   type AgentObserver,
+  type PromptAssembler,
   type SettlementSignalFactory,
 } from '@agent-harness/agent'
 export { AgentIdCollisionError } from '@agent-harness/agent'
@@ -24,6 +26,9 @@ import {
 import type { ToolCapability } from '@agent-harness/tools'
 
 const neverAbortedSignal = new AbortController().signal
+const DEFAULT_RUN_TIMEOUT_MS = 120_000
+const DEFAULT_MAX_MODEL_OUTPUT_BYTES = 1_048_576
+const DEFAULT_MAX_INPUT_BYTES = 1_048_576
 
 /** 为新建或恢复的 Agent 创建一组标识符。 */
 export interface AgentIdGeneratorFactory {
@@ -55,6 +60,11 @@ export interface AgentRuntimeOptions {
   readonly tools: ToolCapability
   readonly maxSteps: number
   readonly settlementTimeoutMs: number
+  readonly runTimeoutMs?: number
+  readonly maxModelOutputBytes?: number
+  readonly maxInputBytes?: number
+  readonly systemPrompt?: string
+  readonly prompts?: PromptAssembler
   readonly observers?: readonly AgentObserver[]
   readonly idGenerators?: AgentIdGeneratorFactory
 }
@@ -98,6 +108,15 @@ export class AgentRuntime {
       || options.settlementTimeoutMs < 1
     ) {
       throw new TypeError('settlementTimeoutMs 必须是正有限整数')
+    }
+    for (const [name, value] of [
+      ['runTimeoutMs', options.runTimeoutMs],
+      ['maxModelOutputBytes', options.maxModelOutputBytes],
+      ['maxInputBytes', options.maxInputBytes],
+    ] as const) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
+        throw new TypeError(`${name} 必须是正整数`)
+      }
     }
     this.#options = options
     this.#settlementSignals = {
@@ -163,6 +182,12 @@ export class AgentRuntime {
           ids: generatedIds,
           maxSteps: this.#options.maxSteps,
           settlementSignals: this.#settlementSignals,
+          prompts: this.#options.prompts ?? new BoundedPromptAssembler({
+            maxInputBytes: this.#options.maxInputBytes ?? DEFAULT_MAX_INPUT_BYTES,
+            ...(this.#options.systemPrompt === undefined ? {} : { systemPrompt: this.#options.systemPrompt }),
+          }),
+          runTimeoutMs: this.#options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS,
+          maxModelOutputBytes: this.#options.maxModelOutputBytes ?? DEFAULT_MAX_MODEL_OUTPUT_BYTES,
           ...(this.#options.observers === undefined
             ? {}
             : { observers: this.#options.observers }),

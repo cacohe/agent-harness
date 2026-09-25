@@ -55,6 +55,24 @@ function expectClosed(events: readonly EventEnvelope[]): void {
 }
 
 describe('Agent', () => {
+  it('模型输出超过预算时取消并持久化 terminal settlement', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const agent = new Agent({
+      model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'too large' }] }]),
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      maxModelOutputBytes: 1,
+      settlementSignals: new TestSettlementSignals(),
+    })
+
+    await expect(agent.run(user())).rejects.toThrow('模型输出超过 maxModelOutputBytes')
+    const events = await readEvents(session)
+    expect(events.at(-1)?.event).toMatchObject({ type: 'turn.ended', outcome: 'failed' })
+    expectClosed(events)
+  })
+
   it('提交普通回复并完整闭合 turn 和 step', async () => {
     const session = new InMemorySessionLog(sessionId)
     const model = new ScriptedModelProvider([
