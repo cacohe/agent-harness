@@ -14,13 +14,13 @@ Runtime 向 Agent 注入每个 turn 的总 deadline 和模型输出预算。Agen
 
 Host 侧 `run_shell` 默认不注册。显式启用时仅继承最小运行环境，并在 Unix 中以独立进程组启动和终止整组进程。它仍是本地实验能力，不能作为多租户隔离边界。
 
-JSONL adapter 保持单机文件存储定位；生产多实例必须在 `SessionWriteLeaseProvider` 注入具有 fencing/租约语义的外部实现。CLI 不把 JSONL 标记为多实例安全。
+当前阶段的 JSONL adapter 与 CLI 只支持单实例部署：同一 `sessionRoot` 不得由多个 Node.js 进程或服务实例共享。现有进程内 lease 只用于单个 Host 内的 writer 互斥。未来需要多实例时，必须在 `SessionWriteLeaseProvider` 注入具有 fencing/租约语义的外部实现，并以新的 ADR 记录所选协调系统。
 
 ## 后果
 
 模型可见输入和资源预算成为可替换、可测试的显式依赖。静态提示词不写入会话日志；会话事件仍是对话事实源。运行超时会走既有取消与 terminal settlement 路径。
 
-跨进程 session 所有权不由不具备可靠分布式锁语义的本地文件锁伪造；生产 host 必须组合外部 lease provider 与相应 repository。
+跨进程 session 所有权不由不具备可靠分布式锁语义的本地文件锁伪造；当前 Host 只能作为单实例部署运行。
 
 ## 放弃的方案
 

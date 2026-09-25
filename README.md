@@ -126,6 +126,8 @@ pnpm run build
 
 密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 默认关闭；显式启用后仍以当前用户权限执行命令，无沙箱，仅适合本地实验。
 
+当前 CLI 与 JSONL 会话存储只支持单实例运行。同一 `sessionRoot` 不得被多个 Node.js 进程、容器或服务实例同时使用。
+
 ### 2. 运行
 
 ```bash
