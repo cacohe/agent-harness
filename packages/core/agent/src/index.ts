@@ -10,6 +10,7 @@ import {
   type AssistantMessage,
   type AttemptId,
   type MessageId,
+  type SessionId,
   type SessionEvent,
   type EventEnvelope,
   type StepId,
@@ -51,7 +52,25 @@ export interface AgentIdGenerator {
 /** 接收瞬态模型流事件；失败不得影响 Agent 生命周期。 */
 export interface AgentObserver {
   onStream?(event: ModelStreamEvent): void | Promise<void>
+  onExecution?(event: AgentExecutionEvent): void | Promise<void>
 }
+
+/** 为审计、指标与计费 adapter 提供的结构化执行通知。 */
+export type AgentExecutionEvent =
+  | { readonly type: 'session.event', readonly envelope: EventEnvelope }
+  | {
+    readonly type: 'model.usage'
+    readonly sessionId: SessionId
+    readonly turnId: TurnId
+    readonly stepId: StepId
+    readonly attemptId: AttemptId
+    /** 在该 attempt 内从一开始递增的 usage 报告序号。 */
+    readonly usageSequence: number
+    /** 相对上一条累计 usage 的输入 token 增量。 */
+    readonly inputTokensDelta: number
+    /** 相对上一条累计 usage 的输出 token 增量。 */
+    readonly outputTokensDelta: number
+  }
 
 /** 为当前 run 的结算链创建新信号；Agent 对一条链只调用一次。 */
 export interface SettlementSignalFactory {
@@ -301,17 +320,14 @@ export class Agent {
     let activeStep: StepLifecycle | undefined
 
     try {
-      await this.#session.append([{
+      await this.#append([{
         type: 'turn.started',
         turnId,
         ...(execution === undefined ? {} : { execution }),
-      }], { signal })
+      }], signal)
       turnStarted = true
       this.#reservations.message(admitted.id)
-      await this.#session.append(
-        [{ type: 'user.message', message: admitted }],
-        { signal },
-      )
+      await this.#append([{ type: 'user.message', message: admitted }], signal)
 
       for (let stepNumber = 1; stepNumber <= this.#maxSteps; stepNumber += 1) {
         throwIfAborted(signal)
@@ -321,9 +337,9 @@ export class Agent {
         const messageFromStep = await this.#runStep(turnId, activeStep, signal, execution)
 
         if (messageFromStep.toolCalls.length === 0) {
-          await this.#session.append([
+          await this.#append([
             { type: 'turn.ended', turnId, outcome: 'completed' },
-          ], { signal })
+          ], signal)
           turnEnded = true
           return messageFromStep
         }
@@ -350,7 +366,7 @@ export class Agent {
       if (terminalEvents.length > 0) {
         try {
           const settlementSignal = this.#settlementSignals.create()
-          await this.#session.append(terminalEvents, { signal: settlementSignal })
+          await this.#append(terminalEvents, settlementSignal)
         } catch (persistenceError) {
           throw new SettlementPersistenceError(error, persistenceError, outcome)
         }
@@ -375,9 +391,7 @@ export class Agent {
     execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
     const stepId = lifecycle.stepId
-    await this.#session.append([{ type: 'step.started', turnId, stepId }], {
-      signal,
-    })
+    await this.#append([{ type: 'step.started', turnId, stepId }], signal)
     lifecycle.started = true
     throwIfAborted(signal)
 
@@ -394,6 +408,9 @@ export class Agent {
     }
     lifecycle.attempt = attempt
     let outputBytes = 0
+    let inputTokens = 0
+    let outputTokens = 0
+    let usageSequence = 0
 
     for await (const event of prepared.stream(request, signal)) {
       throwIfAborted(signal)
@@ -411,6 +428,20 @@ export class Agent {
           attempt.observedToolCalls.push(event.call)
           break
         case 'usage':
+          assertCumulativeUsage(event.inputTokens, event.outputTokens, inputTokens, outputTokens)
+          usageSequence += 1
+          this.#notifyExecution({
+            type: 'model.usage',
+            sessionId: this.#session.sessionId,
+            turnId,
+            stepId,
+            attemptId: attempt.attemptId,
+            usageSequence,
+            inputTokensDelta: event.inputTokens - inputTokens,
+            outputTokensDelta: event.outputTokens - outputTokens,
+          })
+          inputTokens = event.inputTokens
+          outputTokens = event.outputTokens
           break
         default:
           assertNever(event)
@@ -429,14 +460,14 @@ export class Agent {
       attemptId: attempt.attemptId,
       message: assistantMessage,
     }
-    await this.#session.append([
+    await this.#append([
       {
         type: 'assistant.settled',
         turnId,
         stepId,
         settlement: attempt.settlement,
       },
-    ], { signal })
+    ], signal)
     attempt.settlementPersisted = true
 
     for (const call of attempt.observedToolCalls) {
@@ -445,15 +476,15 @@ export class Agent {
         ...(execution === undefined ? {} : { execution }),
       })
       attempt.toolResults.set(call.id, result)
-      await this.#session.append([
+      await this.#append([
         { type: 'tool.completed', turnId, stepId, result },
-      ], { signal })
+      ], signal)
       attempt.persistedToolResults.add(call.id)
     }
 
-    await this.#session.append([
+    await this.#append([
       { type: 'step.ended', turnId, stepId, outcome: 'completed' },
-    ], { signal })
+    ], signal)
     lifecycle.ended = true
     return assistantMessage
   }
@@ -471,6 +502,25 @@ export class Agent {
         void Promise.resolve(observer.onStream?.(event)).catch(() => undefined)
       } catch {
         // 观察者只接收瞬态通知，其失败不能改变 Agent 生命周期。
+      }
+    }
+  }
+
+  /** 成功提交会话事件后，向 observer 发送与持久化事实一致的通知。 */
+  async #append(events: readonly SessionEvent[], signal: AbortSignal): Promise<void> {
+    const appended = await this.#session.append(events, { signal })
+    for (const envelope of appended) {
+      this.#notifyExecution({ type: 'session.event', envelope })
+    }
+  }
+
+  /** 向 observer 派发结构化执行事件；同步与异步失败均被隔离。 */
+  #notifyExecution(event: AgentExecutionEvent): void {
+    for (const observer of this.#observers) {
+      try {
+        void Promise.resolve(observer.onExecution?.(event)).catch(() => undefined)
+      } catch {
+        // 观察者只接收执行通知，其失败不能改变 Agent 生命周期。
       }
     }
   }
@@ -687,6 +737,21 @@ function freezeExecutionMetadata(
     }
   }
   return Object.freeze({ id, subject, authorizationVersion })
+}
+
+/** 拒绝不符合模型 capability 累计语义的 usage，避免下游重复计费。 */
+function assertCumulativeUsage(
+  inputTokens: number,
+  outputTokens: number,
+  previousInputTokens: number,
+  previousOutputTokens: number,
+): void {
+  if (!Number.isSafeInteger(inputTokens) || inputTokens < previousInputTokens) {
+    throw new TypeError('模型 inputTokens 必须是单调不减的非负安全整数')
+  }
+  if (!Number.isSafeInteger(outputTokens) || outputTokens < previousOutputTokens) {
+    throw new TypeError('模型 outputTokens 必须是单调不减的非负安全整数')
+  }
 }
 
 const textEncoder = new TextEncoder()

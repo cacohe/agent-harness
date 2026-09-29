@@ -3,6 +3,7 @@ import {
   Agent,
   AgentIdCollisionError,
   SettlementPersistenceError,
+  type AgentExecutionEvent,
 } from '@agent-harness/agent'
 import {
   brandId,
@@ -715,11 +716,18 @@ describe('Agent', () => {
           onStream() {
             throw new Error('sync observer failed')
           },
+          onExecution() {
+            throw new Error('sync execution observer failed')
+          },
         },
         {
           async onStream(event) {
             seen.push(event.type)
             throw new Error('async observer failed')
+          },
+          async onExecution(event) {
+            seen.push(event.type)
+            throw new Error('async execution observer failed')
           },
         },
       ],
@@ -729,6 +737,145 @@ describe('Agent', () => {
 
     expect(response.content).toBe('ok')
     expect(seen).toContain('text.delta')
+    expect(seen).toContain('session.event')
+    expectClosed(await readEvents(session))
+  })
+
+  it('在提交会话事件后发送生命周期通知，并关联模型用量', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const observed: AgentExecutionEvent[] = []
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        {
+          events: [
+            { type: 'usage', inputTokens: 12, outputTokens: 3 },
+            { type: 'text.delta', text: 'ok' },
+            { type: 'usage', inputTokens: 12, outputTokens: 5 },
+          ],
+        },
+      ]),
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      observers: [{ onExecution: event => observed.push(event) }],
+    })
+
+    await agent.run(user())
+
+    expect(observed.map(event => event.type)).toEqual([
+      'session.event',
+      'session.event',
+      'session.event',
+      'model.usage',
+      'model.usage',
+      'session.event',
+      'session.event',
+      'session.event',
+    ])
+    expect(observed
+      .filter((event): event is Extract<AgentExecutionEvent, { type: 'session.event' }> => event.type === 'session.event')
+      .map(event => event.envelope.event.type),
+    ).toEqual([
+      'turn.started',
+      'user.message',
+      'step.started',
+      'assistant.settled',
+      'step.ended',
+      'turn.ended',
+    ])
+    expect(observed[3]).toMatchObject({
+      type: 'model.usage',
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      stepId: 'step-2',
+      attemptId: 'attempt-3',
+      usageSequence: 1,
+      inputTokensDelta: 12,
+      outputTokensDelta: 3,
+    })
+    expect(observed[4]).toMatchObject({
+      type: 'model.usage',
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      stepId: 'step-2',
+      attemptId: 'attempt-3',
+      usageSequence: 2,
+      inputTokensDelta: 0,
+      outputTokensDelta: 2,
+    })
+    expect(observed
+      .filter((event): event is Extract<AgentExecutionEvent, { type: 'session.event' }> => event.type === 'session.event')
+      .map(event => event.envelope.sequence),
+    ).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('以 sessionId 区分相同 attempt 标识符的不同会话用量', async () => {
+    const observed: AgentExecutionEvent[] = []
+    const run = async (id: SessionId): Promise<void> => {
+      const agent = new Agent({
+        model: new ScriptedModelProvider([{
+          events: [{ type: 'usage', inputTokens: 2, outputTokens: 1 }],
+        }]),
+        session: new InMemorySessionLog(id),
+        tools: new ToolRegistry([]),
+        ids: new SequentialAgentIds(),
+        maxSteps: 4,
+        settlementSignals: new TestSettlementSignals(),
+        observers: [{ onExecution: event => observed.push(event) }],
+      })
+      await agent.run(user())
+    }
+
+    const secondSessionId = brandId<'SessionId'>('session-2') as SessionId
+    await run(sessionId)
+    await run(secondSessionId)
+
+    const usage = observed.filter(
+      (event): event is Extract<AgentExecutionEvent, { type: 'model.usage' }> => event.type === 'model.usage',
+    )
+    expect(usage).toHaveLength(2)
+    expect(usage.map(event => event.sessionId)).toEqual([sessionId, secondSessionId])
+    expect(usage.map(({ sessionId: _sessionId, ...identity }) => identity)).toEqual([
+      {
+        type: 'model.usage',
+        turnId: 'turn-1',
+        stepId: 'step-2',
+        attemptId: 'attempt-3',
+        usageSequence: 1,
+        inputTokensDelta: 2,
+        outputTokensDelta: 1,
+      },
+      {
+        type: 'model.usage',
+        turnId: 'turn-1',
+        stepId: 'step-2',
+        attemptId: 'attempt-3',
+        usageSequence: 1,
+        inputTokensDelta: 2,
+        outputTokensDelta: 1,
+      },
+    ])
+  })
+
+  it('拒绝递减的模型累计 usage 并结算 turn', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const agent = new Agent({
+      model: new ScriptedModelProvider([{
+        events: [
+          { type: 'usage', inputTokens: 12, outputTokens: 3 },
+          { type: 'usage', inputTokens: 11, outputTokens: 4 },
+        ],
+      }]),
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+    })
+
+    await expect(agent.run(user())).rejects.toThrow('inputTokens 必须是单调不减')
     expectClosed(await readEvents(session))
   })
 })

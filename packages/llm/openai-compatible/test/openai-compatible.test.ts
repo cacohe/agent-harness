@@ -212,6 +212,11 @@ describe('OpenAiCompatibleModelProvider', () => {
     ['非成功 HTTP', async () => response([], 502), OpenAiCompatibleHttpError],
     ['畸形 data JSON', async () => response(['data: {bad}\n\n']), OpenAiCompatibleProtocolError],
     ['缺少 DONE', async () => response(['data: {"choices":[]}\n\n']), OpenAiCompatibleProtocolError],
+    ['递减的累计 usage', async () => response([
+      'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":5}}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":5}}\n\n',
+      'data: [DONE]\n\n',
+    ]), OpenAiCompatibleProtocolError],
     ['无效 tool arguments', async () => response([
       'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call","function":{"name":"bad","arguments":"{"}}]}}]}\n\n',
       'data: [DONE]\n\n',
