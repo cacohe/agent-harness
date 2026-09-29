@@ -65,6 +65,8 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 `core/tools` 还拥有执行治理接口。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；domain、agent 与 session 不依赖其网络协议、账户模型或 SDK。
 
+`SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个 `ToolDefinition.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号。`run_shell` 不是 Sandbox，不可替代此接口。
+
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。
 
 第一阶段内核由 `domain`、`session/session`、`llm/model`、`core/tools`、`core/agent` 和 `test-support` 组成。内存会话实现 sequence 分配，纯投影重建模型消息；Agent 按顺序执行工具，并在开始下一 step 前持久化全部结果。真实模型与 HTTP 集成由 `llm/`、`session/` 下的 adapter 提供，动态插件系统仍不属于当前范围。
