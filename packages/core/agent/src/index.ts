@@ -91,11 +91,11 @@ export class BoundedPromptAssembler implements PromptAssembler {
   }
 
   #findStart(messages: readonly ModelMessage[], tools: readonly ModelToolDefinition[]): number {
-    const systemBytes = this.#systemPrompt === undefined ? 0 : Buffer.byteLength(this.#systemPrompt, 'utf8')
-    let bytes = systemBytes + Buffer.byteLength(JSON.stringify(tools), 'utf8')
+    const systemBytes = this.#systemPrompt === undefined ? 0 : utf8ByteLength(this.#systemPrompt)
+    let bytes = systemBytes + utf8ByteLength(JSON.stringify(tools))
     let start = messages.length
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      bytes += Buffer.byteLength(JSON.stringify(messages[index]), 'utf8')
+      bytes += utf8ByteLength(JSON.stringify(messages[index]))
       if (bytes > this.#maxInputBytes) break
       if (messages[index]?.role === 'user') start = index
     }
@@ -382,12 +382,12 @@ export class Agent {
       this.#notifyStream(event)
       switch (event.type) {
         case 'text.delta':
-          outputBytes += Buffer.byteLength(event.text, 'utf8')
+          outputBytes += utf8ByteLength(event.text)
           this.#assertOutputBudget(outputBytes)
           attempt.partialText += event.text
           break
         case 'tool.call':
-          outputBytes += Buffer.byteLength(JSON.stringify(event.call), 'utf8')
+          outputBytes += utf8ByteLength(JSON.stringify(event.call))
           this.#assertOutputBudget(outputBytes)
           this.#reservations.toolCall(event.call.id)
           attempt.observedToolCalls.push(event.call)
@@ -640,4 +640,11 @@ function cancellationError(signal: AbortSignal): Error {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const textEncoder = new TextEncoder()
+
+/** 计算字符串的 UTF-8 字节长度，避免依赖 Node Buffer。 */
+function utf8ByteLength(value: string): number {
+  return textEncoder.encode(value).byteLength
 }
