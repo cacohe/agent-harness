@@ -1,3 +1,7 @@
+/**
+ * Agent 核心循环状态机
+ * 只依赖 model / session / tools 的 capability 接口；
+ */
 import {
   assertNever,
   isAbortError,
@@ -88,11 +92,11 @@ export class BoundedPromptAssembler implements PromptAssembler {
   }
 
   #findStart(messages: readonly ModelMessage[], tools: readonly ModelToolDefinition[]): number {
-    const systemBytes = this.#systemPrompt === undefined ? 0 : Buffer.byteLength(this.#systemPrompt, 'utf8')
-    let bytes = systemBytes + Buffer.byteLength(JSON.stringify(tools), 'utf8')
+    const systemBytes = this.#systemPrompt === undefined ? 0 : utf8ByteLength(this.#systemPrompt)
+    let bytes = systemBytes + utf8ByteLength(JSON.stringify(tools))
     let start = messages.length
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      bytes += Buffer.byteLength(JSON.stringify(messages[index]), 'utf8')
+      bytes += utf8ByteLength(JSON.stringify(messages[index]))
       if (bytes > this.#maxInputBytes) break
       if (messages[index]?.role === 'user') start = index
     }
@@ -101,6 +105,15 @@ export class BoundedPromptAssembler implements PromptAssembler {
     }
     return start
   }
+}
+
+/** 初始化 Agent 实例内统一标识符 reservation 的不可变快照。 */
+export interface AgentIdReservationSeed {
+  readonly turnIds: readonly TurnId[]
+  readonly stepIds: readonly StepId[]
+  readonly attemptIds: readonly AttemptId[]
+  readonly messageIds: readonly MessageId[]
+  readonly toolCallIds: readonly ToolCallId[]
 }
 
 /** 构造 Agent 所需的全部显式依赖与运行限制。 */
@@ -130,15 +143,6 @@ export class AgentClosedError extends Error {
   override readonly name = 'AgentClosedError'
 }
 
-/** 初始化 Agent 实例内统一标识符 reservation 的不可变快照。 */
-export interface AgentIdReservationSeed {
-  readonly turnIds: readonly TurnId[]
-  readonly stepIds: readonly StepId[]
-  readonly attemptIds: readonly AttemptId[]
-  readonly messageIds: readonly MessageId[]
-  readonly toolCallIds: readonly ToolCallId[]
-}
-
 /** 表示实时路径准备持久化的 ID 已在历史或当前 Agent 中占用。 */
 export class AgentIdCollisionError extends Error {
   override readonly name = 'AgentIdCollisionError'
@@ -154,6 +158,8 @@ export class AgentIdCollisionError extends Error {
     this.value = value
   }
 }
+
+type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>
 
 /** 同时保留原始运行结果和 terminal settlement 持久化失败。 */
 export class SettlementPersistenceError extends Error {
@@ -394,12 +400,12 @@ export class Agent {
       this.#notifyStream(event)
       switch (event.type) {
         case 'text.delta':
-          outputBytes += Buffer.byteLength(event.text, 'utf8')
+          outputBytes += utf8ByteLength(event.text)
           this.#assertOutputBudget(outputBytes)
           attempt.partialText += event.text
           break
         case 'tool.call':
-          outputBytes += Buffer.byteLength(JSON.stringify(event.call), 'utf8')
+          outputBytes += utf8ByteLength(JSON.stringify(event.call))
           this.#assertOutputBudget(outputBytes)
           this.#reservations.toolCall(event.call.id)
           attempt.observedToolCalls.push(event.call)
@@ -489,14 +495,56 @@ interface StepLifecycle {
   attempt?: AttemptLifecycle
 }
 
+class AgentIdReservations {
+  readonly #turnIds: Set<string>
+  readonly #stepIds: Set<string>
+  readonly #attemptIds: Set<string>
+  readonly #messageIds: Set<string>
+  readonly #toolCallIds: Set<string>
+
+  constructor(seed: AgentIdReservationSeed | undefined) {
+    this.#turnIds = new Set(seed?.turnIds)
+    this.#stepIds = new Set(seed?.stepIds)
+    this.#attemptIds = new Set(seed?.attemptIds)
+    this.#messageIds = new Set(seed?.messageIds)
+    this.#toolCallIds = new Set(seed?.toolCallIds)
+  }
+
+  turn(value: TurnId): TurnId {
+    return this.#reserve('turn', this.#turnIds, value)
+  }
+
+  step(value: StepId): StepId {
+    return this.#reserve('step', this.#stepIds, value)
+  }
+
+  attempt(value: AttemptId): AttemptId {
+    return this.#reserve('attempt', this.#attemptIds, value)
+  }
+
+  message(value: MessageId): MessageId {
+    return this.#reserve('message', this.#messageIds, value)
+  }
+
+  toolCall(value: ToolCallId): ToolCallId {
+    return this.#reserve('toolCall', this.#toolCallIds, value)
+  }
+
+  #reserve<T extends string>(
+    kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall',
+    values: Set<string>,
+    value: T,
+  ): T {
+    if (values.has(value)) throw new AgentIdCollisionError(kind, value)
+    values.add(value)
+    return value
+  }
+}
+
 function createStepLifecycle(stepId: StepId): StepLifecycle {
   return { stepId, started: false, ended: false }
 }
 
-/**
- * 为失败或取消路径构造尚未写入的 terminal 事件。
- * 保证已打开的 step/turn 补齐 assistant 结算、缺失工具结果与 ended 事件。
- */
 function buildTerminalEvents(options: {
   readonly error: unknown
   readonly outcome: RuntimeFailureOutcome
@@ -556,7 +604,6 @@ function buildTerminalEvents(options: {
   return events
 }
 
-/** 根据失败或取消结果，从部分流式输出构造 assistant settlement。 */
 function failedAttemptSettlement(
   attempt: AttemptLifecycle,
   outcome: RuntimeFailureOutcome,
@@ -580,7 +627,6 @@ function failedAttemptSettlement(
   }
 }
 
-/** 为结算时尚未执行的工具调用补写 cancelled 或 failure 结果。 */
 function unexecutedToolResult(
   call: ToolCall,
   outcome: RuntimeFailureOutcome,
@@ -599,62 +645,10 @@ function unexecutedToolResult(
   }
 }
 
-/** 运行时失败结算只区分 failed 与 cancelled。 */
-type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>
-
-/** 统一保留历史与实时路径上的各类 ID，写入事件前检测冲突。 */
-class AgentIdReservations {
-  readonly #turnIds: Set<string>
-  readonly #stepIds: Set<string>
-  readonly #attemptIds: Set<string>
-  readonly #messageIds: Set<string>
-  readonly #toolCallIds: Set<string>
-
-  constructor(seed: AgentIdReservationSeed | undefined) {
-    this.#turnIds = new Set(seed?.turnIds)
-    this.#stepIds = new Set(seed?.stepIds)
-    this.#attemptIds = new Set(seed?.attemptIds)
-    this.#messageIds = new Set(seed?.messageIds)
-    this.#toolCallIds = new Set(seed?.toolCallIds)
-  }
-
-  turn(value: TurnId): TurnId {
-    return this.#reserve('turn', this.#turnIds, value)
-  }
-
-  step(value: StepId): StepId {
-    return this.#reserve('step', this.#stepIds, value)
-  }
-
-  attempt(value: AttemptId): AttemptId {
-    return this.#reserve('attempt', this.#attemptIds, value)
-  }
-
-  message(value: MessageId): MessageId {
-    return this.#reserve('message', this.#messageIds, value)
-  }
-
-  toolCall(value: ToolCallId): ToolCallId {
-    return this.#reserve('toolCall', this.#toolCallIds, value)
-  }
-
-  #reserve<T extends string>(
-    kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall',
-    values: Set<string>,
-    value: T,
-  ): T {
-    if (values.has(value)) throw new AgentIdCollisionError(kind, value)
-    values.add(value)
-    return value
-  }
-}
-
-/** 若信号已中止则抛出 AbortError。 */
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw cancellationError(signal)
 }
 
-/** 将 AbortSignal 的 reason 规范化为名为 AbortError 的 Error。 */
 function cancellationError(signal: AbortSignal): Error {
   const reason = signal.reason
   const message = reason instanceof Error
@@ -693,4 +687,11 @@ function freezeExecutionMetadata(
     }
   }
   return Object.freeze({ id, subject, authorizationVersion })
+}
+
+const textEncoder = new TextEncoder()
+
+/** 计算字符串的 UTF-8 字节长度，避免依赖 Node Buffer。 */
+function utf8ByteLength(value: string): number {
+  return textEncoder.encode(value).byteLength
 }
