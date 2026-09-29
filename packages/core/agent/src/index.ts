@@ -16,6 +16,7 @@ import {
   type TurnOutcome,
   type UserMessage,
   type ModelMessage,
+  type ExecutionMetadata,
 } from '@agent-harness/domain'
 import type {
   ModelProvider,
@@ -24,7 +25,7 @@ import type {
   ModelToolDefinition,
 } from '@agent-harness/model'
 import { deriveModelMessages, type SessionLog } from '@agent-harness/session'
-import type { ToolCapability } from '@agent-harness/tools'
+import { executeWithContext, type ToolCapability } from '@agent-harness/tools'
 
 /** Agent 对外可见的阶段：空闲，或正在执行某个 turn/step。 */
 export type AgentPhase =
@@ -116,6 +117,12 @@ export interface AgentOptions {
   readonly observers?: readonly AgentObserver[]
   /** 初始化恢复历史已经占用的各类 ID；Agent 会继续保留实时 reservation。 */
   readonly reservedIds?: AgentIdReservationSeed
+}
+
+/** 一次 turn 的调用选项；执行上下文只在本次 run 内有效。 */
+export interface AgentRunOptions {
+  readonly signal?: AbortSignal
+  readonly execution?: ExecutionMetadata
 }
 
 /** 表示 Agent 已停止接纳新的 run。 */
@@ -258,11 +265,17 @@ export class Agent {
    */
   async run(
     message: UserMessage,
-    externalSignal: AbortSignal = new AbortController().signal,
+    options: AbortSignal | AgentRunOptions = {},
   ): Promise<AssistantMessage> {
     if (!this.#accepting) throw new AgentClosedError('Agent 已停止接纳新的 run')
     if (this.#phase.kind !== 'idle') throw new Error('agent is already running')
 
+    const externalSignal = isAbortSignal(options)
+      ? options
+      : options.signal ?? new AbortController().signal
+    const execution = freezeExecutionMetadata(
+      isAbortSignal(options) ? undefined : options.execution,
+    )
     const turnId = this.#reservations.turn(this.#ids.turn())
     this.#idle = new Promise<void>(resolve => {
       this.#resolveIdle = resolve
@@ -282,7 +295,11 @@ export class Agent {
     let activeStep: StepLifecycle | undefined
 
     try {
-      await this.#session.append([{ type: 'turn.started', turnId }], { signal })
+      await this.#session.append([{
+        type: 'turn.started',
+        turnId,
+        ...(execution === undefined ? {} : { execution }),
+      }], { signal })
       turnStarted = true
       this.#reservations.message(admitted.id)
       await this.#session.append(
@@ -295,7 +312,7 @@ export class Agent {
         const stepId = this.#reservations.step(this.#ids.step())
         activeStep = createStepLifecycle(stepId)
         this.#phase = { kind: 'running', turnId, stepId }
-        const messageFromStep = await this.#runStep(turnId, activeStep, signal)
+        const messageFromStep = await this.#runStep(turnId, activeStep, signal, execution)
 
         if (messageFromStep.toolCalls.length === 0) {
           await this.#session.append([
@@ -349,6 +366,7 @@ export class Agent {
     turnId: TurnId,
     lifecycle: StepLifecycle,
     signal: AbortSignal,
+    execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
     const stepId = lifecycle.stepId
     await this.#session.append([{ type: 'step.started', turnId, stepId }], {
@@ -416,7 +434,10 @@ export class Agent {
     attempt.settlementPersisted = true
 
     for (const call of attempt.observedToolCalls) {
-      const result = await this.#tools.execute(call, signal)
+      const result = await executeWithContext(this.#tools, call, {
+        signal,
+        ...(execution === undefined ? {} : { execution }),
+      })
       attempt.toolResults.set(call.id, result)
       await this.#session.append([
         { type: 'tool.completed', turnId, stepId, result },
@@ -646,4 +667,30 @@ function cancellationError(signal: AbortSignal): Error {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isAbortSignal(value: AbortSignal | AgentRunOptions): value is AbortSignal {
+  return 'aborted' in value && typeof value.aborted === 'boolean'
+}
+
+/** 在 Agent 边界拒绝不可信的执行审计字段，避免坏数据进入持久会话。 */
+function freezeExecutionMetadata(
+  execution: ExecutionMetadata | undefined,
+): ExecutionMetadata | undefined {
+  if (execution === undefined) return undefined
+  if (typeof execution !== 'object' || execution === null || Array.isArray(execution)) {
+    throw new TypeError('execution 必须是对象')
+  }
+  const keys = Object.keys(execution)
+  const expected = ['authorizationVersion', 'id', 'subject']
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
+    throw new TypeError('execution 只能包含 id、subject 与 authorizationVersion')
+  }
+  const { id, subject, authorizationVersion } = execution
+  for (const [name, value] of Object.entries({ id, subject, authorizationVersion })) {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new TypeError(`execution.${name} 必须是非空字符串`)
+    }
+  }
+  return Object.freeze({ id, subject, authorizationVersion })
 }

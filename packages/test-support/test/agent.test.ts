@@ -6,6 +6,7 @@ import {
 } from '@agent-harness/agent'
 import {
   brandId,
+  type ExecutionId,
   type EventEnvelope,
   type MessageId,
   type SessionId,
@@ -55,6 +56,97 @@ function expectClosed(events: readonly EventEnvelope[]): void {
 }
 
 describe('Agent', () => {
+  it('将一次性执行上下文写入 turn 审计事件而不注入模型消息', async () => {
+    const model = new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: '完成' }] }])
+    const session = new InMemorySessionLog(sessionId)
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 2,
+      settlementSignals: new TestSettlementSignals(),
+    })
+
+    await agent.run(user('执行'), {
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })
+
+    const events = await session.read({ signal: new AbortController().signal })
+    expect(events[0]?.event).toEqual({
+      type: 'turn.started',
+      turnId: 'turn-1',
+      execution: {
+        id: 'execution-1',
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })
+    expect(model.requests[0]?.messages).not.toContainEqual(expect.objectContaining({
+      content: expect.stringContaining('execution-1'),
+    }))
+  })
+
+  it('在 Agent 边界冻结执行上下文，策略与审计使用同一快照', async () => {
+    let modelPrepared!: () => void
+    let releaseModel!: () => void
+    const prepared = new Promise<void>(resolve => { modelPrepared = resolve })
+    const release = new Promise<void>(resolve => { releaseModel = resolve })
+    let observedSubject: string | undefined
+    const model = new ScriptedModelProvider([
+      {
+        prepare: async () => {
+          modelPrepared()
+          await release
+        },
+        events: [{
+          type: 'tool.call',
+          call: {
+            id: brandId<'ToolCallId'>('call-1') as ToolCallId,
+            name: 'write',
+            input: {},
+          },
+        }],
+      },
+      { events: [{ type: 'text.delta', text: '完成' }] },
+    ])
+    const session = new InMemorySessionLog(sessionId)
+    const tools = {
+      list: () => [{ name: 'write', description: '写入', inputSchema: { type: 'object' } }],
+      execute: async () => ({ status: 'failure', callId: 'call-1', error: { name: 'Error', message: '不应调用' } }),
+      executeWithContext: async (_call: unknown, context: { readonly execution?: { readonly subject: string } }) => {
+        observedSubject = context.execution?.subject
+        return { status: 'success' as const, callId: 'call-1' as ToolCallId, output: { ok: true } }
+      },
+    }
+    const agent = new Agent({
+      model,
+      session,
+      tools,
+      ids: new SequentialAgentIds(),
+      maxSteps: 3,
+      settlementSignals: new TestSettlementSignals(),
+    })
+    const execution = {
+      id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+      subject: 'user-1',
+      authorizationVersion: 'v1',
+    }
+    const running = agent.run(user('执行'), { execution })
+    await prepared
+    execution.subject = 'attacker'
+    releaseModel()
+    await running
+
+    expect(observedSubject).toBe('user-1')
+    expect((await readEvents(session))[0]?.event).toMatchObject({
+      execution: { subject: 'user-1' },
+    })
+  })
   it('模型输出超过预算时取消并持久化 terminal settlement', async () => {
     const session = new InMemorySessionLog(sessionId)
     const agent = new Agent({

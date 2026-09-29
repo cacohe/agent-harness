@@ -10,6 +10,7 @@ export type TurnId = BrandedString<'TurnId'>
 export type StepId = BrandedString<'StepId'>
 export type AttemptId = BrandedString<'AttemptId'>
 export type ToolCallId = BrandedString<'ToolCallId'>
+export type ExecutionId = BrandedString<'ExecutionId'>
 /** 标识一次持久化原子追加，供冲突检查与审计使用。 */
 export type SessionBatchId = BrandedString<'SessionBatchId'>
 
@@ -223,6 +224,13 @@ export type StepOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted'
 /** turn 结束时的状态 */
 export type TurnOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
+/** 一次 turn 已冻结执行身份的最小审计快照；不会投影给模型。 */
+export interface ExecutionMetadata {
+  readonly id: ExecutionId
+  readonly subject: string
+  readonly authorizationVersion: string
+}
+
 // ------------------------------------------------------------
 // 会话事件日志
 // ------------------------------------------------------------
@@ -231,6 +239,7 @@ export type TurnOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted'
 export interface TurnStarted {
   readonly type: 'turn.started'
   readonly turnId: TurnId
+  readonly execution?: ExecutionMetadata
 }
 
 /** 用户消息写入会话。 */
