@@ -1,6 +1,6 @@
 import { brandId, type ExecutionId, type ToolCallId } from '@agent-harness/domain'
 import { describe, expect, it } from 'vitest'
-import { PolicyControlledTools, ToolRegistry } from '../src/index.ts'
+import { PolicyControlledTools, SandboxToolRegistry, ToolRegistry } from '../src/index.ts'
 
 function call(name: string, input: unknown = {}) {
   return {
@@ -245,5 +245,125 @@ describe('ToolRegistry', () => {
       error: { name: 'ToolAuthorizationError', message: '执行策略返回无效授权决定' },
     })
     expect(executed).toBe(false)
+  })
+
+  it('Sandbox 在派发前校验输入，并传递任务边界', async () => {
+    const tasks: unknown[] = []
+    const tools = new SandboxToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: input => {
+        if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+          throw new TypeError('输入必须是对象')
+        }
+        return { normalized: true }
+      },
+      execute: async () => ({ local: true }),
+    }], {
+      dispatch: async task => {
+        tasks.push(task)
+        return { sandboxed: true }
+      },
+    }, {
+      workspace: '/workspace',
+      limits: { timeoutMs: 1_000, maxOutputBytes: 4_096 },
+    })
+
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })).resolves.toEqual({
+      status: 'success', callId: 'call-1', output: { sandboxed: true },
+    })
+    expect(tasks).toEqual([{
+      call: { id: 'call-1', name: 'write', input: { normalized: true } },
+      workspace: '/workspace',
+      limits: { timeoutMs: 1_000, maxOutputBytes: 4_096 },
+    }])
+  })
+
+  it('Sandbox 输入校验失败时不派发任务', async () => {
+    let dispatched = false
+    const tools = new SandboxToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: () => { throw new TypeError('无效输入') },
+      execute: async () => ({ local: true }),
+    }], {
+      dispatch: async () => {
+        dispatched = true
+        return { sandboxed: true }
+      },
+    })
+
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })).resolves.toMatchObject({
+      status: 'failure', error: { name: 'TypeError', message: '无效输入' },
+    })
+    expect(dispatched).toBe(false)
+  })
+
+  it('Sandbox 缺少冻结执行上下文时拒绝派发', async () => {
+    let dispatched = false
+    const tools = new SandboxToolRegistry([{
+      name: 'write', description: '写入', inputSchema: { type: 'object' },
+      parseInput: input => input, execute: async () => ({ ok: true }),
+    }], { dispatch: async () => { dispatched = true; return { ok: true } } })
+
+    await expect(tools.execute(call('write'), new AbortController().signal)).resolves.toMatchObject({
+      status: 'failure', error: { name: 'ToolAuthorizationError' },
+    })
+    expect(dispatched).toBe(false)
+  })
+
+  it('Sandbox 复制冻结资源限制，并拒绝不完整限制', async () => {
+    const limits = { timeoutMs: 1_000, maxOutputBytes: 4_096 }
+    const observed: unknown[] = []
+    const tools = new SandboxToolRegistry([{
+      name: 'write', description: '写入', inputSchema: { type: 'object' },
+      parseInput: input => input, execute: async () => ({ ok: true }),
+    }], { dispatch: async task => { observed.push(task.limits); return { ok: true } } }, { limits })
+    limits.timeoutMs = 0
+
+    await tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1', authorizationVersion: 'v1',
+      },
+    })
+    expect(observed).toEqual([{ timeoutMs: 1_000, maxOutputBytes: 4_096 }])
+    expect(() => new SandboxToolRegistry([], { dispatch: async () => ({}) }, {
+      limits: { timeoutMs: 1_000 } as never,
+    })).toThrow('sandbox limits 只能包含')
+  })
+
+  it('Sandbox 在跨边界前拒绝 parser 返回的非 JSON', async () => {
+    let dispatched = false
+    const tools = new SandboxToolRegistry([{
+      name: 'write', description: '写入', inputSchema: { type: 'object' },
+      parseInput: () => (() => undefined) as never, execute: async () => ({ ok: true }),
+    }], { dispatch: async () => { dispatched = true; return { ok: true } } })
+
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1', authorizationVersion: 'v1',
+      },
+    })).resolves.toMatchObject({ status: 'failure', error: { name: 'TypeError' } })
+    expect(dispatched).toBe(false)
   })
 })
