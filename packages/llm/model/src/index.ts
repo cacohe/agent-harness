@@ -21,6 +21,7 @@ export type ModelStreamEvent =
   | { readonly type: 'text.delta'; readonly text: string }
   | { readonly type: 'tool.call'; readonly call: ToolCall }
   | {
+      /** 截至当前流事件的累计 token；同一调用内必须为非负安全整数且单调不减。 */
       readonly type: 'usage'
       readonly inputTokens: number
       readonly outputTokens: number

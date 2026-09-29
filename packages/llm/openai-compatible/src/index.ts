@@ -149,6 +149,7 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
     const reader = response.body.getReader()
     const decoder = new TextDecoder('utf-8', { fatal: true })
     const fragments = new ToolCallFragments()
+    const usage = new CumulativeUsage()
     let lineBuffer = ''
     let dataLines: string[] = []
     let dataBytes = 0
@@ -188,7 +189,7 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
         return []
       }
       const chunk = parseChunk(payload)
-      return decodeChunk(chunk, fragments)
+      return decodeChunk(chunk, fragments, usage)
     }
 
     try {
@@ -379,7 +380,11 @@ function parseChunk(payload: string): JsonObject {
   return requireObject(value, 'chunk')
 }
 
-function decodeChunk(chunk: JsonObject, fragments: ToolCallFragments): ModelStreamEvent[] {
+function decodeChunk(
+  chunk: JsonObject,
+  fragments: ToolCallFragments,
+  usageTotals: CumulativeUsage,
+): ModelStreamEvent[] {
   const choices = chunk.choices
   if (!Array.isArray(choices)) throw new OpenAiCompatibleProtocolError('chunk.choices 必须是数组')
   if (choices.length > 1) {
@@ -391,6 +396,7 @@ function decodeChunk(chunk: JsonObject, fragments: ToolCallFragments): ModelStre
     const record = requireObject(usage, 'chunk.usage')
     const inputTokens = requireNonNegativeInteger(record.prompt_tokens, 'chunk.usage.prompt_tokens')
     const outputTokens = requireNonNegativeInteger(record.completion_tokens, 'chunk.usage.completion_tokens')
+    usageTotals.observe(inputTokens, outputTokens)
     events.push({ type: 'usage', inputTokens, outputTokens })
   }
   for (const choice of choices) {
@@ -413,6 +419,20 @@ function decodeChunk(chunk: JsonObject, fragments: ToolCallFragments): ModelStre
     }
   }
   return events
+}
+
+/** 校验供应商的 usage 符合 model capability 规定的累计语义。 */
+class CumulativeUsage {
+  #inputTokens = 0
+  #outputTokens = 0
+
+  observe(inputTokens: number, outputTokens: number): void {
+    if (inputTokens < this.#inputTokens || outputTokens < this.#outputTokens) {
+      throw new OpenAiCompatibleProtocolError('chunk.usage 必须是单调不减的累计值')
+    }
+    this.#inputTokens = inputTokens
+    this.#outputTokens = outputTokens
+  }
 }
 
 class ToolCallFragments {
