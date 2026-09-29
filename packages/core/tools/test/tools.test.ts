@@ -1,6 +1,6 @@
-import { brandId, type ToolCallId } from '@agent-harness/domain'
+import { brandId, type ExecutionId, type ToolCallId } from '@agent-harness/domain'
 import { describe, expect, it } from 'vitest'
-import { ToolRegistry } from '../src/index.ts'
+import { PolicyControlledTools, ToolRegistry } from '../src/index.ts'
 
 function call(name: string, input: unknown = {}) {
   return {
@@ -160,5 +160,90 @@ describe('ToolRegistry', () => {
       callId: 'call-1',
       reason: 'already',
     })
+  })
+
+  it('策略拒绝时不执行工具，并把拒绝持久化为失败结果', async () => {
+    let executed = false
+    const tools = new PolicyControlledTools(new ToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: input => input,
+      execute: async () => {
+        executed = true
+        return { ok: true }
+      },
+    }]), {
+      authorize: async () => ({ status: 'denied', reason: '需要审批' }),
+    })
+
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })).resolves.toEqual({
+      status: 'failure',
+      callId: 'call-1',
+      error: { name: 'ToolAuthorizationError', message: '需要审批' },
+    })
+    expect(executed).toBe(false)
+  })
+
+  it('策略收到冻结上下文后才委派工具', async () => {
+    const observed: string[] = []
+    const tools = new PolicyControlledTools(new ToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: input => input,
+      execute: async (_input, context) => ({ subject: context.execution?.subject ?? 'missing' }),
+    }]), {
+      authorize: async (_call, context) => {
+        observed.push(context.execution.id)
+        return { status: 'allowed' }
+      },
+    })
+
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })).resolves.toMatchObject({ status: 'success', output: { subject: 'user-1' } })
+    expect(observed).toEqual(['execution-1'])
+  })
+
+  it('无效策略结果 fail closed，且不执行工具', async () => {
+    let executed = false
+    const tools = new PolicyControlledTools(new ToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: input => input,
+      execute: async () => {
+        executed = true
+        return { ok: true }
+      },
+    }]), {
+      authorize: async () => ({ status: 'pending' } as never),
+    })
+
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })).resolves.toMatchObject({
+      status: 'failure',
+      error: { name: 'ToolAuthorizationError', message: '执行策略返回无效授权决定' },
+    })
+    expect(executed).toBe(false)
   })
 })

@@ -576,8 +576,13 @@ function validateSessionEvent(value: unknown): SessionEvent {
   assertExactObject(value, ['type'], 'session event', true)
   switch (value.type) {
     case 'turn.started':
-      assertExactObject(value, ['type', 'turnId'], value.type)
+      assertExactObject(
+        value,
+        value.execution === undefined ? ['type', 'turnId'] : ['type', 'turnId', 'execution'],
+        value.type,
+      )
       assertId(value.turnId, 'turnId')
+      if (value.execution !== undefined) parseExecutionMetadata(value.execution)
       return value as unknown as SessionEvent
     case 'user.message':
       assertExactObject(value, ['type', 'message'], value.type)
@@ -716,6 +721,15 @@ function parseSerializedError(value: unknown): SerializedError {
     throw new SessionCorruptionError('错误字段必须是字符串')
   }
   return value as unknown as SerializedError
+}
+
+function parseExecutionMetadata(value: unknown): void {
+  assertExactObject(value, ['id', 'subject', 'authorizationVersion'], 'execution metadata')
+  for (const [name, field] of Object.entries(value)) {
+    if (typeof field !== 'string' || field.length === 0) {
+      throw new SessionCorruptionError(`execution.${name} 必须是非空字符串`)
+    }
+  }
 }
 
 function assertPersistedJson(value: unknown): asserts value is JsonValue {

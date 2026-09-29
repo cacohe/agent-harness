@@ -23,7 +23,11 @@ import {
   type SessionLog,
   type SessionRepository,
 } from '@agent-harness/session'
-import type { ToolCapability } from '@agent-harness/tools'
+import {
+  PolicyControlledTools,
+  type ToolCapability,
+  type ToolExecutionPolicy,
+} from '@agent-harness/tools'
 
 const neverAbortedSignal = new AbortController().signal
 const DEFAULT_RUN_TIMEOUT_MS = 120_000
@@ -58,6 +62,8 @@ export interface AgentRuntimeOptions {
   readonly sessions: SessionRepository
   readonly model: ModelProvider
   readonly tools: ToolCapability
+  /** 可选的工具执行策略；由 Runtime 在组合点包裹真实工具。 */
+  readonly toolPolicy?: ToolExecutionPolicy
   readonly maxSteps: number
   readonly settlementTimeoutMs: number
   readonly runTimeoutMs?: number
@@ -178,7 +184,9 @@ export class AgentRuntime {
         const agent = new Agent({
           model: this.#options.model,
           session,
-          tools: this.#options.tools,
+          tools: this.#options.toolPolicy === undefined
+            ? this.#options.tools
+            : new PolicyControlledTools(this.#options.tools, this.#options.toolPolicy),
           ids: generatedIds,
           maxSteps: this.#options.maxSteps,
           settlementSignals: this.#settlementSignals,

@@ -179,6 +179,7 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 | 会话读写 / 恢复分析    | `packages/session/session`；持久化实现放 `packages/session/session-jsonl` |
 | 模型协议           | 接口在 `packages/llm/model`；实现在 `packages/llm/*` |
 | 工具             | 接口与 `ToolRegistry` 在 `packages/core/tools`；在 host/runtime 组合时注入 |
+| 工具治理         | 可选 `ToolExecutionPolicy` 在工具副作用前判定许可；每个 turn 可带冻结执行审计快照 |
 | Agent 循环 / 结算  | `packages/core/agent` |
 | 组合与 resume     | `packages/runtime` |
 | 进程协议（CLI/HTTP） | `packages/hosts/*` |
