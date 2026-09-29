@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   Agent,
   AgentIdCollisionError,
+  BoundedPromptAssembler,
+  CurrentTimeContext,
   SettlementPersistenceError,
   type AgentExecutionEvent,
 } from '@agent-harness/agent'
@@ -57,6 +59,43 @@ function expectClosed(events: readonly EventEnvelope[]): void {
 }
 
 describe('Agent', () => {
+  it('在每次模型请求中加入可替换的上下文贡献', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([
+      { events: [{ type: 'text.delta', text: 'ok' }] },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: new BoundedPromptAssembler({
+        maxInputBytes: 4096,
+        systemPrompt: '基础人格与安全边界',
+        contributors: [
+          new CurrentTimeContext({ now: () => new Date('2026-09-29T10:00:00.000Z') }),
+          {
+            contribute: ({ tools }) => [{
+              role: 'system',
+              content: `当前启用能力：${tools.map(tool => tool.name).join('、') || '无'}`,
+            }],
+          },
+        ],
+      }),
+    })
+
+    await agent.run(user())
+
+    expect(model.requests[0]?.messages).toEqual([
+      { role: 'system', content: '基础人格与安全边界' },
+      { role: 'system', content: '当前时间（UTC）：2026-09-29T10:00:00.000Z' },
+      { role: 'system', content: '当前启用能力：无' },
+      { id: 'user-1', role: 'user', content: 'hello' },
+    ])
+  })
+
   it('将一次性执行上下文写入 turn 审计事件而不注入模型消息', async () => {
     const model = new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: '完成' }] }])
     const session = new InMemorySessionLog(sessionId)

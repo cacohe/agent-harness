@@ -85,12 +85,50 @@ export interface PromptAssembler {
   ): ModelRequest
 }
 
+/** 提供组装请求时可用的、不会进入会话事件日志的上下文。 */
+export interface ContextContributor {
+  contribute(input: ContextContributorInput): readonly ModelMessage[]
+}
+
+/** 传给上下文贡献器的只读事实快照。 */
+export interface ContextContributorInput {
+  readonly events: readonly EventEnvelope[]
+  readonly tools: readonly ModelToolDefinition[]
+}
+
+/** 为贡献当前时间等易变上下文提供可替换的时钟。 */
+export interface Clock {
+  now(): Date
+}
+
+/** 将组合方提供的当前时间作为一条系统消息加入每次模型请求。 */
+export class CurrentTimeContext implements ContextContributor {
+  readonly #clock: Clock
+
+  constructor(clock: Clock) {
+    this.#clock = clock
+  }
+
+  contribute(_input: ContextContributorInput): readonly ModelMessage[] {
+    const now = this.#clock.now()
+    if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
+      throw new TypeError('Clock.now 必须返回有效 Date')
+    }
+    return [{ role: 'system', content: `当前时间（UTC）：${now.toISOString()}` }]
+  }
+}
+
 /** 默认上下文策略：保留完整的最近用户 turn，并限制模型输入字节数。 */
 export class BoundedPromptAssembler implements PromptAssembler {
   readonly #systemPrompt: string | undefined
+  readonly #contributors: readonly ContextContributor[]
   readonly #maxInputBytes: number
 
-  constructor(options: { readonly maxInputBytes: number, readonly systemPrompt?: string }) {
+  constructor(options: {
+    readonly maxInputBytes: number
+    readonly systemPrompt?: string
+    readonly contributors?: readonly ContextContributor[]
+  }) {
     if (!Number.isSafeInteger(options.maxInputBytes) || options.maxInputBytes < 1) {
       throw new TypeError('maxInputBytes 必须是正整数')
     }
@@ -99,20 +137,41 @@ export class BoundedPromptAssembler implements PromptAssembler {
     }
     this.#maxInputBytes = options.maxInputBytes
     this.#systemPrompt = options.systemPrompt
+    this.#contributors = options.contributors ?? []
   }
 
   assemble(events: readonly EventEnvelope[], tools: readonly ModelToolDefinition[]): ModelRequest {
     const history = deriveModelMessages(events)
-    const start = this.#findStart(history, tools)
-    const messages: readonly ModelMessage[] = this.#systemPrompt === undefined
-      ? history.slice(start)
-      : [{ role: 'system', content: this.#systemPrompt }, ...history.slice(start)]
+    const context = this.#contextMessages({ events, tools })
+    const start = this.#findStart(history, tools, context)
+    const messages: readonly ModelMessage[] = [...context, ...history.slice(start)]
     return { messages, tools }
   }
 
-  #findStart(messages: readonly ModelMessage[], tools: readonly ModelToolDefinition[]): number {
-    const systemBytes = this.#systemPrompt === undefined ? 0 : utf8ByteLength(this.#systemPrompt)
-    let bytes = systemBytes + utf8ByteLength(JSON.stringify(tools))
+  #contextMessages(input: ContextContributorInput): readonly ModelMessage[] {
+    const messages: ModelMessage[] = this.#systemPrompt === undefined
+      ? []
+      : [{ role: 'system', content: this.#systemPrompt }]
+    for (const contributor of this.#contributors) {
+      for (const message of contributor.contribute(input)) {
+        if (message.role !== 'system' || message.content.length === 0) {
+          throw new TypeError('ContextContributor 只能返回非空 system 消息')
+        }
+        messages.push(message)
+      }
+    }
+    return messages
+  }
+
+  #findStart(
+    messages: readonly ModelMessage[],
+    tools: readonly ModelToolDefinition[],
+    context: readonly ModelMessage[],
+  ): number {
+    let bytes = utf8ByteLength(JSON.stringify(context)) + utf8ByteLength(JSON.stringify(tools))
+    if (bytes > this.#maxInputBytes) {
+      throw new Error('上下文与工具定义超过 maxInputBytes')
+    }
     let start = messages.length
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       bytes += utf8ByteLength(JSON.stringify(messages[index]))
