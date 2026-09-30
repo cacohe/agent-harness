@@ -315,6 +315,36 @@ describe('ToolRegistry', () => {
     expect(dispatched).toBe(false)
   })
 
+  it('Sandbox 使用与普通注册表一致的唯一注册规则', () => {
+    const definition = {
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: (input: unknown) => input,
+      execute: async () => ({ ok: true }),
+    }
+
+    expect(() => new SandboxToolRegistry([definition, definition], {
+      dispatch: async () => ({ ok: true }),
+    })).toThrow('duplicate tool registration: write')
+  })
+
+  it('Sandbox list 只暴露模型可见 schema', () => {
+    const tools = new SandboxToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: input => input,
+      execute: async () => ({ ok: true }),
+    }], { dispatch: async () => ({ ok: true }) })
+
+    expect(tools.list()).toEqual([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+    }])
+  })
+
   it('Sandbox 缺少冻结执行上下文时拒绝派发', async () => {
     let dispatched = false
     const tools = new SandboxToolRegistry([{
