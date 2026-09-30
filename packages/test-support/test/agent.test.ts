@@ -4,6 +4,7 @@ import {
   AgentIdCollisionError,
   BoundedPromptAssembler,
   CurrentTimeContext,
+  EnabledSkillsContext,
   SettlementPersistenceError,
   type AgentExecutionEvent,
 } from '@agent-harness/agent'
@@ -59,6 +60,58 @@ function expectClosed(events: readonly EventEnvelope[]): void {
 }
 
 describe('Agent', () => {
+  it('仅将已启用 Skill 摘要加入模型请求，不读取正文或写入会话', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }])
+    let reads = 0
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: new BoundedPromptAssembler({
+        maxInputBytes: 4096,
+        contributors: [new EnabledSkillsContext({
+          listEnabled: () => [{ id: 'research', name: '研究助手', description: '整理研究资料' }],
+          read: async () => {
+            reads += 1
+            return '不得进入默认 prompt 的 Skill 正文'
+          },
+        })],
+      }),
+    })
+
+    await agent.run(user())
+
+    expect(model.requests[0]?.messages).toContainEqual({
+      role: 'system', content: '当前启用 Skills：\n- 研究助手：整理研究资料',
+    })
+    expect(model.requests[0]?.messages).not.toContainEqual(expect.objectContaining({
+      content: expect.stringContaining('Skill 正文'),
+    }))
+    expect(reads).toBe(0)
+    expect(eventTypes(await readEvents(session))).not.toContain('skill.loaded')
+  })
+
+  it('在格式化前限制过长或过多的 Skill 摘要', () => {
+    const oversized = new EnabledSkillsContext({
+      listEnabled: () => [{ id: 'large', name: '大', description: 'x'.repeat(2_049) }],
+      read: async () => '',
+    })
+    const tooMany = new EnabledSkillsContext({
+      listEnabled: () => Array.from({ length: 129 }, (_value, index) => ({
+        id: `skill-${index}`, name: `Skill ${index}`, description: '描述',
+      })),
+      read: async () => '',
+    })
+    const input = { events: [], tools: [] }
+
+    expect(() => oversized.contribute(input)).toThrow('Skill 字段不能超过')
+    expect(() => tooMany.contribute(input)).toThrow('已启用 Skills 数量不能超过')
+  })
+
   it('在每次模型请求中加入可替换的上下文贡献', async () => {
     const session = new InMemorySessionLog(sessionId)
     const model = new ScriptedModelProvider([

@@ -63,7 +63,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 ## 替换接缝
 
-首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`core/agent` 拥有 `PromptAssembler`，默认实现以完整用户 turn 为边界裁剪历史，并限制输入字节数；组合方可提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；当前时间通过注入的 `Clock` 提供。会话事件日志继续只保存对话事实。每个接缝包含消费者侧 capability package 拥有的接口、至少一个实现，以及 `runtime` 或 host 中的组合点。
+首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`core/agent` 拥有 `PromptAssembler`，默认实现以完整用户 turn 为边界裁剪历史，并限制输入字节数；组合方可提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`EnabledSkillsContext` 只注入名称和描述，不读取正文。会话事件日志继续只保存对话事实。每个接缝包含消费者侧 capability package 拥有的接口、至少一个实现，以及 `runtime` 或 host 中的组合点。
 
 `core/tools` 还拥有执行治理接口。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；domain、agent 与 session 不依赖其网络协议、账户模型或 SDK。
 
