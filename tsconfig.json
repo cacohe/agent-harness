@@ -7,6 +7,7 @@
     { "path": "packages/llm/model" },
     { "path": "packages/llm/openai-compatible" },
     { "path": "packages/core/tools" },
+    { "path": "packages/tools/mcp" },
     { "path": "packages/core/agent" },
     { "path": "packages/runtime" },
     { "path": "packages/hosts/cli" },
