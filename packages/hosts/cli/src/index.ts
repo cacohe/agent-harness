@@ -9,6 +9,8 @@ import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
 import { ToolRegistry, type ToolDefinition } from '@agent-harness/tools'
+import { McpToolAdapter } from '@agent-harness/mcp'
+import { StdioMcpClient } from './mcp-stdio.js'
 import { createShellTool } from './shell-tool.js'
 import { CliUsageError, readConfig, type CliConfig, type CliModelConfig } from './config.js'
 
@@ -53,6 +55,7 @@ type CliCommand =
 export async function runCli(dependencies: CliDependencies): Promise<number> {
   let runtime: AgentRuntime | undefined
   let handle: Awaited<ReturnType<AgentRuntime['create']>> | undefined
+  let mcp: McpToolAdapter | undefined
   const processController = new AbortController()
   let turnController: AbortController | undefined
   const cancel = () => {
@@ -73,10 +76,12 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       dependencies.readFile ?? nodeReadFile,
       dependencies.cwd ?? process.cwd(),
     )
+    mcp = config.mcp === undefined ? undefined : createMcpAdapter(config, dependencies.env)
+    await mcp?.start(processController.signal)
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
       model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
-      tools: new ToolRegistry(buildTools(config)),
+      tools: mcp ?? new ToolRegistry(buildTools(config)),
       maxSteps: config.maxSteps,
       settlementTimeoutMs: config.settlementTimeoutMs,
       runTimeoutMs: config.runTimeoutMs,
@@ -123,6 +128,10 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     const resources: { close(): Promise<void> }[] = []
     if (handle !== undefined) resources.push(handle)
     if (runtime !== undefined) resources.push(runtime)
+    if (mcp !== undefined) {
+      const adapter = mcp
+      resources.push({ close: () => adapter.close(new AbortController().signal) })
+    }
     const closeErrors = await closeCliResources(resources)
     if (failure !== undefined || closeErrors.length > 0) {
       code = 1
@@ -134,6 +143,24 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     dependencies.signals.off('SIGTERM', cancel)
   }
   return code
+}
+
+function createMcpAdapter(
+  config: CliConfig,
+  environment: Readonly<Record<string, string | undefined>>,
+): McpToolAdapter {
+  if (config.mcp === undefined) throw new Error('MCP 配置缺失')
+  if (config.shell.enabled) throw new CliUsageError('mcp 与 shell 不能同时启用')
+  const childEnvironment: Record<string, string> = {}
+  for (const [target, source] of Object.entries(config.mcp.environment)) {
+    childEnvironment[target] = requiredEnvironment(environment, source)
+  }
+  return new McpToolAdapter(new StdioMcpClient({
+    command: config.mcp.command,
+    args: config.mcp.args,
+    ...(config.mcp.cwd === undefined ? {} : { cwd: config.mcp.cwd }),
+    env: childEnvironment,
+  }))
 }
 
 /** Host 只根据已校验配置选择一个 provider，不在 Runtime 内保留模型目录或路由。 */

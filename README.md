@@ -129,6 +129,7 @@ pnpm run build
 - 本地直连模型使用 `model.baseUrl`、`model.model` 和 `model.apiKeyEnv`：OpenAI-compatible API 根、模型名与存放 API key 的环境变量名（默认 `DEEPSEEK_API_KEY`）
 - Platform Gateway 模型使用 `model.platformBaseUrl`、`model.modelId` 和 `model.authorizationEnv`：HTTPS Platform API 根、Platform 已解析的模型 ID 与存放完整认证头值的环境变量名。该模式由 Host 注入单个 provider，不允许运行中切换模型。
 - `shell`（可选）：`enabled`、`cwd`（绝对路径）、`timeoutMs`、`maxOutputBytes`；控制本机 `run_shell` 工具
+- `mcp`（可选）：`command`、`args`、可选绝对 `cwd` 与 `environment` 映射；启动一个 MCP stdio server。`environment` 的键是子进程变量名，值是 Host 中保存实际值的环境变量名，避免将密钥写进配置。
 
 密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 默认关闭；显式启用后仍以当前用户权限执行命令，无沙箱，仅适合本地实验。
 
@@ -144,6 +145,18 @@ Platform Gateway 配置示例：
 ```
 
 `PLATFORM_AUTHORIZATION` 的值是完整 HTTP Authorization header（例如 `Bearer <token>`）；CLI 不会把它输出到诊断。该配置只组合模型 Gateway。工具许可要求每个 turn 由 Platform/Host 冻结执行身份，因此仍由具备该身份上下文的 Host 组合。
+
+MCP stdio 配置示例：
+
+```json
+"mcp": {
+  "command": "npx",
+  "args": ["-y", "@example/mcp-server"],
+  "environment": { "API_TOKEN": "MCP_API_TOKEN" }
+}
+```
+
+当前 CLI 将 `mcp` 与 `shell.enabled: true` 设为互斥，避免两个独立来源出现重复工具名；MCP server 的 stdout 必须只输出 MCP 协议数据。
 
 当前 CLI 与 JSONL 会话存储只支持单实例运行。同一 `sessionRoot` 不得被多个 Node.js 进程、容器或服务实例同时使用。
 
