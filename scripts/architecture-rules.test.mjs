@@ -68,4 +68,18 @@ describe('架构依赖规则', () => {
     ])
     expect(forbidden).toContain('tools/platform-policy: adapter has forbidden dependency on runtime')
   })
+
+  it('允许 Platform HTTP client 依赖模型请求词汇但不依赖 Runtime', () => {
+    const allowed = verifyArchitecture([
+      ['llm/model', manifest('model')],
+      ['platform/platform-http', manifest('platform-http', { '@agent-harness/model': 'workspace:*' })],
+    ])
+    expect(allowed).toEqual([])
+
+    const forbidden = verifyArchitecture([
+      ['runtime', manifest('runtime')],
+      ['platform/platform-http', manifest('platform-http', { '@agent-harness/runtime': 'workspace:*' })],
+    ])
+    expect(forbidden).toContain('platform/platform-http: adapter has forbidden dependency on runtime')
+  })
 })

@@ -3,5 +3,6 @@ packages:
   - packages/core/*
   - packages/tools/*
   - packages/llm/*
+  - packages/platform/*
   - packages/session/*
   - packages/hosts/*
