@@ -3,6 +3,7 @@ packages:
   - packages/core/*
   - packages/tools/*
   - packages/llm/*
+  - packages/memory/*
   - packages/platform/*
   - packages/session/*
   - packages/skills/*

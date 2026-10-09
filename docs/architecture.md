@@ -26,6 +26,8 @@ packages/
     model/                     模型 provider 接口
     openai-compatible/         Chat Completions adapter
     gateway/                   Platform LLM Gateway adapter
+  memory/
+    memory-gateway/            Platform 长期记忆 Gateway adapter
   platform/
     platform-http/             Platform Gateway 与 Permit HTTP adapter
   session/
@@ -108,6 +110,8 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 `llm/openai-compatible` 实现首个真实模型 provider。它只依赖 `domain` 与 `llm/model`，使用组合方显式传入的 URL、API key、模型名和可选 `fetch` 实现调用 OpenAI-compatible `/v1/chat/completions`。它把 ModelRequest 映射为 Chat Completions 的 system、user、assistant、tool 与 function tools 字段，并把 SSE 文本、usage 与完整 tool call 映射回模型 capability。无工具定义或不含 tool call 的 assistant 消息会省略对应空数组字段，避免部分供应商对 `tools: []` / `tool_calls: []` 返回 HTTP 400。适配器限制未完成 SSE 数据的缓存和整个响应字节数，且在流结束并收到 `[DONE]` 后才发布 tool call；缺少 `[DONE]`、无效 UTF-8/JSON、字段类型错误、冲突的 tool fragment 或不能解析为 JSON 的 arguments 都终止本次 stream。它不支持 OpenAI Responses、Anthropic Messages 或 Gemini 协议，也不负责重试或供应商选择。
 
 `llm/gateway` 让 Host 或 Platform 把一个已经解析、已授权的模型选择注入为单个 `ModelProvider`。Gateway client 拥有身份、密钥、模型授权、调用协议与计费；adapter 只严格校验 Gateway 流并转换为模型 capability 事件。工具输入在复制前限制规范 JSON 字节数和嵌套深度，避免不可信流绕过 Runtime 后续的输出预算。Runtime 不包含模型 registry、租户或计费逻辑，用户输入也不能在运行中选择任意模型。
+
+`memory/memory-gateway` 让 Host 或 Platform 把一个已解析、已授权的 memory space 注入为单个 `MemoryRetriever`。Gateway client 拥有认证、租户、PG/Qdrant/OSS 组合、检索协议与计费；adapter 限制查询和结果并严格转换为 `MemoryMatch`。Runtime 不包含 memory registry、租户或向量数据库逻辑，用户输入不能切换 memory space。
 
 `platform/platform-http` 为单实例 Host 实现 Gateway 与 Permit 的 HTTPS Platform HTTP 命令协议。它向模型调用发送 NDJSON 流命令，向工具许可发送 JSON 命令，并使用幂等键、响应大小限制、严格 Content-Type/UTF-8/JSON 校验与取消传播保护网络边界；任何未完整读取的响应 body 都会取消。Platform 服务端必须把计费、审计和可靠 outbox 作为命令处理事务的一部分；Harness observer 只用于观测和对账。CLI 可以通过 `platformBaseUrl`、`modelId` 与认证环境变量把同一 client 注入 Gateway provider；它不创建工具许可策略，因为本地 CLI 没有 Platform 冻结的执行身份。
 

@@ -107,6 +107,12 @@ importers:
         specifier: workspace:*
         version: link:../model
 
+  packages/memory/memory-gateway:
+    dependencies:
+      '@agent-harness/agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+
   packages/platform/platform-http:
     dependencies:
       '@agent-harness/model':
