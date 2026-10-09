@@ -21,7 +21,7 @@ hosts  →  runtime  →  core/agent|tools · llm/model · session/session
 |------|----------|------|
 | 领域词汇 | `packages/domain` | 稳定标识符、事件、消息与错误 |
 | Capability | `core/*`、`llm/model`、`session/session` | 核心行为与接口 |
-| Adapter | `llm/openai-compatible`、`session/session-jsonl` | 外部系统实现 |
+| Adapter | `llm/openai-compatible`、`session/session-jsonl`、`tools/mcp`、`tools/platform-policy` | 外部系统实现 |
 | 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
 | 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
 
@@ -57,6 +57,9 @@ packages/
   llm/
     model/                模型 provider 接口与流事件
     openai-compatible/    OpenAI-compatible Chat Completions
+  tools/
+    mcp/                  MCP 工具 adapter
+    platform-policy/      Platform 一次性工具许可 adapter
   session/
     session/              事件日志、投影、持久化接口
     session-jsonl/        JSONL 会话存储 adapter

@@ -218,6 +218,125 @@ describe('ToolRegistry', () => {
     expect(observed).toEqual(['execution-1'])
   })
 
+  it('授权等待期间的调用和执行身份修改不影响真实执行', async () => {
+    let release!: () => void
+    const authorized = new Promise<void>(resolve => { release = resolve })
+    const observed: unknown[] = []
+    const tools = new PolicyControlledTools(new ToolRegistry([{
+      name: 'write',
+      description: '写入',
+      inputSchema: { type: 'object' },
+      parseInput: input => input,
+      execute: async (input, context) => ({
+        input,
+        subject: context.execution?.subject ?? 'missing',
+      }),
+    }]), {
+      authorize: async (authorizedCall, authorizedContext) => {
+        observed.push({ call: authorizedCall, execution: authorizedContext.execution })
+        await authorized
+        return { status: 'allowed' }
+      },
+    })
+    const input = { path: 'before' }
+    const execution = {
+      id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+      subject: 'user-1',
+      authorizationVersion: 'v1',
+    }
+    const mutableCall = call('write', input)
+    const running = tools.executeWithContext(mutableCall, {
+      signal: new AbortController().signal,
+      execution,
+    })
+
+    input.path = 'after'
+    execution.subject = 'attacker'
+    ;(mutableCall as { name: string }).name = 'missing'
+    release()
+
+    await expect(running).resolves.toMatchObject({
+      status: 'success',
+      output: { input: { path: 'before' }, subject: 'user-1' },
+    })
+    expect(observed).toEqual([{
+      call: { id: 'call-1', name: 'write', input: { path: 'before' } },
+      execution: { id: 'execution-1', subject: 'user-1', authorizationVersion: 'v1' },
+    }])
+    const snapshot = observed[0] as { call: object, execution: object }
+    expect(Object.isFrozen(snapshot.call)).toBe(true)
+    expect(Object.isFrozen(snapshot.execution)).toBe(true)
+  })
+
+  it.each(['denied', 'error', 'cancelled'] as const)(
+    '授权等待后的 %s 使用冻结 call ID 结算',
+    async outcome => {
+      let release!: () => void
+      const authorized = new Promise<void>(resolve => { release = resolve })
+      const controller = new AbortController()
+      const tools = new PolicyControlledTools(new ToolRegistry([]), {
+        authorize: async () => {
+          await authorized
+          if (outcome === 'error') throw new Error('Platform 响应无效')
+          if (outcome === 'denied') return { status: 'denied', reason: '需要审批' }
+          return { status: 'allowed' }
+        },
+      })
+      const mutableCall = call('write')
+      const running = tools.executeWithContext(mutableCall, {
+        signal: controller.signal,
+        execution: {
+          id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+          subject: 'user-1',
+          authorizationVersion: 'v1',
+        },
+      })
+
+      ;(mutableCall as { id: ToolCallId }).id = brandId<'ToolCallId'>('tampered') as ToolCallId
+      if (outcome === 'cancelled') controller.abort('用户取消')
+      release()
+
+      await expect(running).resolves.toMatchObject({
+        status: outcome === 'cancelled' ? 'cancelled' : 'failure',
+        callId: 'call-1',
+      })
+    },
+  )
+
+  it('冻结 JSON 时保留 __proto__ 自有字段且不修改对象原型', async () => {
+    const input = JSON.parse('{"__proto__":{"admin":true},"value":1}') as Record<string, unknown>
+    let observedInput: unknown
+    const tools = new PolicyControlledTools(new ToolRegistry([{
+      name: 'inspect',
+      description: '检查输入',
+      inputSchema: { type: 'object' },
+      parseInput: value => value,
+      execute: async value => value,
+    }]), {
+      authorize: async authorizedCall => {
+        observedInput = authorizedCall.input
+        return { status: 'allowed' }
+      },
+    })
+
+    const result = await tools.executeWithContext(call('inspect', input), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    })
+    expect(result).toMatchObject({ status: 'success', callId: 'call-1' })
+    if (result.status !== 'success') throw new Error('预期工具成功')
+    const output = result.output as Record<string, unknown>
+    expect(Object.hasOwn(output, '__proto__')).toBe(true)
+    expect(output['__proto__']).toEqual({ admin: true })
+    expect(output.value).toBe(1)
+    expect(Object.hasOwn(observedInput as object, '__proto__')).toBe(true)
+    expect(Object.getPrototypeOf(observedInput as object)).toBe(Object.prototype)
+  })
+
   it('无效策略结果 fail closed，且不执行工具', async () => {
     let executed = false
     const tools = new PolicyControlledTools(new ToolRegistry([{

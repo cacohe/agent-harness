@@ -36,4 +36,29 @@ describe('架构依赖规则', () => {
     ])
     expect(failures).toEqual([])
   })
+
+  it('限制 Platform 策略 adapter 只能依赖工具 capability 与 domain', () => {
+    const allowed = verifyArchitecture([
+      ['domain', manifest('domain')],
+      ['core/tools', manifest('tools', { '@agent-harness/domain': 'workspace:*' })],
+      [
+        'tools/platform-policy',
+        manifest('platform-policy', {
+          '@agent-harness/domain': 'workspace:*',
+          '@agent-harness/tools': 'workspace:*',
+        }),
+      ],
+    ])
+    expect(allowed).toEqual([])
+
+    const forbidden = verifyArchitecture([
+      ['domain', manifest('domain')],
+      ['runtime', manifest('runtime')],
+      [
+        'tools/platform-policy',
+        manifest('platform-policy', { '@agent-harness/runtime': 'workspace:*' }),
+      ],
+    ])
+    expect(forbidden).toContain('tools/platform-policy: adapter has forbidden dependency on runtime')
+  })
 })

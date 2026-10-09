@@ -20,6 +20,7 @@ packages/
     tools/                     工具注册与调度
   tools/
     mcp/                       MCP 工具 adapter
+    platform-policy/           Platform 一次性工具许可 adapter
   llm/
     model/                     模型 provider 接口
     openai-compatible/         Chat Completions adapter
@@ -70,6 +71,8 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 `SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个 `ToolDefinition.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号。`run_shell` 不是 Sandbox，不可替代此接口。
 
 `tools/mcp` 将组合方提供的 MCP client 转换为 `ToolCapability`。它的 `start` 在 Agent 接纳输入前拉取并严格校验工具表，`close` 释放 client；工具调用与关闭均传递取消信号。MCP transport、进程创建、网络认证和租户凭据属于 Host 或 Platform adapter，不进入 core 或 MCP 工具映射层。
+
+`tools/platform-policy` 将组合方提供的 `PlatformPermitClient` 转换为 `ToolExecutionPolicy`。`PolicyControlledTools` 先冻结 ToolCall 与执行身份，并让策略和真实工具共享同一快照；adapter 对该 ToolCall JSON 进行规范编码和 SHA-256 摘要，要求 Platform 许可回显完整执行身份、tool call、工具名和输入摘要，并校验失效时间。Client 负责原子领取与记账、传输、认证和审批协议；adapter 对无效、过期或绑定不匹配的响应失败关闭。
 
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。`AgentObserver.onExecution` 在每批会话事件成功追加后逐条通知 `session.event`，因此 Platform 可以以 session sequence 重建审计状态；模型 capability 的 usage 是同一 attempt 内单调不减的累计 token，Agent 将其转换为带 session、turn、step、attempt 与单调 `usageSequence` 的 `model.usage` token 增量通知，供 Platform 去重后累加。observer 投递不具备可靠性保证，需要可靠投递的 Platform adapter 必须自行持久化 outbox 并以 sequence 去重。
 
