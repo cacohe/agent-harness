@@ -183,6 +183,15 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/tools/sandbox-docker:
+    dependencies:
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.2':

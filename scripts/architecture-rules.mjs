@@ -19,6 +19,7 @@ export function verifyArchitecture(manifests) {
     ['llm/gateway', new Set(['domain', 'llm/model'])],
     ['platform/platform-http', new Set(['llm/model'])],
     ['tools/platform-policy', new Set(['domain', 'core/tools'])],
+    ['tools/sandbox-docker', new Set(['domain', 'core/tools'])],
   ])
   const hostDependencies = new Map([
     [

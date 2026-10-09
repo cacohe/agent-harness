@@ -10,6 +10,7 @@
     { "path": "packages/platform/platform-http" },
     { "path": "packages/core/tools" },
     { "path": "packages/tools/mcp" },
+    { "path": "packages/tools/sandbox-docker" },
     { "path": "packages/tools/platform-policy" },
     { "path": "packages/core/agent" },
     { "path": "packages/runtime" },
