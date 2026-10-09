@@ -21,6 +21,7 @@ packages/
   tools/
     mcp/                       MCP 工具 adapter
     platform-policy/           Platform 一次性工具许可 adapter
+    sandbox-docker/            Docker OCI Sandbox dispatcher
   llm/
     model/                     模型 provider 接口
     openai-compatible/         Chat Completions adapter
@@ -72,6 +73,8 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 `core/tools` 还拥有执行治理接口。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；domain、agent 与 session 不依赖其网络协议、账户模型或 SDK。
 
 `SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个 `ToolDefinition.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号。`run_shell` 不是 Sandbox，不可替代此接口。
+
+`tools/sandbox-docker` 是单实例 Docker OCI dispatcher。它将任务交给明确实现 stdin/stdout JSON worker 协议的镜像；默认禁网、只读根文件系统、非 root、无 capabilities、禁止提权，并限制 CPU、内存、PID、期限与输出。它不挂载宿主工作区、Docker socket 或密钥；镜像供应链与 Docker daemon 的安全配置属于 Host 运维边界。
 
 `tools/mcp` 将组合方提供的 MCP client 转换为 `ToolCapability`。它的 `start` 在 Agent 接纳输入前拉取并严格校验工具表，`close` 释放 client；工具调用与关闭均传递取消信号。CLI 的 `mcp` 配置可显式组合官方 SDK 的 stdio client；子进程仅继承 SDK 的安全默认环境和由配置映射的环境变量，配置不保存密钥。CLI 当前将 MCP 与本机 shell 视为互斥工具来源，多个工具来源的统一目录与执行调度留给后续 Host 组合。MCP transport、进程创建、网络认证和租户凭据属于 Host 或 Platform adapter，不进入 core 或 MCP 工具映射层。
 

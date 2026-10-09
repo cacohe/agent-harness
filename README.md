@@ -63,6 +63,7 @@ packages/
   tools/
     mcp/                  MCP 工具 adapter
     platform-policy/      Platform 一次性工具许可 adapter
+    sandbox-docker/       Docker OCI Sandbox dispatcher
   session/
     session/              事件日志、投影、持久化接口
     session-jsonl/        JSONL 会话存储 adapter
