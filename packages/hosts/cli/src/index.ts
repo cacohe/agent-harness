@@ -3,12 +3,14 @@ import { readFile as nodeReadFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { brandId, isAbortError, type MessageId, type SessionId } from '@agent-harness/domain'
+import { LlmGatewayModelProvider } from '@agent-harness/gateway'
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
+import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
 import { ToolRegistry, type ToolDefinition } from '@agent-harness/tools'
 import { createShellTool } from './shell-tool.js'
-import { CliUsageError, readConfig, type CliConfig } from './config.js'
+import { CliUsageError, readConfig, type CliConfig, type CliModelConfig } from './config.js'
 
 type FetchImplementation = (input: string | URL, init?: RequestInit) => Promise<Response>
 
@@ -71,20 +73,9 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       dependencies.readFile ?? nodeReadFile,
       dependencies.cwd ?? process.cwd(),
     )
-    const apiKey = dependencies.env[config.model.apiKeyEnv]
-    if (apiKey === undefined || apiKey.length === 0) {
-      throw new CliUsageError(`环境变量 ${config.model.apiKeyEnv} 未设置`)
-    }
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
-      model: new OpenAiCompatibleModelProvider({
-        id: config.model.id,
-        baseUrl: config.model.baseUrl,
-        apiKey,
-        model: config.model.model,
-        maxResponseBytes: config.maxModelOutputBytes,
-        ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
-      }),
+      model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
       tools: new ToolRegistry(buildTools(config)),
       maxSteps: config.maxSteps,
       settlementTimeoutMs: config.settlementTimeoutMs,
@@ -143,6 +134,42 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     dependencies.signals.off('SIGTERM', cancel)
   }
   return code
+}
+
+/** Host 只根据已校验配置选择一个 provider，不在 Runtime 内保留模型目录或路由。 */
+function createModelProvider(
+  config: CliModelConfig,
+  maxResponseBytes: number,
+  dependencies: CliDependencies,
+): OpenAiCompatibleModelProvider | LlmGatewayModelProvider {
+  if ('baseUrl' in config) {
+    const apiKey = requiredEnvironment(dependencies.env, config.apiKeyEnv)
+    return new OpenAiCompatibleModelProvider({
+      id: config.id,
+      baseUrl: config.baseUrl,
+      apiKey,
+      model: config.model,
+      maxResponseBytes,
+      ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
+    })
+  }
+  const authorization = requiredEnvironment(dependencies.env, config.authorizationEnv)
+  const client = new PlatformHttpClient({
+    baseUrl: config.platformBaseUrl,
+    authorization,
+    maxResponseBytes,
+    ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
+  })
+  return new LlmGatewayModelProvider({ id: config.id, modelId: config.modelId, client })
+}
+
+function requiredEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+  name: string,
+): string {
+  const value = environment[name]
+  if (value === undefined || value.length === 0) throw new CliUsageError(`环境变量 ${name} 未设置`)
+  return value
 }
 
 async function openChatSession(
@@ -343,6 +370,11 @@ function describeSafeProviderError(error: unknown): string | undefined {
       case 'OpenAiCompatibleHttpError':
       case 'OpenAiCompatibleProtocolError':
       case 'OpenAiCompatibleConfigurationError':
+      case 'LlmGatewayConfigurationError':
+      case 'LlmGatewayProtocolError':
+      case 'PlatformHttpConfigurationError':
+      case 'PlatformHttpError':
+      case 'PlatformHttpProtocolError':
         return candidate.message
       default:
         break

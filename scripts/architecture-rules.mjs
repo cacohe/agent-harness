@@ -23,7 +23,15 @@ export function verifyArchitecture(manifests) {
   const hostDependencies = new Map([
     [
       'hosts/cli',
-      new Set(['domain', 'llm/openai-compatible', 'runtime', 'session/session-jsonl', 'core/tools']),
+      new Set([
+        'domain',
+        'llm/gateway',
+        'llm/openai-compatible',
+        'platform/platform-http',
+        'runtime',
+        'session/session-jsonl',
+        'core/tools',
+      ]),
     ],
   ])
   const adapterPackages = new Set(adapterDependencies.keys())

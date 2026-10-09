@@ -23,6 +23,19 @@ function config(sessionRoot: string, shell?: Record<string, unknown>): string {
     ...(shell === undefined ? {} : { shell }),
   })
 }
+function platformConfig(sessionRoot: string): string {
+  return JSON.stringify({
+    sessionRoot,
+    maxSteps: 4,
+    settlementTimeoutMs: 1000,
+    model: {
+      id: 'platform-gateway',
+      platformBaseUrl: 'https://platform.example/v1',
+      modelId: 'approved-model',
+      authorizationEnv: 'PLATFORM_AUTHORIZATION',
+    },
+  })
+}
 function sse(text: string): Response {
   return new Response(new ReadableStream({
     start(controller) {
@@ -30,6 +43,11 @@ function sse(text: string): Response {
       controller.close()
     },
   }))
+}
+function ndjson(text: string): Response {
+  return new Response(`${JSON.stringify({ type: 'text.delta', text })}\n`, {
+    headers: { 'content-type': 'application/x-ndjson; charset=utf-8' },
+  })
 }
 function toolCallSse(): Response {
   const payload = JSON.stringify({
@@ -61,6 +79,35 @@ describe('CLI Host', () => {
     expect(output.map(line => JSON.parse(line))).toMatchObject([{ type: 'stream', event: { type: 'text.delta', text: 'done' } }, { type: 'result', sessionId: 's1', message: { content: 'done' } }])
   })
 
+  it('组合 Platform Gateway 的已选模型，并且不泄露认证头', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    let request: Request | undefined
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'platform-1', '--message', 'hello'],
+      env: { PLATFORM_AUTHORIZATION: 'Bearer platform-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => platformConfig(sessionRoot),
+      fetch: async (input, init) => {
+        request = new Request(input, init)
+        return ndjson('from-platform')
+      },
+    })
+    expect(code).toBe(0)
+    expect(errors).toEqual([])
+    expect(request?.url).toBe('https://platform.example/v1/agent/model-calls')
+    expect(request?.headers.get('authorization')).toBe('Bearer platform-secret')
+    expect(await request?.json()).toMatchObject({ modelId: 'approved-model', request: { messages: [{ role: 'user', content: 'hello' }] } })
+    expect(output.map(line => JSON.parse(line))).toMatchObject([
+      { type: 'stream', event: { type: 'text.delta', text: 'from-platform' } },
+      { type: 'result', sessionId: 'platform-1', message: { content: 'from-platform' } },
+    ])
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('platform-secret')
+  })
+
   it('将参数和密钥失败写为不含密钥的 JSONL error', async () => {
     const output: string[] = []; const errors: string[] = []
     const relative = await runCli({ argv: ['run', '--config', 'config.json', '--session', 's', '--message', 'x'], env: { TEST_KEY: 'top-secret' }, stdout: { write: value => output.push(value) }, stderr: { write: value => errors.push(value) }, signals: new Signals() })
@@ -77,6 +124,41 @@ describe('CLI Host', () => {
     expect(emptyMessage).toBe(1); expect(unknownField).toBe(1)
     expect(output.map(line => JSON.parse(line))).toEqual([{ type: 'error', code: 'failed' }, { type: 'error', code: 'failed' }])
     expect(errors.join('')).not.toContain('forbidden')
+  })
+
+  it('拒绝混合模型配置，并对缺失的 Platform 认证保持诊断安全', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const mixed = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'mixed', '--message', 'x'],
+      env: { PLATFORM_AUTHORIZATION: 'Bearer not-for-output' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(platformConfig(sessionRoot)),
+        model: {
+          id: 'platform-gateway',
+          platformBaseUrl: 'https://platform.example/v1',
+          modelId: 'approved-model',
+          authorizationEnv: 'PLATFORM_AUTHORIZATION',
+          baseUrl: 'https://forbidden.example/v1',
+        },
+      }),
+    })
+    const missing = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'missing', '--message', 'x'],
+      env: {},
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => platformConfig(sessionRoot),
+    })
+    expect(mixed).toBe(1)
+    expect(missing).toBe(1)
+    expect(errors.join('')).toContain('PLATFORM_AUTHORIZATION 未设置')
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('not-for-output')
   })
 
   it('SIGINT 取消运行，并在 finally 释放 reader 与信号监听器', async () => {
