@@ -6,6 +6,7 @@
     { "path": "packages/session/session-jsonl" },
     { "path": "packages/llm/model" },
     { "path": "packages/llm/openai-compatible" },
+    { "path": "packages/llm/gateway" },
     { "path": "packages/core/tools" },
     { "path": "packages/tools/mcp" },
     { "path": "packages/tools/platform-policy" },

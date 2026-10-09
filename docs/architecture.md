@@ -24,6 +24,7 @@ packages/
   llm/
     model/                     模型 provider 接口
     openai-compatible/         Chat Completions adapter
+    gateway/                   Platform LLM Gateway adapter
   session/
     session/                   事件日志、投影与持久化接口
     session-jsonl/             JSONL 会话 adapter
@@ -93,6 +94,8 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 `runtime` 是显式组合根，接收 repository、model、tools、运行限制、observer 和可选标识符 factory。`create` 创建新 writer；`resume` 取得 writer、读取并校验历史、原子修复后才构造 Agent。生产标识符使用随机 UUID，测试可以替换 factory。Runtime 把历史 ID 快照传入 Agent，不复制实时 reservation。Runtime 不包含 registry、服务定位器或动态插件装载。
 
 `llm/openai-compatible` 实现首个真实模型 provider。它只依赖 `domain` 与 `llm/model`，使用组合方显式传入的 URL、API key、模型名和可选 `fetch` 实现调用 OpenAI-compatible `/v1/chat/completions`。它把 ModelRequest 映射为 Chat Completions 的 system、user、assistant、tool 与 function tools 字段，并把 SSE 文本、usage 与完整 tool call 映射回模型 capability。无工具定义或不含 tool call 的 assistant 消息会省略对应空数组字段，避免部分供应商对 `tools: []` / `tool_calls: []` 返回 HTTP 400。适配器限制未完成 SSE 数据的缓存和整个响应字节数，且在流结束并收到 `[DONE]` 后才发布 tool call；缺少 `[DONE]`、无效 UTF-8/JSON、字段类型错误、冲突的 tool fragment 或不能解析为 JSON 的 arguments 都终止本次 stream。它不支持 OpenAI Responses、Anthropic Messages 或 Gemini 协议，也不负责重试或供应商选择。
+
+`llm/gateway` 让 Host 或 Platform 把一个已经解析、已授权的模型选择注入为单个 `ModelProvider`。Gateway client 拥有身份、密钥、模型授权、调用协议与计费；adapter 只严格校验 Gateway 流并转换为模型 capability 事件。工具输入在复制前限制规范 JSON 字节数和嵌套深度，避免不可信流绕过 Runtime 后续的输出预算。Runtime 不包含模型 registry、租户或计费逻辑，用户输入也不能在运行中选择任意模型。
 
 `hosts/cli` 是单进程 JSON 配置入口。它接受绝对 `--config` 路径及 `run`、`resume`、`chat`、`--session`、可选 `--message` 参数，显式组合 JSONL repository、OpenAI-compatible provider、可选 `run_shell` 工具和 Runtime。`runTimeoutMs`、`maxModelOutputBytes` 和 `maxInputBytes` 分别限制一个 turn 的协作式执行期限、模型输出与输入上下文；超时按取消路径结算。所有 provider 与工具都必须响应传入的 `AbortSignal`；不受进程隔离的任意第三方实现无法获得硬超时保证。shell 默认不注册，显式启用时只继承最小环境，并在 Unix 中终止整个进程组；它仍仅适合本地实验 Host，不以沙箱为安全边界。
 
