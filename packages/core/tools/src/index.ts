@@ -43,6 +43,57 @@ export interface ExecutionAwareToolCapability extends ToolCapability {
   executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>
 }
 
+/** 工具来源在组合时暴露了重复名称。 */
+export class DuplicateToolNameError extends Error {
+  override readonly name = 'DuplicateToolNameError'
+
+  constructor(readonly toolName: string) {
+    super(`duplicate tool registration: ${toolName}`)
+  }
+}
+
+/** 将多个已就绪的工具来源合并为单一目录，并按工具名路由执行。 */
+export class CompositeToolCapability implements ExecutionAwareToolCapability {
+  readonly #definitions: readonly ModelToolDefinition[]
+  readonly #routes: ReadonlyMap<string, ToolCapability>
+
+  constructor(capabilities: readonly ToolCapability[]) {
+    const definitions: ModelToolDefinition[] = []
+    const routes = new Map<string, ToolCapability>()
+    for (const capability of capabilities) {
+      for (const definition of capability.list()) {
+        if (routes.has(definition.name)) {
+          throw new DuplicateToolNameError(definition.name)
+        }
+        assertJsonValue(definition.inputSchema)
+        routes.set(definition.name, capability)
+        definitions.push(Object.freeze({
+          name: definition.name,
+          description: definition.description,
+          inputSchema: freezeJson(definition.inputSchema as JsonValue) as Readonly<Record<string, unknown>>,
+        }))
+      }
+    }
+    this.#definitions = Object.freeze(definitions)
+    this.#routes = routes
+  }
+
+  list(): readonly ModelToolDefinition[] {
+    return this.#definitions
+  }
+
+  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult> {
+    return this.executeWithContext(call, { signal })
+  }
+
+  executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    if (context.signal.aborted) return Promise.resolve(cancelledResult(call, context.signal.reason))
+    const capability = this.#routes.get(call.name)
+    if (capability === undefined) return Promise.resolve(unknownToolResult(call))
+    return executeWithContext(capability, call, context)
+  }
+}
+
 /** 平台、审批或本地策略在任何副作用前作出的闭合许可决定。 */
 export type ToolAuthorizationDecision =
   | { readonly status: 'allowed' }
@@ -100,16 +151,7 @@ export class ToolRegistry implements ToolCapability {
     if (signal.aborted) return cancelledResult(call, signal.reason)
 
     const definition = this.#definitions.get(call.name)
-    if (definition === undefined) {
-      return {
-        status: 'failure',
-        callId: call.id,
-        error: {
-          name: 'UnknownToolError',
-          message: `unknown tool: ${call.name}`,
-        },
-      }
-    }
+    if (definition === undefined) return unknownToolResult(call)
 
     try {
       const input = definition.parseInput(call.input)
@@ -163,13 +205,7 @@ export class SandboxToolRegistry implements ExecutionAwareToolCapability {
       return authorizationFailure(call, '缺少冻结执行上下文')
     }
     const definition = this.#definitions.get(call.name)
-    if (definition === undefined) {
-      return {
-        status: 'failure',
-        callId: call.id,
-        error: { name: 'UnknownToolError', message: `unknown tool: ${call.name}` },
-      }
-    }
+    if (definition === undefined) return unknownToolResult(call)
     try {
       const input = definition.parseInput(call.input)
       assertJsonValue(input)
@@ -380,5 +416,13 @@ function cancelledResult(call: ToolCall, reason: unknown): ToolResult {
     status: 'cancelled',
     callId: call.id,
     reason: reason instanceof Error ? reason.message : String(reason ?? 'cancelled'),
+  }
+}
+
+function unknownToolResult(call: ToolCall): ToolResult {
+  return {
+    status: 'failure',
+    callId: call.id,
+    error: { name: 'UnknownToolError', message: `unknown tool: ${call.name}` },
   }
 }

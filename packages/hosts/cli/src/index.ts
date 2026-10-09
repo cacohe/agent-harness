@@ -10,9 +10,14 @@ import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
 import { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem'
-import { ToolRegistry, type ToolDefinition } from '@agent-harness/tools'
-import { McpToolAdapter } from '@agent-harness/mcp'
-import { StdioMcpClient } from './mcp-stdio.js'
+import {
+  CompositeToolCapability,
+  DuplicateToolNameError,
+  ToolRegistry,
+  type ToolDefinition,
+} from '@agent-harness/tools'
+import { McpToolAdapter, type McpClient } from '@agent-harness/mcp'
+import { StdioMcpClient, type StdioMcpClientOptions } from './mcp-stdio.js'
 import { createShellTool } from './shell-tool.js'
 import { CliUsageError, readConfig, type CliConfig, type CliModelConfig } from './config.js'
 
@@ -35,6 +40,7 @@ export interface CliDependencies {
   readonly signals: CliSignals
   readonly readFile?: (path: string, encoding: 'utf8') => Promise<string>
   readonly fetch?: FetchImplementation
+  readonly createMcpClient?: (options: StdioMcpClientOptions) => McpClient
   /** 多轮交互的行输入；缺省时从 process.stdin 读取。 */
   readonly lines?: AsyncIterable<string>
   /** shell 工具默认 cwd；缺省时使用 process.cwd()。 */
@@ -43,8 +49,15 @@ export interface CliDependencies {
 
 /** 无论前一个资源是否失败都关闭全部资源，并返回所有关闭错误。 */
 export async function closeCliResources(resources: readonly { close(): Promise<void> }[]): Promise<readonly unknown[]> {
-  const settled = await Promise.allSettled(resources.map(resource => resource.close()))
-  return settled.filter((value): value is PromiseRejectedResult => value.status === 'rejected').map(value => value.reason)
+  const errors: unknown[] = []
+  for (const resource of resources) {
+    try {
+      await resource.close()
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+  return errors
 }
 
 export { createShellTool } from './shell-tool.js'
@@ -78,7 +91,9 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       dependencies.readFile ?? nodeReadFile,
       dependencies.cwd ?? process.cwd(),
     )
-    mcp = config.mcp === undefined ? undefined : createMcpAdapter(config, dependencies.env)
+    mcp = config.mcp === undefined
+      ? undefined
+      : createMcpAdapter(config, dependencies.env, dependencies.createMcpClient)
     await mcp?.start(processController.signal)
     const skills = config.skills === undefined
       ? undefined
@@ -86,7 +101,7 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
       model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
-      tools: mcp ?? new ToolRegistry(buildTools(config)),
+      tools: composeTools(config, mcp),
       maxSteps: config.maxSteps,
       settlementTimeoutMs: config.settlementTimeoutMs,
       runTimeoutMs: config.runTimeoutMs,
@@ -157,19 +172,34 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
 function createMcpAdapter(
   config: CliConfig,
   environment: Readonly<Record<string, string | undefined>>,
+  createClient: ((options: StdioMcpClientOptions) => McpClient) | undefined,
 ): McpToolAdapter {
   if (config.mcp === undefined) throw new Error('MCP 配置缺失')
-  if (config.shell.enabled) throw new CliUsageError('mcp 与 shell 不能同时启用')
   const childEnvironment: Record<string, string> = {}
   for (const [target, source] of Object.entries(config.mcp.environment)) {
     childEnvironment[target] = requiredEnvironment(environment, source)
   }
-  return new McpToolAdapter(new StdioMcpClient({
+  const options: StdioMcpClientOptions = {
     command: config.mcp.command,
     args: config.mcp.args,
     ...(config.mcp.cwd === undefined ? {} : { cwd: config.mcp.cwd }),
     env: childEnvironment,
-  }))
+  }
+  return new McpToolAdapter(createClient?.(options) ?? new StdioMcpClient(options))
+}
+
+function composeTools(config: CliConfig, mcp: McpToolAdapter | undefined): CompositeToolCapability {
+  try {
+    return new CompositeToolCapability([
+      new ToolRegistry(buildTools(config)),
+      ...(mcp === undefined ? [] : [mcp]),
+    ])
+  } catch (error) {
+    if (error instanceof DuplicateToolNameError) {
+      throw new CliUsageError(`工具名在多个来源中重复：${error.toolName}`)
+    }
+    throw error
+  }
 }
 
 /** Host 只根据已校验配置选择一个 provider，不在 Runtime 内保留模型目录或路由。 */

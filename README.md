@@ -160,7 +160,7 @@ MCP stdio 配置示例：
 }
 ```
 
-当前 CLI 将 `mcp` 与 `shell.enabled: true` 设为互斥，避免两个独立来源出现重复工具名；MCP server 的 stdout 必须只输出 MCP 协议数据。
+CLI 可以同时启用 `mcp` 与 `shell`；启动时会合并工具目录并拒绝重复工具名。MCP server 的 stdout 必须只输出 MCP 协议数据。
 
 当前 CLI 与 JSONL 会话存储只支持单实例运行。同一 `sessionRoot` 不得被多个 Node.js 进程、容器或服务实例同时使用。
 

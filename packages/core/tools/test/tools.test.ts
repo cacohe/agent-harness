@@ -1,6 +1,12 @@
 import { brandId, type ExecutionId, type ToolCallId } from '@agent-harness/domain'
 import { describe, expect, it } from 'vitest'
-import { PolicyControlledTools, SandboxToolRegistry, ToolRegistry } from '../src/index.ts'
+import {
+  CompositeToolCapability,
+  PolicyControlledTools,
+  SandboxToolRegistry,
+  ToolRegistry,
+  type ExecutionAwareToolCapability,
+} from '../src/index.ts'
 
 function call(name: string, input: unknown = {}) {
   return {
@@ -514,5 +520,77 @@ describe('ToolRegistry', () => {
       },
     })).resolves.toMatchObject({ status: 'failure', error: { name: 'TypeError' } })
     expect(dispatched).toBe(false)
+  })
+})
+
+describe('CompositeToolCapability', () => {
+  const registry = (name: string) => new ToolRegistry([{
+    name,
+    description: name,
+    inputSchema: { type: 'object' },
+    parseInput: input => input,
+    execute: async input => ({ source: name, input }),
+  }])
+
+  it('合并目录并按名称路由执行', async () => {
+    const tools = new CompositeToolCapability([registry('local'), registry('remote')])
+    expect(tools.list().map(tool => tool.name)).toEqual(['local', 'remote'])
+    await expect(tools.execute(
+      call('remote', { q: 'x' }),
+      new AbortController().signal,
+    )).resolves.toMatchObject({ status: 'success', output: { source: 'remote', input: { q: 'x' } } })
+  })
+
+  it('在组合时拒绝跨来源重复工具名', () => {
+    expect(() => new CompositeToolCapability([registry('same'), registry('same')]))
+      .toThrow('duplicate tool registration: same')
+  })
+
+  it('固定模型可见目录，避免来源事后修改 schema', () => {
+    const inputSchema = { type: 'object' }
+    const source = registry('stable')
+    const mutableSource = {
+      list: () => [{ name: 'stable', description: 'stable', inputSchema }],
+      execute: source.execute.bind(source),
+    }
+    const tools = new CompositeToolCapability([mutableSource])
+    inputSchema.type = 'array'
+    expect(tools.list()).toEqual([{
+      name: 'stable', description: 'stable', inputSchema: { type: 'object' },
+    }])
+  })
+
+  it('把冻结执行上下文传给支持它的来源', async () => {
+    let subject: string | undefined
+    const aware: ExecutionAwareToolCapability = {
+      list: () => [{ name: 'write', description: 'write', inputSchema: { type: 'object' } }],
+      execute: async toolCall => ({ status: 'failure', callId: toolCall.id, error: { name: 'Unexpected', message: '未传上下文' } }),
+      async executeWithContext(toolCall, context) {
+        subject = context.execution?.subject
+        return { status: 'success', callId: toolCall.id, output: { ok: true } }
+      },
+    }
+    const tools = new CompositeToolCapability([aware])
+    await expect(tools.executeWithContext(call('write'), {
+      signal: new AbortController().signal,
+      execution: {
+        id: brandId<'ExecutionId'>('execution-composite') as ExecutionId,
+        subject: 'user-composite',
+        authorizationVersion: 'v1',
+      },
+    })).resolves.toMatchObject({ status: 'success' })
+    expect(subject).toBe('user-composite')
+  })
+
+  it('对未知工具和已取消调用返回稳定结果', async () => {
+    const tools = new CompositeToolCapability([])
+    await expect(tools.execute(call('missing'), new AbortController().signal)).resolves.toMatchObject({
+      status: 'failure', error: { name: 'UnknownToolError' },
+    })
+    const controller = new AbortController()
+    controller.abort(new Error('stop'))
+    await expect(tools.execute(call('missing'), controller.signal)).resolves.toEqual({
+      status: 'cancelled', callId: 'call-1', reason: 'stop',
+    })
   })
 })
