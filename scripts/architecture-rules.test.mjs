@@ -33,6 +33,13 @@ describe('架构依赖规则', () => {
           '@agent-harness/model': 'workspace:*',
         }),
       ],
+      [
+        'llm/gateway',
+        manifest('gateway', {
+          '@agent-harness/domain': 'workspace:*',
+          '@agent-harness/model': 'workspace:*',
+        }),
+      ],
     ])
     expect(failures).toEqual([])
   })

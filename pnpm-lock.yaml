@@ -62,6 +62,15 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/llm/gateway:
+    dependencies:
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/model':
+        specifier: workspace:*
+        version: link:../model
+
   packages/llm/model:
     dependencies:
       '@agent-harness/domain':
