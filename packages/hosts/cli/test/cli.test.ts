@@ -184,10 +184,12 @@ describe('CLI Host', () => {
     expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('not-for-output')
   })
 
-  it('拒绝同时启用 MCP 与本机 shell，且不输出 MCP 环境变量值', async () => {
+  it('同时组合 MCP 与本机 shell，且不输出 MCP 环境变量值', async () => {
     const output: string[] = []
     const errors: string[] = []
     const sessionRoot = await root()
+    let request: Record<string, unknown> | undefined
+    let closed = false
     const code = await runCli({
       argv: ['run', '--config', '/config.json', '--session', 'mcp-shell', '--message', 'x'],
       env: { TEST_KEY: 'secret', MCP_TOKEN: 'mcp-secret' },
@@ -196,12 +198,92 @@ describe('CLI Host', () => {
       signals: new Signals(),
       readFile: async () => JSON.stringify({
         ...JSON.parse(config(sessionRoot, { enabled: true })),
-        mcp: { command: 'unused', environment: { TOKEN: 'MCP_TOKEN' } },
+        mcp: { command: 'fake', environment: { TOKEN: 'MCP_TOKEN' } },
       }),
+      createMcpClient: options => ({
+        async listTools() {
+          expect(options.env).toEqual({ TOKEN: 'mcp-secret' })
+          return [{ name: 'mcp_lookup', description: '远程查询', inputSchema: { type: 'object' } }]
+        },
+        async callTool() { return { ok: true } },
+        async close() { closed = true },
+      }),
+      fetch: async (_input, init) => {
+        request = JSON.parse(String(init?.body))
+        return sse('done')
+      },
+    })
+    expect(code).toBe(0)
+    expect(JSON.stringify(request)).toContain('run_shell')
+    expect(JSON.stringify(request)).toContain('mcp_lookup')
+    expect(closed).toBe(true)
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('mcp-secret')
+  })
+
+  it('在模型调用前拒绝跨来源重复工具名并关闭 MCP', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    let fetched = false
+    let closed = false
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'mcp-duplicate', '--message', 'x'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot, { enabled: true })),
+        mcp: { command: 'fake' },
+      }),
+      createMcpClient: () => ({
+        async listTools() {
+          return [{ name: 'run_shell', description: '冲突工具', inputSchema: { type: 'object' } }]
+        },
+        async callTool() { return { ok: true } },
+        async close() { closed = true },
+      }),
+      fetch: async () => {
+        fetched = true
+        return sse('unexpected')
+      },
     })
     expect(code).toBe(1)
-    expect(errors.join('')).toContain('mcp 与 shell 不能同时启用')
-    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('mcp-secret')
+    expect(fetched).toBe(false)
+    expect(closed).toBe(true)
+    expect(errors.join('')).toContain('工具名在多个来源中重复：run_shell')
+    expect(output.map(line => JSON.parse(line))).toEqual([{ type: 'error', code: 'failed' }])
+  })
+
+  it('MCP 工具发现失败时关闭 client 且不调用模型', async () => {
+    const output: string[] = []
+    const sessionRoot = await root()
+    let fetched = false
+    let closed = false
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'mcp-start-failure', '--message', 'x'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write() {} },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        mcp: { command: 'fake' },
+      }),
+      createMcpClient: () => ({
+        async listTools() { throw new Error('discover failure') },
+        async callTool() { return { ok: true } },
+        async close() { closed = true },
+      }),
+      fetch: async () => {
+        fetched = true
+        return sse('unexpected')
+      },
+    })
+    expect(code).toBe(1)
+    expect(fetched).toBe(false)
+    expect(closed).toBe(true)
+    expect(output.map(line => JSON.parse(line))).toEqual([{ type: 'error', code: 'failed' }])
   })
 
   it('SIGINT 取消运行，并在 finally 释放 reader 与信号监听器', async () => {
@@ -229,6 +311,22 @@ describe('CLI Host', () => {
     ])
     expect(calls).toEqual(['handle', 'runtime'])
     expect(errors).toHaveLength(2)
+  })
+
+  it('按所有权顺序关闭资源，不让后一个资源提前关闭', async () => {
+    const calls: string[] = []
+    let releaseFirst: (() => void) | undefined
+    const firstClosed = new Promise<void>(resolve => { releaseFirst = resolve })
+    const closing = closeCliResources([
+      { async close() { calls.push('handle:start'); await firstClosed; calls.push('handle:end') } },
+      { async close() { calls.push('runtime') } },
+      { async close() { calls.push('mcp') } },
+    ])
+    await Promise.resolve()
+    expect(calls).toEqual(['handle:start'])
+    releaseFirst?.()
+    await expect(closing).resolves.toEqual([])
+    expect(calls).toEqual(['handle:start', 'handle:end', 'runtime', 'mcp'])
   })
 
   it('对已存在会话的 run 提示改用 resume', async () => {
