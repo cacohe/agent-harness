@@ -10,6 +10,7 @@ import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
 import { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem'
+import { createSkillLoaderTool } from '@agent-harness/skill-tool'
 import {
   CompositeToolCapability,
   DuplicateToolNameError,
@@ -101,7 +102,7 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
       model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
-      tools: composeTools(config, mcp),
+      tools: composeTools(config, mcp, skills),
       maxSteps: config.maxSteps,
       settlementTimeoutMs: config.settlementTimeoutMs,
       runTimeoutMs: config.runTimeoutMs,
@@ -188,10 +189,19 @@ function createMcpAdapter(
   return new McpToolAdapter(createClient?.(options) ?? new StdioMcpClient(options))
 }
 
-function composeTools(config: CliConfig, mcp: McpToolAdapter | undefined): CompositeToolCapability {
+function composeTools(
+  config: CliConfig,
+  mcp: McpToolAdapter | undefined,
+  skills: FilesystemSkillCatalog | undefined,
+): CompositeToolCapability {
   try {
     return new CompositeToolCapability([
-      new ToolRegistry(buildTools(config)),
+      new ToolRegistry([
+        ...buildTools(config),
+        ...(skills === undefined || config.skills === undefined
+          ? []
+          : [createSkillLoaderTool(skills, { maxContentBytes: config.skills.maxSkillBytes })]),
+      ]),
       ...(mcp === undefined ? [] : [mcp]),
     ])
   } catch (error) {

@@ -19,6 +19,7 @@
     "@agent-harness/runtime": "workspace:*",
     "@agent-harness/session-jsonl": "workspace:*",
     "@agent-harness/skill-filesystem": "workspace:*",
+    "@agent-harness/skill-tool": "workspace:*",
     "@agent-harness/tools": "workspace:*",
     "@modelcontextprotocol/client": "^2.3.1"
   }

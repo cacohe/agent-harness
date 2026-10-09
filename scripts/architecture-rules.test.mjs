@@ -96,4 +96,24 @@ describe('架构依赖规则', () => {
     ])
     expect(forbidden).toContain('skills/skill-filesystem: adapter has forbidden dependency on runtime')
   })
+
+  it('限制 Skill 工具只依赖 Skill 与工具 capability', () => {
+    const allowed = verifyArchitecture([
+      ['domain', manifest('domain')],
+      ['core/agent', manifest('agent')],
+      ['core/tools', manifest('tools')],
+      ['skills/skill-tool', manifest('skill-tool', {
+        '@agent-harness/agent': 'workspace:*',
+        '@agent-harness/domain': 'workspace:*',
+        '@agent-harness/tools': 'workspace:*',
+      })],
+    ])
+    expect(allowed).toEqual([])
+
+    const forbidden = verifyArchitecture([
+      ['runtime', manifest('runtime')],
+      ['skills/skill-tool', manifest('skill-tool', { '@agent-harness/runtime': 'workspace:*' })],
+    ])
+    expect(forbidden).toContain('skills/skill-tool: adapter has forbidden dependency on runtime')
+  })
 })

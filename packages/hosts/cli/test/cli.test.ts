@@ -49,16 +49,20 @@ function ndjson(text: string): Response {
     headers: { 'content-type': 'application/x-ndjson; charset=utf-8' },
   })
 }
-function toolCallSse(): Response {
+function toolCallSse(
+  name = 'run_shell',
+  args = '{"command":"echo hi"}',
+  id = 'call-shell',
+): Response {
   const payload = JSON.stringify({
     choices: [{
       index: 0,
       delta: {
         tool_calls: [{
           index: 0,
-          id: 'call-shell',
+          id,
           type: 'function',
-          function: { name: 'run_shell', arguments: '{"command":"echo hi"}' },
+          function: { name, arguments: args },
         }],
       },
     }],
@@ -98,8 +102,37 @@ describe('CLI Host', () => {
     expect(code).toBe(0)
     const serialized = JSON.stringify(request)
     expect(serialized).toContain('当前启用 Skills')
+    expect(serialized).toContain('id: review')
     expect(serialized).toContain('审查代码')
+    expect(serialized).toContain('load_skill')
     expect(serialized).not.toContain('不得自动注入的正文')
+  })
+
+  it('通过 load_skill 工具按需读取正文并写入下一步模型请求', async () => {
+    const sessionRoot = await root()
+    const skillsRoot = await root()
+    const skillRoot = join(skillsRoot, 'review')
+    await mkdir(skillRoot)
+    await writeFile(join(skillRoot, 'SKILL.md'), '---\nname: 代码审查\ndescription: 审查代码\n---\n按需加载的审查步骤')
+    const requests: Record<string, unknown>[] = []
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'skills-load', '--message', 'review'],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write() {} }, stderr: { write() {} }, signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        skills: { root: skillsRoot, enabled: ['review'] },
+      }),
+      fetch: async (_input, init) => {
+        requests.push(JSON.parse(String(init?.body)))
+        return requests.length === 1
+          ? toolCallSse('load_skill', '{"id":"review"}', 'call-skill')
+          : sse('reviewed')
+      },
+    })
+    expect(code).toBe(0)
+    expect(requests).toHaveLength(2)
+    expect(JSON.stringify(requests[1])).toContain('按需加载的审查步骤')
   })
 
   it('组合 Platform Gateway 的已选模型，并且不泄露认证头', async () => {

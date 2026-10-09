@@ -12,6 +12,7 @@
     { "path": "packages/tools/mcp" },
     { "path": "packages/tools/sandbox-docker" },
     { "path": "packages/skills/skill-filesystem" },
+    { "path": "packages/skills/skill-tool" },
     { "path": "packages/tools/platform-policy" },
     { "path": "packages/core/agent" },
     { "path": "packages/runtime" },

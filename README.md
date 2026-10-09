@@ -69,6 +69,7 @@ packages/
     session-jsonl/        JSONL 会话存储 adapter
   skills/
     skill-filesystem/     受限文件系统 Skill catalog
+    skill-tool/           Skill 正文加载工具 adapter
   runtime/                显式组合与 handle 生命周期
   hosts/
     cli/                  单进程 JSON 配置 CLI
@@ -133,7 +134,7 @@ pnpm run build
 - Platform Gateway 模型使用 `model.platformBaseUrl`、`model.modelId` 和 `model.authorizationEnv`：HTTPS Platform API 根、Platform 已解析的模型 ID 与存放完整认证头值的环境变量名。该模式由 Host 注入单个 provider，不允许运行中切换模型。
 - `shell`（可选）：`enabled`、`cwd`（绝对路径）、`timeoutMs`、`maxOutputBytes`；控制本机 `run_shell` 工具
 - `mcp`（可选）：`command`、`args`、可选绝对 `cwd` 与 `environment` 映射；启动一个 MCP stdio server。`environment` 的键是子进程变量名，值是 Host 中保存实际值的环境变量名，避免将密钥写进配置。
-- `skills`（Linux，可选）：`root`、明确启用的 `enabled` ID 数组与可选 `maxSkillBytes`；只把 Skill 名称和描述加入 prompt，正文保持按需读取。
+- `skills`（Linux，可选）：`root`、明确启用的 `enabled` ID 数组与可选 `maxSkillBytes`；prompt 只包含 Skill 名称、ID 和描述，模型通过 `load_skill` 工具按需读取正文。
 
 密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 默认关闭；显式启用后仍以当前用户权限执行命令，无沙箱，仅适合本地实验。
 
