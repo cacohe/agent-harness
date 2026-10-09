@@ -17,6 +17,7 @@ export function verifyArchitecture(manifests) {
     ['session/session-jsonl', new Set(['domain', 'session/session'])],
     ['llm/openai-compatible', new Set(['domain', 'llm/model'])],
     ['llm/gateway', new Set(['domain', 'llm/model'])],
+    ['memory/memory-gateway', new Set(['core/agent'])],
     ['platform/platform-http', new Set(['llm/model'])],
     ['tools/platform-policy', new Set(['domain', 'core/tools'])],
     ['tools/sandbox-docker', new Set(['domain', 'core/tools'])],

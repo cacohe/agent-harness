@@ -116,4 +116,22 @@ describe('架构依赖规则', () => {
     ])
     expect(forbidden).toContain('skills/skill-tool: adapter has forbidden dependency on runtime')
   })
+
+  it('限制 Memory Gateway adapter 只依赖 Agent capability', () => {
+    const allowed = verifyArchitecture([
+      ['core/agent', manifest('agent')],
+      ['memory/memory-gateway', manifest('memory-gateway', {
+        '@agent-harness/agent': 'workspace:*',
+      })],
+    ])
+    expect(allowed).toEqual([])
+
+    const forbidden = verifyArchitecture([
+      ['runtime', manifest('runtime')],
+      ['memory/memory-gateway', manifest('memory-gateway', {
+        '@agent-harness/runtime': 'workspace:*',
+      })],
+    ])
+    expect(forbidden).toContain('memory/memory-gateway: adapter has forbidden dependency on runtime')
+  })
 })

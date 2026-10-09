@@ -58,6 +58,8 @@ packages/
     model/                模型 provider 接口与流事件
     openai-compatible/    OpenAI-compatible Chat Completions
     gateway/              Platform LLM Gateway adapter
+  memory/
+    memory-gateway/       Platform 长期记忆 Gateway adapter
   platform/
     platform-http/        Platform Gateway 与 Permit HTTP adapter
   tools/

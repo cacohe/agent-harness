@@ -109,6 +109,14 @@ export interface MemoryMatch {
   readonly content: string
 }
 
+/** MemoryRetriever 与上下文投影共享的硬边界，供外部 adapter 在 I/O 边界提前校验。 */
+export const MEMORY_CONTEXT_LIMITS = Object.freeze({
+  maxQueryBytes: 4_096,
+  maxMatches: 8,
+  maxFieldBytes: 2_048,
+  maxSummaryBytes: 8_192,
+})
+
 /** 以最新用户输入检索长期记忆，并将有限结果作为 system context 加入请求。 */
 export class RetrievedMemoryContext implements ContextContributor {
   readonly #retriever: MemoryRetriever
@@ -121,25 +129,27 @@ export class RetrievedMemoryContext implements ContextContributor {
     const userEvent = [...input.events].reverse().find(event => event.event.type === 'user.message')
     if (userEvent?.event.type !== 'user.message') return []
     const query = userEvent.event.message.content
-    assertMemoryFieldBytes(query, MAX_MEMORY_QUERY_BYTES, '查询')
+    assertMemoryFieldBytes(query, MEMORY_CONTEXT_LIMITS.maxQueryBytes, '查询')
     const matches = await this.#retriever.search(query, signal)
     signal.throwIfAborted()
     if (!Array.isArray(matches)) throw new TypeError('MemoryRetriever.search 必须返回数组')
-    if (matches.length > MAX_MEMORY_MATCHES) throw new RangeError(`长期记忆结果不能超过 ${MAX_MEMORY_MATCHES} 条`)
+    if (matches.length > MEMORY_CONTEXT_LIMITS.maxMatches) {
+      throw new RangeError(`长期记忆结果不能超过 ${MEMORY_CONTEXT_LIMITS.maxMatches} 条`)
+    }
     const entries: MemoryMatch[] = []
     const ids = new Set<string>()
     for (const match of matches) {
       assertMemoryMatch(match)
-      assertMemoryFieldBytes(match.id, MAX_MEMORY_FIELD_BYTES, '标识符')
-      assertMemoryFieldBytes(match.content, MAX_MEMORY_FIELD_BYTES, '内容')
+      assertMemoryFieldBytes(match.id, MEMORY_CONTEXT_LIMITS.maxFieldBytes, '标识符')
+      assertMemoryFieldBytes(match.content, MEMORY_CONTEXT_LIMITS.maxFieldBytes, '内容')
       if (ids.has(match.id)) throw new TypeError(`长期记忆标识符重复：${match.id}`)
       ids.add(match.id)
       entries.push({ id: match.id, content: match.content })
     }
     if (entries.length === 0) return []
     const data = JSON.stringify(entries).replaceAll('<', '\\u003c')
-    if (utf8ByteLength(data) > MAX_MEMORY_SUMMARY_BYTES) {
-      throw new RangeError(`长期记忆摘要不能超过 ${MAX_MEMORY_SUMMARY_BYTES} UTF-8 字节`)
+    if (utf8ByteLength(data) > MEMORY_CONTEXT_LIMITS.maxSummaryBytes) {
+      throw new RangeError(`长期记忆摘要不能超过 ${MEMORY_CONTEXT_LIMITS.maxSummaryBytes} UTF-8 字节`)
     }
     return [{
       role: 'system',
@@ -147,11 +157,6 @@ export class RetrievedMemoryContext implements ContextContributor {
     }]
   }
 }
-
-const MAX_MEMORY_QUERY_BYTES = 4_096
-const MAX_MEMORY_MATCHES = 8
-const MAX_MEMORY_FIELD_BYTES = 2_048
-const MAX_MEMORY_SUMMARY_BYTES = 8_192
 
 const MAX_ENABLED_SKILLS = 128
 const MAX_SKILL_FIELD_BYTES = 2_048
