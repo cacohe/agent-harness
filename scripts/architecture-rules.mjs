@@ -20,18 +20,21 @@ export function verifyArchitecture(manifests) {
     ['platform/platform-http', new Set(['llm/model'])],
     ['tools/platform-policy', new Set(['domain', 'core/tools'])],
     ['tools/sandbox-docker', new Set(['domain', 'core/tools'])],
+    ['skills/skill-filesystem', new Set(['core/agent'])],
   ])
   const hostDependencies = new Map([
     [
       'hosts/cli',
       new Set([
         'domain',
+        'core/agent',
         'llm/gateway',
         'llm/openai-compatible',
         'platform/platform-http',
         'tools/mcp',
         'runtime',
         'session/session-jsonl',
+        'skills/skill-filesystem',
         'core/tools',
       ]),
     ],

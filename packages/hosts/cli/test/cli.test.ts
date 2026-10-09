@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -77,6 +77,29 @@ describe('CLI Host', () => {
     const code = await runCli({ argv: ['run', '--config', '/config.json', '--session', 's1', '--message', 'hello'], env: { TEST_KEY: 'secret' }, stdout: { write: value => output.push(value) }, stderr: { write: value => errors.push(value) }, signals: new Signals(), readFile: async () => config(sessionRoot), fetch: async () => sse('done') })
     expect(code).toBe(0); expect(errors).toEqual([])
     expect(output.map(line => JSON.parse(line))).toMatchObject([{ type: 'stream', event: { type: 'text.delta', text: 'done' } }, { type: 'result', sessionId: 's1', message: { content: 'done' } }])
+  })
+
+  it('从文件系统 Skill catalog 只注入启用摘要', async () => {
+    const sessionRoot = await root()
+    const skillsRoot = await root()
+    const skillRoot = join(skillsRoot, 'review')
+    await mkdir(skillRoot)
+    await writeFile(join(skillRoot, 'SKILL.md'), '---\nname: review\ndescription: 审查代码\n---\n不得自动注入的正文')
+    let request: Record<string, unknown> | undefined
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'skills-1', '--message', 'hello'], env: { TEST_KEY: 'secret' },
+      stdout: { write() {} }, stderr: { write() {} }, signals: new Signals(),
+      readFile: async () => JSON.stringify({ ...JSON.parse(config(sessionRoot)), skills: { root: skillsRoot, enabled: ['review'] } }),
+      fetch: async (_input, init) => {
+        request = JSON.parse(String(init?.body))
+        return sse('done')
+      },
+    })
+    expect(code).toBe(0)
+    const serialized = JSON.stringify(request)
+    expect(serialized).toContain('当前启用 Skills')
+    expect(serialized).toContain('审查代码')
+    expect(serialized).not.toContain('不得自动注入的正文')
   })
 
   it('组合 Platform Gateway 的已选模型，并且不泄露认证头', async () => {

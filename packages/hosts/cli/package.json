@@ -10,6 +10,7 @@
     ".": "./lib/index.js"
   },
   "dependencies": {
+    "@agent-harness/agent": "workspace:*",
     "@agent-harness/domain": "workspace:*",
     "@agent-harness/gateway": "workspace:*",
     "@agent-harness/mcp": "workspace:*",
@@ -17,6 +18,7 @@
     "@agent-harness/platform-http": "workspace:*",
     "@agent-harness/runtime": "workspace:*",
     "@agent-harness/session-jsonl": "workspace:*",
+    "@agent-harness/skill-filesystem": "workspace:*",
     "@agent-harness/tools": "workspace:*",
     "@modelcontextprotocol/client": "^2.3.1"
   }

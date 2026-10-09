@@ -19,6 +19,11 @@ interface McpConfig {
   /** 子进程变量名映射到 Host 环境变量名；配置文件不保存密钥值。 */
   readonly environment: Readonly<Record<string, string>>
 }
+interface SkillsConfig {
+  readonly root: string
+  readonly enabled: readonly string[]
+  readonly maxSkillBytes: number
+}
 
 interface OpenAiCompatibleCliModelConfig {
   readonly id: string
@@ -47,6 +52,7 @@ export interface CliConfig {
   readonly model: CliModelConfig
   readonly shell: ShellConfig
   readonly mcp?: McpConfig
+  readonly skills?: SkillsConfig
 }
 
 /** 读取并严格校验 CLI 配置文件。 */
@@ -63,7 +69,7 @@ export async function readConfig(
   }
   const root = object(value, '配置')
   exact(root, ['sessionRoot', 'maxSteps', 'settlementTimeoutMs', 'model'], '配置', [
-    'shell', 'mcp', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
+    'shell', 'mcp', 'skills', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
   ])
   const model = object(root.model, 'model 配置')
   const sessionRoot = text(root.sessionRoot, 'sessionRoot')
@@ -81,6 +87,21 @@ export async function readConfig(
     model: modelConfig(model),
     shell: readShellConfig(root.shell, defaultCwd),
     ...(root.mcp === undefined ? {} : { mcp: readMcpConfig(root.mcp) }),
+    ...(root.skills === undefined ? {} : { skills: readSkillsConfig(root.skills) }),
+  }
+}
+
+function readSkillsConfig(value: unknown): SkillsConfig {
+  const skills = object(value, 'skills 配置')
+  exact(skills, ['root', 'enabled'], 'skills 配置', ['maxSkillBytes'])
+  const root = text(skills.root, 'skills.root')
+  if (!isAbsolute(root)) throw new CliUsageError('skills.root 必须是绝对路径')
+  return {
+    root,
+    enabled: textArray(skills.enabled, 'skills.enabled'),
+    maxSkillBytes: skills.maxSkillBytes === undefined
+      ? 256 * 1024
+      : positive(skills.maxSkillBytes, 'skills.maxSkillBytes'),
   }
 }
 

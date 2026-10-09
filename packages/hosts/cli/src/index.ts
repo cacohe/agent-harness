@@ -3,11 +3,13 @@ import { readFile as nodeReadFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { brandId, isAbortError, type MessageId, type SessionId } from '@agent-harness/domain'
+import { BoundedPromptAssembler, EnabledSkillsContext } from '@agent-harness/agent'
 import { LlmGatewayModelProvider } from '@agent-harness/gateway'
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
 import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
+import { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem'
 import { ToolRegistry, type ToolDefinition } from '@agent-harness/tools'
 import { McpToolAdapter } from '@agent-harness/mcp'
 import { StdioMcpClient } from './mcp-stdio.js'
@@ -78,6 +80,9 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     )
     mcp = config.mcp === undefined ? undefined : createMcpAdapter(config, dependencies.env)
     await mcp?.start(processController.signal)
+    const skills = config.skills === undefined
+      ? undefined
+      : await FilesystemSkillCatalog.create(config.skills, processController.signal)
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
       model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
@@ -87,7 +92,11 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       runTimeoutMs: config.runTimeoutMs,
       maxModelOutputBytes: config.maxModelOutputBytes,
       maxInputBytes: config.maxInputBytes,
-      ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
+      prompts: new BoundedPromptAssembler({
+        maxInputBytes: config.maxInputBytes,
+        ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
+        ...(skills === undefined ? {} : { contributors: [new EnabledSkillsContext(skills)] }),
+      }),
       // chat 仅展示最终回复；run/resume 保持 JSONL stream。
       observers: command.mode === 'chat'
         ? []

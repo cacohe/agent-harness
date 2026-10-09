@@ -3,10 +3,12 @@
   "compilerOptions": { "outDir": "lib", "rootDir": "src" },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../../core/agent" },
     { "path": "../../domain" },
     { "path": "../../llm/openai-compatible" },
     { "path": "../../runtime" },
     { "path": "../../session/session-jsonl" },
+    { "path": "../../skills/skill-filesystem" },
     { "path": "../../core/tools" }
   ]
 }
