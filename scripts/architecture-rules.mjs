@@ -21,6 +21,7 @@ export function verifyArchitecture(manifests) {
     ['tools/platform-policy', new Set(['domain', 'core/tools'])],
     ['tools/sandbox-docker', new Set(['domain', 'core/tools'])],
     ['skills/skill-filesystem', new Set(['core/agent'])],
+    ['skills/skill-tool', new Set(['domain', 'core/agent', 'core/tools'])],
   ])
   const hostDependencies = new Map([
     [
@@ -35,6 +36,7 @@ export function verifyArchitecture(manifests) {
         'runtime',
         'session/session-jsonl',
         'skills/skill-filesystem',
+        'skills/skill-tool',
         'core/tools',
       ]),
     ],

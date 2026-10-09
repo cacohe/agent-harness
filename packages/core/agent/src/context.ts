@@ -75,6 +75,7 @@ export class EnabledSkillsContext implements ContextContributor {
       throw new RangeError(`已启用 Skills 数量不能超过 ${MAX_ENABLED_SKILLS}`)
     }
     const names = new Set<string>()
+    const ids = new Set<string>()
     const lines: string[] = []
     let summaryBytes = 0
     for (const skill of descriptors) {
@@ -82,9 +83,11 @@ export class EnabledSkillsContext implements ContextContributor {
       assertSkillFieldBytes(skill.id)
       assertSkillFieldBytes(skill.name)
       assertSkillFieldBytes(skill.description)
+      if (ids.has(skill.id)) throw new TypeError(`已启用 Skill ID 重复：${skill.id}`)
       if (names.has(skill.name)) throw new TypeError(`已启用 Skill 名称重复：${skill.name}`)
+      ids.add(skill.id)
       names.add(skill.name)
-      const line = `- ${skill.name}：${skill.description}`
+      const line = `- ${skill.name}（id: ${skill.id}）：${skill.description}`
       summaryBytes += utf8ByteLength(line) + (lines.length === 0 ? 0 : 1)
       if (summaryBytes > MAX_SKILLS_SUMMARY_BYTES) {
         throw new RangeError(`Skill 摘要不能超过 ${MAX_SKILLS_SUMMARY_BYTES} UTF-8 字节`)

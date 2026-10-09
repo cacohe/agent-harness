@@ -6,7 +6,7 @@
 
 ## 决策
 
-`core/agent` 定义 `SkillCatalog`：同步列出已启用的 `SkillDescriptor`，并通过带取消信号的 `read` 按 ID 读取正文。`EnabledSkillsContext` 只使用 `listEnabled`，把经严格校验的名称和描述转换为一条 system 消息；不调用 `read`，不把正文或元数据写入会话事件。
+`core/agent` 定义 `SkillCatalog`：同步列出已启用的 `SkillDescriptor`，并通过带取消信号的 `read` 按 ID 读取正文。`EnabledSkillsContext` 只使用 `listEnabled`，把经严格校验的名称、ID 和描述转换为一条 system 消息；不调用 `read`，不把正文或元数据写入会话事件。正文显式加载由 ADR 0029 补充。
 
 ## 后果
 

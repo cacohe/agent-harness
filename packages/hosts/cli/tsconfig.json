@@ -9,6 +9,7 @@
     { "path": "../../runtime" },
     { "path": "../../session/session-jsonl" },
     { "path": "../../skills/skill-filesystem" },
+    { "path": "../../skills/skill-tool" },
     { "path": "../../core/tools" }
   ]
 }

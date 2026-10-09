@@ -180,7 +180,7 @@ describe('Agent', () => {
     await agent.run(user())
 
     expect(model.requests[0]?.messages).toContainEqual({
-      role: 'system', content: '当前启用 Skills：\n- 研究助手：整理研究资料',
+      role: 'system', content: '当前启用 Skills：\n- 研究助手（id: research）：整理研究资料',
     })
     expect(model.requests[0]?.messages).not.toContainEqual(expect.objectContaining({
       content: expect.stringContaining('Skill 正文'),
@@ -204,6 +204,18 @@ describe('Agent', () => {
 
     expect(() => oversized.contribute(input)).toThrow('Skill 字段不能超过')
     expect(() => tooMany.contribute(input)).toThrow('已启用 Skills 数量不能超过')
+  })
+
+  it('拒绝重复 Skill ID，避免摘要与按需读取产生歧义', () => {
+    const duplicateIds = new EnabledSkillsContext({
+      listEnabled: () => [
+        { id: 'same', name: '第一个', description: '一' },
+        { id: 'same', name: '第二个', description: '二' },
+      ],
+      read: async () => '',
+    })
+    expect(() => duplicateIds.contribute({ events: [], tools: [] }))
+      .toThrow('已启用 Skill ID 重复：same')
   })
 
   it('在每次模型请求中加入可替换的上下文贡献', async () => {
