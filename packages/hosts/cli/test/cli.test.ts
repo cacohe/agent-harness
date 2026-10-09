@@ -161,6 +161,26 @@ describe('CLI Host', () => {
     expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('not-for-output')
   })
 
+  it('拒绝同时启用 MCP 与本机 shell，且不输出 MCP 环境变量值', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'mcp-shell', '--message', 'x'],
+      env: { TEST_KEY: 'secret', MCP_TOKEN: 'mcp-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot, { enabled: true })),
+        mcp: { command: 'unused', environment: { TOKEN: 'MCP_TOKEN' } },
+      }),
+    })
+    expect(code).toBe(1)
+    expect(errors.join('')).toContain('mcp 与 shell 不能同时启用')
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('mcp-secret')
+  })
+
   it('SIGINT 取消运行，并在 finally 释放 reader 与信号监听器', async () => {
     const sessionRoot = await root(); const signals = new Signals(); let cancelled = false
     let startFetch: (() => void) | undefined; let startRead: (() => void) | undefined

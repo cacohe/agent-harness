@@ -28,6 +28,7 @@ export function verifyArchitecture(manifests) {
         'llm/gateway',
         'llm/openai-compatible',
         'platform/platform-http',
+        'tools/mcp',
         'runtime',
         'session/session-jsonl',
         'core/tools',

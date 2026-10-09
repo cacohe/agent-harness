@@ -12,6 +12,14 @@ interface ShellConfig {
   readonly maxOutputBytes: number
 }
 
+interface McpConfig {
+  readonly command: string
+  readonly args: readonly string[]
+  readonly cwd?: string
+  /** 子进程变量名映射到 Host 环境变量名；配置文件不保存密钥值。 */
+  readonly environment: Readonly<Record<string, string>>
+}
+
 interface OpenAiCompatibleCliModelConfig {
   readonly id: string
   readonly baseUrl: string
@@ -38,6 +46,7 @@ export interface CliConfig {
   readonly systemPrompt?: string
   readonly model: CliModelConfig
   readonly shell: ShellConfig
+  readonly mcp?: McpConfig
 }
 
 /** 读取并严格校验 CLI 配置文件。 */
@@ -54,7 +63,7 @@ export async function readConfig(
   }
   const root = object(value, '配置')
   exact(root, ['sessionRoot', 'maxSteps', 'settlementTimeoutMs', 'model'], '配置', [
-    'shell', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
+    'shell', 'mcp', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
   ])
   const model = object(root.model, 'model 配置')
   const sessionRoot = text(root.sessionRoot, 'sessionRoot')
@@ -71,6 +80,23 @@ export async function readConfig(
     ...(root.systemPrompt === undefined ? {} : { systemPrompt: text(root.systemPrompt, 'systemPrompt') }),
     model: modelConfig(model),
     shell: readShellConfig(root.shell, defaultCwd),
+    ...(root.mcp === undefined ? {} : { mcp: readMcpConfig(root.mcp) }),
+  }
+}
+
+function readMcpConfig(value: unknown): McpConfig {
+  const mcp = object(value, 'mcp 配置')
+  exact(mcp, ['command'], 'mcp 配置', ['args', 'cwd', 'environment'])
+  const command = text(mcp.command, 'mcp.command')
+  const args = mcp.args === undefined ? [] : textArray(mcp.args, 'mcp.args')
+  const cwd = mcp.cwd === undefined ? undefined : text(mcp.cwd, 'mcp.cwd')
+  if (cwd !== undefined && !isAbsolute(cwd)) throw new CliUsageError('mcp.cwd 必须是绝对路径')
+  const environment = mcp.environment === undefined ? {} : environmentMap(mcp.environment)
+  return {
+    command,
+    args,
+    ...(cwd === undefined ? {} : { cwd }),
+    environment,
   }
 }
 
@@ -136,4 +162,19 @@ function environmentName(value: unknown, name: string): string {
   const result = text(value, name)
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result)) throw new CliUsageError(`${name} 必须是环境变量名`)
   return result
+}
+function textArray(value: unknown, name: string): readonly string[] {
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) {
+    throw new CliUsageError(`${name} 必须是字符串数组`)
+  }
+  return Object.freeze([...value])
+}
+function environmentMap(value: unknown): Readonly<Record<string, string>> {
+  const map = object(value, 'mcp.environment')
+  const result: Record<string, string> = {}
+  for (const [target, source] of Object.entries(map)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) throw new CliUsageError('mcp.environment 键必须是环境变量名')
+    result[target] = environmentName(source, `mcp.environment.${target}`)
+  }
+  return Object.freeze(result)
 }
