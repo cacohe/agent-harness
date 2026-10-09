@@ -126,11 +126,24 @@ pnpm run build
 - `runTimeoutMs`：单个 turn 的协作式执行期限，默认 120 秒；provider 与工具必须响应 `AbortSignal`
 - `maxModelOutputBytes`、`maxInputBytes`：模型输出与输入上下文的字节预算，默认各 1 MiB
 - `systemPrompt`（可选）：不写入会话事件的静态 system 指令
-- `model.baseUrl`：OpenAI-compatible API 根（通常以 `/v1` 结尾）
-- `model.apiKeyEnv`：存放 API key 的环境变量名（默认 `DEEPSEEK_API_KEY`）
+- 本地直连模型使用 `model.baseUrl`、`model.model` 和 `model.apiKeyEnv`：OpenAI-compatible API 根、模型名与存放 API key 的环境变量名（默认 `DEEPSEEK_API_KEY`）
+- Platform Gateway 模型使用 `model.platformBaseUrl`、`model.modelId` 和 `model.authorizationEnv`：HTTPS Platform API 根、Platform 已解析的模型 ID 与存放完整认证头值的环境变量名。该模式由 Host 注入单个 provider，不允许运行中切换模型。
 - `shell`（可选）：`enabled`、`cwd`（绝对路径）、`timeoutMs`、`maxOutputBytes`；控制本机 `run_shell` 工具
 
 密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 默认关闭；显式启用后仍以当前用户权限执行命令，无沙箱，仅适合本地实验。
+
+Platform Gateway 配置示例：
+
+```json
+"model": {
+  "id": "platform-gateway",
+  "platformBaseUrl": "https://platform.example/v1",
+  "modelId": "approved-model-id",
+  "authorizationEnv": "PLATFORM_AUTHORIZATION"
+}
+```
+
+`PLATFORM_AUTHORIZATION` 的值是完整 HTTP Authorization header（例如 `Bearer <token>`）；CLI 不会把它输出到诊断。该配置只组合模型 Gateway。工具许可要求每个 turn 由 Platform/Host 冻结执行身份，因此仍由具备该身份上下文的 Host 组合。
 
 当前 CLI 与 JSONL 会话存储只支持单实例运行。同一 `sessionRoot` 不得被多个 Node.js 进程、容器或服务实例同时使用。
 

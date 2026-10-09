@@ -12,6 +12,22 @@ interface ShellConfig {
   readonly maxOutputBytes: number
 }
 
+interface OpenAiCompatibleCliModelConfig {
+  readonly id: string
+  readonly baseUrl: string
+  readonly model: string
+  readonly apiKeyEnv: string
+}
+
+interface PlatformGatewayCliModelConfig {
+  readonly id: string
+  readonly platformBaseUrl: string
+  readonly modelId: string
+  readonly authorizationEnv: string
+}
+
+export type CliModelConfig = OpenAiCompatibleCliModelConfig | PlatformGatewayCliModelConfig
+
 export interface CliConfig {
   readonly sessionRoot: string
   readonly maxSteps: number
@@ -20,12 +36,7 @@ export interface CliConfig {
   readonly maxModelOutputBytes: number
   readonly maxInputBytes: number
   readonly systemPrompt?: string
-  readonly model: {
-    readonly id: string
-    readonly baseUrl: string
-    readonly model: string
-    readonly apiKeyEnv: string
-  }
+  readonly model: CliModelConfig
   readonly shell: ShellConfig
 }
 
@@ -46,13 +57,8 @@ export async function readConfig(
     'shell', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
   ])
   const model = object(root.model, 'model 配置')
-  exact(model, ['id', 'baseUrl', 'model', 'apiKeyEnv'], 'model 配置')
   const sessionRoot = text(root.sessionRoot, 'sessionRoot')
   if (!isAbsolute(sessionRoot)) throw new CliUsageError('sessionRoot 必须是绝对路径')
-  const apiKeyEnv = text(model.apiKeyEnv, 'model.apiKeyEnv')
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv)) {
-    throw new CliUsageError('model.apiKeyEnv 必须是环境变量名')
-  }
   return {
     sessionRoot,
     maxSteps: positive(root.maxSteps, 'maxSteps'),
@@ -63,7 +69,7 @@ export async function readConfig(
       : positive(root.maxModelOutputBytes, 'maxModelOutputBytes'),
     maxInputBytes: root.maxInputBytes === undefined ? 1_048_576 : positive(root.maxInputBytes, 'maxInputBytes'),
     ...(root.systemPrompt === undefined ? {} : { systemPrompt: text(root.systemPrompt, 'systemPrompt') }),
-    model: modelConfig(model, apiKeyEnv),
+    model: modelConfig(model),
     shell: readShellConfig(root.shell, defaultCwd),
   }
 }
@@ -107,4 +113,27 @@ function boolean(value: unknown, name: string): boolean {
   if (typeof value !== 'boolean') throw new CliUsageError(`${name} 必须是布尔值`)
   return value
 }
-function modelConfig(value: Record<string, unknown>, apiKeyEnv: string): CliConfig['model'] { return { id: text(value.id, 'model.id'), baseUrl: text(value.baseUrl, 'model.baseUrl'), model: text(value.model, 'model.model'), apiKeyEnv } }
+function modelConfig(value: Record<string, unknown>): CliModelConfig {
+  if ('baseUrl' in value || 'model' in value || 'apiKeyEnv' in value) {
+    exact(value, ['id', 'baseUrl', 'model', 'apiKeyEnv'], 'model 配置')
+    return {
+      id: text(value.id, 'model.id'),
+      baseUrl: text(value.baseUrl, 'model.baseUrl'),
+      model: text(value.model, 'model.model'),
+      apiKeyEnv: environmentName(value.apiKeyEnv, 'model.apiKeyEnv'),
+    }
+  }
+  exact(value, ['id', 'platformBaseUrl', 'modelId', 'authorizationEnv'], 'model 配置')
+  return {
+    id: text(value.id, 'model.id'),
+    platformBaseUrl: text(value.platformBaseUrl, 'model.platformBaseUrl'),
+    modelId: text(value.modelId, 'model.modelId'),
+    authorizationEnv: environmentName(value.authorizationEnv, 'model.authorizationEnv'),
+  }
+}
+
+function environmentName(value: unknown, name: string): string {
+  const result = text(value, name)
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result)) throw new CliUsageError(`${name} 必须是环境变量名`)
+  return result
+}

@@ -49,9 +49,15 @@ importers:
       '@agent-harness/domain':
         specifier: workspace:*
         version: link:../../domain
+      '@agent-harness/gateway':
+        specifier: workspace:*
+        version: link:../../llm/gateway
       '@agent-harness/openai-compatible':
         specifier: workspace:*
         version: link:../../llm/openai-compatible
+      '@agent-harness/platform-http':
+        specifier: workspace:*
+        version: link:../../platform/platform-http
       '@agent-harness/runtime':
         specifier: workspace:*
         version: link:../../runtime
