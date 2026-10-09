@@ -82,4 +82,18 @@ describe('架构依赖规则', () => {
     ])
     expect(forbidden).toContain('platform/platform-http: adapter has forbidden dependency on runtime')
   })
+
+  it('限制文件系统 Skill adapter 只依赖 Agent capability', () => {
+    const allowed = verifyArchitecture([
+      ['core/agent', manifest('agent')],
+      ['skills/skill-filesystem', manifest('skill-filesystem', { '@agent-harness/agent': 'workspace:*' })],
+    ])
+    expect(allowed).toEqual([])
+
+    const forbidden = verifyArchitecture([
+      ['runtime', manifest('runtime')],
+      ['skills/skill-filesystem', manifest('skill-filesystem', { '@agent-harness/runtime': 'workspace:*' })],
+    ])
+    expect(forbidden).toContain('skills/skill-filesystem: adapter has forbidden dependency on runtime')
+  })
 })

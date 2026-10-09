@@ -5,4 +5,5 @@ packages:
   - packages/llm/*
   - packages/platform/*
   - packages/session/*
+  - packages/skills/*
   - packages/hosts/*

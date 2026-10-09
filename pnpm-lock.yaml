@@ -46,6 +46,9 @@ importers:
 
   packages/hosts/cli:
     dependencies:
+      '@agent-harness/agent':
+        specifier: workspace:*
+        version: link:../../core/agent
       '@agent-harness/domain':
         specifier: workspace:*
         version: link:../../domain
@@ -67,6 +70,9 @@ importers:
       '@agent-harness/session-jsonl':
         specifier: workspace:*
         version: link:../../session/session-jsonl
+      '@agent-harness/skill-filesystem':
+        specifier: workspace:*
+        version: link:../../skills/skill-filesystem
       '@agent-harness/tools':
         specifier: workspace:*
         version: link:../../core/tools
@@ -143,6 +149,12 @@ importers:
       '@agent-harness/session':
         specifier: workspace:*
         version: link:../session
+
+  packages/skills/skill-filesystem:
+    dependencies:
+      '@agent-harness/agent':
+        specifier: workspace:*
+        version: link:../../core/agent
 
   packages/test-support:
     dependencies:
