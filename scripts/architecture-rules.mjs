@@ -16,6 +16,7 @@ export function verifyArchitecture(manifests) {
   const adapterDependencies = new Map([
     ['session/session-jsonl', new Set(['domain', 'session/session'])],
     ['llm/openai-compatible', new Set(['domain', 'llm/model'])],
+    ['tools/platform-policy', new Set(['domain', 'core/tools'])],
   ])
   const hostDependencies = new Map([
     [

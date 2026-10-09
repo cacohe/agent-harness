@@ -218,18 +218,20 @@ export class PolicyControlledTools implements ExecutionAwareToolCapability {
     if (context.execution === undefined) {
       return authorizationFailure(call, '缺少冻结执行上下文')
     }
+    let settlementCall = call
     try {
-      const decision = await this.#policy.authorize(call, context as ToolExecutionContext & {
-        readonly execution: ExecutionMetadata
-      })
-      if (context.signal.aborted) return cancelledResult(call, context.signal.reason)
-      if (!isAllowed(decision)) return authorizationFailure(call, denialReason(decision))
-      return executeWithContext(this.#delegate, call, context)
+      const authorizedCall = freezeToolCall(call)
+      settlementCall = authorizedCall
+      const authorizedContext = freezeExecutionContext(context, context.execution)
+      const decision = await this.#policy.authorize(authorizedCall, authorizedContext)
+      if (context.signal.aborted) return cancelledResult(authorizedCall, context.signal.reason)
+      if (!isAllowed(decision)) return authorizationFailure(authorizedCall, denialReason(decision))
+      return executeWithContext(this.#delegate, authorizedCall, authorizedContext)
     } catch (error) {
       if (context.signal.aborted || isAbortError(error)) {
-        return cancelledResult(call, context.signal.reason ?? error)
+        return cancelledResult(settlementCall, context.signal.reason ?? error)
       }
-      return authorizationFailure(call, serializeError(error).message)
+      return authorizationFailure(settlementCall, serializeError(error).message)
     }
   }
 }
@@ -299,6 +301,31 @@ function authorizationFailure(call: ToolCall, message: string): ToolResult {
   }
 }
 
+/** 授权与真实执行共享同一不可变调用快照，避免 await 期间参数被事后修改。 */
+function freezeToolCall(call: ToolCall): ToolCall {
+  assertJsonValue(call.input)
+  return Object.freeze({
+    id: call.id,
+    name: call.name,
+    input: freezeJson(call.input),
+  })
+}
+
+/** 冻结本次授权使用的执行身份，并把同一快照传给真实工具。 */
+function freezeExecutionContext(
+  context: ToolExecutionContext,
+  execution: ExecutionMetadata,
+): ToolExecutionContext & { readonly execution: ExecutionMetadata } {
+  return Object.freeze({
+    signal: context.signal,
+    execution: Object.freeze({
+      id: execution.id,
+      subject: execution.subject,
+      authorizationVersion: execution.authorizationVersion,
+    }),
+  })
+}
+
 function normalizeSandboxOptions(options: SandboxToolRegistryOptions): {
   readonly workspace: string | undefined
   readonly limits: SandboxResourceLimits | undefined
@@ -337,7 +364,14 @@ function freezeJson(value: JsonValue): JsonValue {
   if (value === null || typeof value !== 'object') return value
   if (Array.isArray(value)) return Object.freeze(value.map(freezeJson))
   const copy: Record<string, JsonValue> = {}
-  for (const [key, child] of Object.entries(value)) copy[key] = freezeJson(child)
+  for (const [key, child] of Object.entries(value)) {
+    Object.defineProperty(copy, key, {
+      value: freezeJson(child),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    })
+  }
   return Object.freeze(copy)
 }
 
