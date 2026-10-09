@@ -86,6 +86,12 @@ importers:
         specifier: workspace:*
         version: link:../model
 
+  packages/platform/platform-http:
+    dependencies:
+      '@agent-harness/model':
+        specifier: workspace:*
+        version: link:../../llm/model
+
   packages/runtime:
     dependencies:
       '@agent-harness/agent':
