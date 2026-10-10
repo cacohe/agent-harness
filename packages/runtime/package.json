@@ -7,13 +7,14 @@
     ".": "./lib/index.js"
   },
   "dependencies": {
-    "@agent-harness/agent": "workspace:*",
+    "@agent-harness/core": "workspace:*",
     "@agent-harness/kernel": "workspace:*",
-    "@agent-harness/session": "workspace:*",
-    "@agent-harness/tools": "workspace:*"
+    "@agent-harness/session-lifecycle": "workspace:*",
+    "@agent-harness/tool-runtime": "workspace:*"
   },
   "devDependencies": {
     "@agent-harness/session-jsonl": "workspace:*",
-    "@agent-harness/test-support": "workspace:*"
+    "@agent-harness/test-support": "workspace:*",
+    "@agent-harness/session-memory": "workspace:*"
   }
 }

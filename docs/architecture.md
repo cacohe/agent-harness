@@ -4,9 +4,9 @@ Agent Harness Lab 使用 append-only 会话事件日志和显式 Agent 状态机
 
 ## 依赖层次
 
-`kernel` 定义 Agent 循环使用的协议无关概念、状态、接口、事件与错误。`core/agent`、`core/session` 与 `core/tools` 只实现核心行为。各能力域下的 adapter（如 `session/session-jsonl`、`llm/openai-compatible`）实现外部存储与模型协议。`runtime` 校验并组合核心实现，`hosts` 组合 adapter 并通过进程协议暴露应用。
+`kernel` 定义 Agent 循环使用的协议无关概念、状态、接口、事件与错误。单一 `core` package 只实现 Agent 核心循环、上下文组装和消息投影。会话与工具实现分别属于 `session/` 和 `tools/` 能力域；adapter 实现外部存储与模型协议。`runtime` 校验并组合 Agent 循环及协议无关实现，`hosts` 组合外部 adapter 并通过进程协议暴露应用。
 
-依赖统一指向 `kernel`。Core 和 adapter 都只依赖内核契约，彼此不建立生产依赖；Runtime 和 Host 在组合点注入具体实现。
+依赖统一指向 `kernel`。Core、能力实现和 adapter 都只依赖内核契约，彼此不建立生产依赖；Runtime 和 Host 在组合点注入具体实现。
 
 ## Package 布局
 
@@ -15,11 +15,9 @@ workspace 按能力域分组（见 ADR 0011），npm 包名仍为 `@agent-harnes
 ```text
 packages/
   kernel/                      Agent 概念、状态、接口、事件与错误
-  core/
-    agent/                     Agent 状态机、上下文组装与消息投影
-    session/                   内存会话与生命周期分析
-    tools/                     工具注册、组合与治理实现
+  core/                        Agent 状态机、上下文组装与消息投影
   tools/
+    tool-runtime/              工具注册、组合与治理实现
     mcp/                       MCP 工具 adapter
     platform-policy/           Platform 一次性工具许可 adapter
     sandbox-docker/            Docker OCI Sandbox dispatcher
@@ -31,6 +29,8 @@ packages/
   platform/
     platform-http/             Platform Gateway 与 Permit HTTP adapter
   session/
+    session-memory/            内存会话实现
+    session-lifecycle/         会话恢复分析实现
     session-jsonl/             JSONL 会话 adapter
   skills/
     skill-filesystem/          受限文件系统 Skill catalog
@@ -45,7 +45,7 @@ packages/
 ```text
 hosts → runtime → core → kernel
   |          |       |
-  +----------+-------+→ adapters → kernel
+  +----------+-------+→ capability implementations / adapters → kernel
 ```
 
 ## 执行模型
@@ -73,13 +73,13 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 ## 替换接缝
 
-首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`kernel` 拥有这些协议无关接口；`core/agent` 的默认 prompt 实现以完整用户 turn 为边界裁剪历史，并限制输入字节数。组合方可提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；异步贡献器接收本次 run 的取消信号。当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`EnabledSkillsContext` 只注入名称、ID 和描述，不读取正文。`MemoryRetriever` 可以检索长期记忆，`RetrievedMemoryContext` 仅将有限的临时检索结果加入系统上下文，不将其写入会话事件。会话事件日志继续只保存对话事实。每个接缝包含 `kernel` 契约、至少一个实现，以及 `runtime` 或 host 中的组合点。
+首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`kernel` 拥有这些协议无关接口；`core` 的默认 prompt 实现以完整用户 turn 为边界裁剪历史，并限制输入字节数。组合方可提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；异步贡献器接收本次 run 的取消信号。当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`EnabledSkillsContext` 只注入名称、ID 和描述，不读取正文。`MemoryRetriever` 可以检索长期记忆，`RetrievedMemoryContext` 仅将有限的临时检索结果加入系统上下文，不将其写入会话事件。会话事件日志继续只保存对话事实。每个接缝包含 `kernel` 契约、至少一个实现，以及 `runtime` 或 host 中的组合点。
 
 `skills/skill-filesystem` 从 Host 明确配置的根目录和启用列表构建 `SkillCatalog`。adapter 在 Linux Host 上根据已打开文件描述符校验真实路径，在目录边界内限制元数据与正文读取并校验 frontmatter；初始化只保存摘要，正文由工具或其他明确调用方按 ID 读取。CLI 负责创建该 adapter，并通过 `EnabledSkillsContext` 将摘要接入 prompt。
 
 `skills/skill-tool` 将 `SkillCatalog` 映射为 `load_skill` function tool。它只接受摘要中展示的 ID，传递工具调用取消信号，并限制返回正文大小。CLI 将该工具与其他来源统一组合；成功正文作为普通工具结果持久化，未调用的正文不会进入上下文。
 
-`kernel` 还定义执行治理与组合接口。`core/tools` 的 `CompositeToolCapability` 在 Host 组合时取得各工具来源的目录快照，拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
+`kernel` 还定义执行治理与组合接口。`tools/tool-runtime` 的 `CompositeToolCapability` 在 Host 组合时取得各工具来源的目录快照，拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
 
 `SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个 `ToolDefinition.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号。`run_shell` 不是 Sandbox，不可替代此接口。
 
@@ -91,7 +91,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。`AgentObserver.onExecution` 在每批会话事件成功追加后逐条通知 `session.event`，因此 Platform 可以以 session sequence 重建审计状态；模型 capability 的 usage 是同一 attempt 内单调不减的累计 token，Agent 将其转换为带 session、turn、step、attempt 与单调 `usageSequence` 的 `model.usage` token 增量通知，供 Platform 去重后累加。observer 投递不具备可靠性保证，需要可靠投递的 Platform adapter 必须自行持久化 outbox 并以 sequence 去重。
 
-内核契约位于 `kernel`；核心实现位于 `core/session`、`core/tools` 与 `core/agent`。内存会话实现 sequence 分配，纯投影重建模型消息；Agent 按顺序执行工具，并在开始下一 step 前持久化全部结果。真实模型与 HTTP 集成由 `llm/`、`session/` 下的 adapter 提供，动态插件系统仍不属于当前范围。
+内核契约位于 `kernel`；Agent 循环只位于 `core`。`session/session-memory` 实现进程内事件日志，`session/session-lifecycle` 实现恢复分析，`tools/tool-runtime` 实现工具注册、组合和执行治理。模型消息投影属于每一步 Agent 请求的派生逻辑，因此保留在 Core。真实模型与持久化集成由 `llm/`、`session/` 下的 adapter 提供，动态插件系统仍不属于当前范围。
 
 `kernel` 拥有 reader、writer、repository 与 writer lease capability。`session/session-jsonl` 是独立 adapter，只依赖 `kernel`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
 
@@ -103,7 +103,7 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 
 在 Windows 上，目录 fd 的 `fsync` 常返回 `EPERM`。JSONL adapter 忽略目录同步上的该错误，但会话文件的 `fdatasync` 仍必须成功；因此文件内容耐久屏障保留，目录项元数据在部分 Windows 环境可能延迟落盘。会话创建在 `rename` 发布 staging 目录前会关闭其中已打开的文件句柄，并在发布后重新打开正式路径；Windows 不允许对仍含打开句柄的目录执行 `rename`。
 
-`core/session` 使用纯生命周期分析验证恢复历史。分析要求 turn 与 step 正确嵌套，事件标识符与当前生命周期一致，assistant settlement 和 tool result 合法关联，已经闭合的生命周期不再追加所属事件。只有成功完成且产生工具调用的 step 才能继续下一 step；工具结果必须严格构成 assistant tool call 顺序的连续前缀。结构矛盾直接拒绝恢复。日志尾部的活动 step 会为该前缀之后的缺失结果补写 `unknown`，再以 `interrupted` 闭合 step 和 turn；活动 turn 只补写 `turn.ended: interrupted`。这些修复使用读取时的末尾 sequence，在暴露 Agent 前作为一个原子 batch 提交。`unknown` 表示工具可能已经执行且外部副作用无法确认，并会进入后续模型消息投影。分析同时返回历史已使用的 turn、step、attempt、message 和 tool call ID 不可变快照。
+`session/session-lifecycle` 使用纯生命周期分析验证恢复历史。分析要求 turn 与 step 正确嵌套，事件标识符与当前生命周期一致，assistant settlement 和 tool result 合法关联，已经闭合的生命周期不再追加所属事件。只有成功完成且产生工具调用的 step 才能继续下一 step；工具结果必须严格构成 assistant tool call 顺序的连续前缀。结构矛盾直接拒绝恢复。日志尾部的活动 step 会为该前缀之后的缺失结果补写 `unknown`，再以 `interrupted` 闭合 step 和 turn；活动 turn 只补写 `turn.ended: interrupted`。这些修复使用读取时的末尾 sequence，在暴露 Agent 前作为一个原子 batch 提交。`unknown` 表示工具可能已经执行且外部副作用无法确认，并会进入后续模型消息投影。分析同时返回历史已使用的 turn、step、attempt、message 和 tool call ID 不可变快照。
 
 `runtime` 是显式组合根，接收 repository、model、tools、运行限制、observer 和可选标识符 factory。`create` 创建新 writer；`resume` 取得 writer、读取并校验历史、原子修复后才构造 Agent。生产标识符使用随机 UUID，测试可以替换 factory。Runtime 把历史 ID 快照传入 Agent，不复制实时 reservation。Runtime 不包含 registry、服务定位器或动态插件装载。
 

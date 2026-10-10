@@ -5,7 +5,7 @@ import {
   CurrentTimeContext,
   EnabledSkillsContext,
   RetrievedMemoryContext,
-} from '@agent-harness/agent'
+} from '@agent-harness/core'
 import {
   brandId,
   AgentIdCollisionError,
@@ -19,10 +19,8 @@ import {
   type UserMessage,
   type SessionLog,
 } from '@agent-harness/kernel'
-import {
-  analyzeSessionLifecycle,
-  InMemorySessionLog,
-} from '@agent-harness/session'
+import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle'
+import { InMemorySessionLog } from '@agent-harness/session-memory'
 import {
   ScriptedModelProvider,
   ScriptedToolCapability,
@@ -31,7 +29,7 @@ import {
   TestSettlementSignals,
   fakeTool,
 } from '@agent-harness/test-support'
-import { ToolRegistry } from '@agent-harness/tools'
+import { ToolRegistry } from '@agent-harness/tool-runtime'
 
 const sessionId = brandId<'SessionId'>('session-1') as SessionId
 

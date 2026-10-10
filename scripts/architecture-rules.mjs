@@ -3,6 +3,13 @@ import ts from 'typescript'
 
 /** 校验 workspace package 的向内依赖方向和生产源码导入，并返回全部诊断。 */
 export function verifyArchitecture(manifests, sources = []) {
+  const protocolNeutralOwners = new Set([
+    'kernel',
+    'core',
+    'session/session-lifecycle',
+    'session/session-memory',
+    'tools/tool-runtime',
+  ])
   const adapters = [
     'llm/gateway', 'llm/openai-compatible', 'memory/memory-gateway',
     'platform/platform-http', 'session/session-jsonl', 'skills/skill-filesystem',
@@ -10,13 +17,14 @@ export function verifyArchitecture(manifests, sources = []) {
   ]
   const allowedByOwner = new Map([
     ['kernel', new Set()],
-    ['core/agent', new Set(['kernel'])],
-    ['core/session', new Set(['kernel'])],
-    ['core/tools', new Set(['kernel'])],
-    ['runtime', new Set(['kernel', 'core/agent', 'core/session', 'core/tools'])],
-    ['test-support', new Set(['kernel', 'core/agent', 'core/session', 'core/tools'])],
+    ['core', new Set(['kernel'])],
+    ['session/session-lifecycle', new Set(['kernel'])],
+    ['session/session-memory', new Set(['kernel'])],
+    ['tools/tool-runtime', new Set(['kernel'])],
+    ['runtime', new Set(['kernel', 'core', 'session/session-lifecycle', 'tools/tool-runtime'])],
+    ['test-support', new Set(['kernel', 'core', 'session/session-memory', 'tools/tool-runtime'])],
     ['hosts/cli', new Set([
-      'kernel', 'core/agent', 'core/tools', 'llm/gateway', 'llm/openai-compatible',
+      'kernel', 'core', 'tools/tool-runtime', 'llm/gateway', 'llm/openai-compatible',
       'memory/memory-gateway', 'platform/platform-http', 'runtime',
       'session/session-jsonl', 'skills/skill-filesystem', 'skills/skill-tool', 'tools/mcp',
     ])],
@@ -39,7 +47,12 @@ export function verifyArchitecture(manifests, sources = []) {
       ...manifest.peerDependencies,
     }
     for (const dependency of Object.keys(dependencies)) {
-      if (!dependency.startsWith('@agent-harness/')) continue
+      if (!dependency.startsWith('@agent-harness/')) {
+        if (protocolNeutralOwners.has(owner)) {
+          failures.push(`${owner}: protocol-neutral package cannot depend on ${dependency}`)
+        }
+        continue
+      }
       const dependencyPath = packageByName.get(dependency)
       if (dependencyPath === undefined) {
         failures.push(`${owner}: unknown workspace dependency ${dependency}`)
@@ -67,7 +80,7 @@ export function verifyArchitecture(manifests, sources = []) {
         }
         continue
       }
-      if (owner === 'kernel' || owner.startsWith('core/')) {
+      if (protocolNeutralOwners.has(owner)) {
         failures.push(`${owner}/${file}: protocol-neutral source cannot import ${specifier}`)
       }
     }

@@ -9,7 +9,7 @@
   ],
   "references": [
     {
-      "path": "../../core/agent"
+      "path": "../../core"
     },
     {
       "path": "../../kernel"
@@ -42,7 +42,7 @@
       "path": "../../skills/skill-tool"
     },
     {
-      "path": "../../core/tools"
+      "path": "../../tools/tool-runtime"
     }
   ]
 }

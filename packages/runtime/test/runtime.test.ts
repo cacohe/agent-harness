@@ -24,10 +24,8 @@ import {
   type SessionRepository,
 } from '@agent-harness/kernel'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
-import {
-  analyzeSessionLifecycle,
-  InMemorySessionLog,
-} from '@agent-harness/session'
+import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle'
+import { InMemorySessionLog } from '@agent-harness/session-memory'
 import {
   AgentRuntime,
   RuntimeClosedError,
@@ -36,7 +34,7 @@ import {
   ScriptedModelProvider,
   SequentialAgentIds,
 } from '@agent-harness/test-support'
-import { ToolRegistry } from '@agent-harness/tools'
+import { ToolRegistry } from '@agent-harness/tool-runtime'
 
 const temporaryDirectories: string[] = []
 

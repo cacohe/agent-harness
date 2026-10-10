@@ -11,10 +11,8 @@ import {
   type TurnId,
   SessionLifecycleCorruptionError,
 } from '@agent-harness/kernel'
-import {
-  analyzeSessionLifecycle,
-} from '@agent-harness/session'
-import { deriveModelMessages } from '@agent-harness/agent'
+import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle'
+import { deriveModelMessages } from '@agent-harness/core'
 
 const sessionId = brandId<'SessionId'>('recovery-session') as SessionId
 const turnId = brandId<'TurnId'>('turn-1') as TurnId

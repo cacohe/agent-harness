@@ -10,6 +10,6 @@
     "@agent-harness/kernel": "workspace:*"
   },
   "devDependencies": {
-    "@agent-harness/tools": "workspace:*"
+    "@agent-harness/tool-runtime": "workspace:*"
   }
 }

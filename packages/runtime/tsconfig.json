@@ -9,16 +9,16 @@
   ],
   "references": [
     {
-      "path": "../core/agent"
+      "path": "../core"
     },
     {
       "path": "../kernel"
     },
     {
-      "path": "../core/session"
+      "path": "../session/session-lifecycle"
     },
     {
-      "path": "../core/tools"
+      "path": "../tools/tool-runtime"
     }
   ]
 }
