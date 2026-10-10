@@ -1,4 +1,4 @@
-import type { ModelRequest } from '@agent-harness/model'
+import type { ModelRequest } from '@agent-harness/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   PlatformHttpClient,

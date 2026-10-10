@@ -2,7 +2,13 @@ import { createInterface } from 'node:readline'
 import { readFile as nodeReadFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { brandId, isAbortError, type MessageId, type SessionId } from '@agent-harness/domain'
+import {
+  brandId,
+  isAbortError,
+  type MessageId,
+  type SessionId,
+  type ToolDefinition,
+} from '@agent-harness/kernel'
 import {
   BoundedPromptAssembler,
   EnabledSkillsContext,
@@ -26,7 +32,6 @@ import {
   CompositeToolCapability,
   DuplicateToolNameError,
   ToolRegistry,
-  type ToolDefinition,
 } from '@agent-harness/tools'
 import { McpToolAdapter, type McpClient } from '@agent-harness/mcp'
 import { StdioMcpClient, type StdioMcpClientOptions } from './mcp-stdio.js'

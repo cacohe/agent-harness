@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/agent'
+import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/kernel'
 import { boundedText, positiveInteger } from './validation.js'
 
 const DEFAULT_MAX_DOCUMENT_BYTES = 10 * 1024 * 1024

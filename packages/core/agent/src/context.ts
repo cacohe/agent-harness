@@ -1,47 +1,21 @@
-import type { EventEnvelope, ModelMessage } from '@agent-harness/domain'
-import type { ModelRequest, ModelToolDefinition } from '@agent-harness/model'
-import { deriveModelMessages } from '@agent-harness/session'
-
-/** 将持久会话事实和当前工具表组装为一次模型请求。 */
-export interface PromptAssembler {
-  assemble(
-    events: readonly EventEnvelope[],
-    tools: readonly ModelToolDefinition[],
-    signal: AbortSignal,
-  ): Promise<ModelRequest>
-}
-
-/** 提供组装请求时可用的、不会进入会话事件日志的上下文。 */
-export interface ContextContributor {
-  contribute(
-    input: ContextContributorInput,
-    signal: AbortSignal,
-  ): readonly ModelMessage[] | Promise<readonly ModelMessage[]>
-}
-
-/** 传给上下文贡献器的只读事实快照。 */
-export interface ContextContributorInput {
-  readonly events: readonly EventEnvelope[]
-  readonly tools: readonly ModelToolDefinition[]
-}
-
-/** 为贡献当前时间等易变上下文提供可替换的时钟。 */
-export interface Clock {
-  now(): Date
-}
-
-/** Host 或 Platform 提供的、当前已启用 Skill 元数据与正文读取能力。 */
-export interface SkillCatalog {
-  listEnabled(): readonly SkillDescriptor[]
-  read(skillId: string, signal: AbortSignal): Promise<string>
-}
-
-/** 可安全展示给模型的 Skill 摘要；正文仅通过显式 read 按需取得。 */
-export interface SkillDescriptor {
-  readonly id: string
-  readonly name: string
-  readonly description: string
-}
+import {
+  MEMORY_CONTEXT_LIMITS,
+  type Clock,
+  type ContextContributor,
+  type ContextContributorInput,
+  type DocumentMemorySource,
+  type EventEnvelope,
+  type MemoryMatch,
+  type MemoryRetriever,
+  type MemorySource,
+  type ModelMessage,
+  type ModelRequest,
+  type ModelToolDefinition,
+  type PromptAssembler,
+  type SkillCatalog,
+  type SkillDescriptor,
+} from '@agent-harness/kernel'
+import { deriveModelMessages } from './message-projection.js'
 
 /** 将组合方提供的当前时间作为一条系统消息加入每次模型请求。 */
 export class CurrentTimeContext implements ContextContributor {
@@ -97,43 +71,6 @@ export class EnabledSkillsContext implements ContextContributor {
     return lines.length === 0 ? [] : [{ role: 'system', content: `当前启用 Skills：\n${lines.join('\n')}` }]
   }
 }
-
-/** Platform 或 adapter 提供的长期记忆检索 capability。 */
-export interface MemoryRetriever {
-  search(query: string, signal: AbortSignal): Promise<readonly MemoryMatch[]>
-}
-
-/** 可安全加入模型请求的一条检索结果。 */
-export interface MemoryMatch {
-  readonly id: string
-  readonly content: string
-  readonly source?: MemorySource
-}
-
-/** Platform 解析的长期记忆来源；只用于归因，不改变内容的不可信属性。 */
-export type MemorySource = StatementMemorySource | DocumentMemorySource
-
-/** 用户显式保存的权威陈述。 */
-export interface StatementMemorySource {
-  readonly type: 'statement'
-}
-
-/** 已完成索引的文档分块及其可展示来源。 */
-export interface DocumentMemorySource {
-  readonly type: 'document'
-  readonly documentId: string
-  readonly fileName: string
-  readonly chunkId: string
-}
-
-/** MemoryRetriever 与上下文投影共享的硬边界，供外部 adapter 在 I/O 边界提前校验。 */
-export const MEMORY_CONTEXT_LIMITS = Object.freeze({
-  maxQueryBytes: 4_096,
-  maxMatches: 8,
-  maxFieldBytes: 2_048,
-  maxFileNameBytes: 512,
-  maxSummaryBytes: 8_192,
-})
 
 /** 以最新用户输入检索长期记忆，并将有限结果作为 system context 加入请求。 */
 export class RetrievedMemoryContext implements ContextContributor {

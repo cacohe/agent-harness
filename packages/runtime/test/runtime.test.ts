@@ -3,11 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  AgentClosedError,
-  type AgentIdGenerator,
-} from '@agent-harness/agent'
-import {
   brandId,
+  AgentClosedError,
+  AgentIdCollisionError,
+  type AgentIdGenerator,
   type AttemptId,
   type EventEnvelope,
   type MessageId,
@@ -17,20 +16,19 @@ import {
   type ToolCallId,
   type TurnId,
   type UserMessage,
-} from '@agent-harness/domain'
-import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
-import {
-  analyzeSessionLifecycle,
-  InMemorySessionLog,
   type SessionAppendOptions,
   type SessionLog,
   type SessionOpenOptions,
   type SessionOperationOptions,
   type SessionReader,
   type SessionRepository,
+} from '@agent-harness/kernel'
+import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
+import {
+  analyzeSessionLifecycle,
+  InMemorySessionLog,
 } from '@agent-harness/session'
 import {
-  AgentIdCollisionError,
   AgentRuntime,
   RuntimeClosedError,
 } from '@agent-harness/runtime'

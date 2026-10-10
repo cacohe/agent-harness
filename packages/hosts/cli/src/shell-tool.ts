@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { isAbsolute } from 'node:path'
-import type { JsonValue } from '@agent-harness/domain'
-import type { ToolDefinition } from '@agent-harness/tools'
+import type { JsonValue, ToolDefinition } from '@agent-harness/kernel'
 
 /** kill 后等待 close 的宽限；超时则强制结束等待。 */
 const DEFAULT_KILL_GRACE_MS = 1000

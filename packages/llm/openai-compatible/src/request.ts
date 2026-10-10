@@ -4,8 +4,8 @@ import {
   type JsonObject,
   type JsonValue,
   type ModelMessage,
-} from '@agent-harness/domain'
-import type { ModelRequest } from '@agent-harness/model'
+} from '@agent-harness/kernel'
+import type { ModelRequest } from '@agent-harness/kernel'
 import { OpenAiCompatibleConfigurationError } from './errors.js'
 
 export function resolveEndpoint(baseUrl: string): URL {

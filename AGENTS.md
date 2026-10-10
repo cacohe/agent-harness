@@ -15,8 +15,8 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 - 必须使用 TypeScript、ESM、Node.js 24 和 `strict: true`。
 - 依赖通过构造函数或函数参数显式传入，不得引入服务定位器或进程全局运行时。
 - 模型可见状态从 append-only 会话事件日志重建。
-- Domain 代码不得导入运行时、adapter、host、文件系统、网络、进程或模型 SDK 模块。
-- Capability 所属 package 只依赖 capability 接口与 `domain`，不依赖具体 adapter。
+- `kernel` 集中定义 Agent 循环使用的协议无关概念、状态、接口、事件与错误，且不得导入其他 workspace package、文件系统、网络、进程或模型 SDK。
+- `core` 只包含核心循环实现并且只依赖 `kernel`；adapter 只包含外部能力实现并且只依赖 `kernel`。
 - Adapter 把外部系统转换为 capability 接口，并放在对应能力域目录（如 `llm/`、`session/`）。
 - Host 组合运行时并拥有进程生命周期。
 - 每个已经开始的 turn 和 step 必须在取消与失败路径上也恰好结算一次。
@@ -51,15 +51,14 @@ workspace 按能力域分组（ADR 0011）；npm 包名为 `@agent-harness/<目�
 ```text
 docs/                              架构与决定
 packages/
-  domain/                          纯标识符、事件、消息与错误
+  kernel/                          Agent 概念、状态、接口、事件与错误
   core/
-    agent/                         Inbox 与 Agent 状态机
-    tools/                         工具定义、注册与调度
+    agent/                         Inbox、上下文组装与 Agent 状态机
+    session/                       内存会话、生命周期分析与投影
+    tools/                         工具注册、组合与治理实现
   llm/
-    model/                         模型 provider 接口与流事件词汇
     openai-compatible/             OpenAI-compatible 模型 adapter
   session/
-    session/                       事件日志、投影与持久化接口
     session-jsonl/                 JSONL 会话存储 adapter
   runtime/                         显式组合与生命周期
   hosts/cli/                       CLI 等进程入口

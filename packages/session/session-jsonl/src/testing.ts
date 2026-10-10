@@ -1,4 +1,4 @@
-import type { SessionRepository } from '@agent-harness/session'
+import type { SessionRepository } from '@agent-harness/kernel'
 import { createNodeJsonlIo, type JsonlFile, type JsonlIo } from './io.js'
 import {
   JsonlSessionRepositoryImplementation,

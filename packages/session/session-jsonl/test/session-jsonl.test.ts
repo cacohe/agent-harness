@@ -5,15 +5,6 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   brandId,
-  type MessageId,
-  type SessionBatchId,
-  type SessionEvent,
-  type SessionId,
-  type StepId,
-  type ToolCallId,
-  type TurnId,
-} from '@agent-harness/domain'
-import {
   SessionAlreadyExistsError,
   SessionAlreadyOwnedError,
   SessionClosedError,
@@ -22,7 +13,14 @@ import {
   SessionPoisonedError,
   SessionSequenceConflictError,
   SessionUncertainCommitError,
-} from '@agent-harness/session'
+  type MessageId,
+  type SessionBatchId,
+  type SessionEvent,
+  type SessionId,
+  type StepId,
+  type ToolCallId,
+  type TurnId,
+} from '@agent-harness/kernel'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
 import {
   createJsonlRepositoryForTesting,

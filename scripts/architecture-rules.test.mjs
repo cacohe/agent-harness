@@ -6,143 +6,116 @@ function manifest(name, dependencies = {}) {
 }
 
 describe('架构依赖规则', () => {
-  it('拒绝 domain 对嵌套 host package 的依赖', () => {
+  it('kernel 不得依赖其他 workspace package', () => {
     const failures = verifyArchitecture([
-      ['domain', manifest('domain', { '@agent-harness/cli': 'workspace:*' })],
-      ['hosts/cli', manifest('cli')],
+      ['kernel', manifest('kernel', { '@agent-harness/agent': 'workspace:*' })],
+      ['core/agent', manifest('agent', { '@agent-harness/kernel': 'workspace:*' })],
     ])
-    expect(failures).toContain('domain: forbidden dependency on cli')
+    expect(failures).toContain('kernel: forbidden workspace dependency on core/agent')
   })
 
-  it('拒绝 core capability 对能力域 adapter 的依赖', () => {
+  it('core 只能依赖 kernel', () => {
     const failures = verifyArchitecture([
-      ['core/agent', manifest('agent', { '@agent-harness/openai-compatible': 'workspace:*' })],
-      ['llm/openai-compatible', manifest('openai-compatible')],
+      ['kernel', manifest('kernel')],
+      ['core/tools', manifest('tools', { '@agent-harness/kernel': 'workspace:*' })],
+      ['core/agent', manifest('agent', { '@agent-harness/tools': 'workspace:*' })],
     ])
-    expect(failures).toContain('core/agent: core package must not depend on adapter openai-compatible')
+    expect(failures).toContain('core/agent: forbidden workspace dependency on core/tools')
   })
 
-  it('允许 adapter 依赖同域 capability 路径', () => {
+  it('adapter 只能依赖 kernel', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['llm/gateway', manifest('gateway', { '@agent-harness/kernel': 'workspace:*' })],
+    ])).toEqual([])
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core/tools', manifest('tools', { '@agent-harness/kernel': 'workspace:*' })],
+      ['tools/mcp', manifest('mcp', { '@agent-harness/tools': 'workspace:*' })],
+    ])).toContain('tools/mcp: forbidden workspace dependency on core/tools')
+  })
+
+  it('runtime 可以组合 kernel 与 core 实现', () => {
     const failures = verifyArchitecture([
-      ['domain', manifest('domain')],
-      ['llm/model', manifest('model', { '@agent-harness/domain': 'workspace:*' })],
-      [
-        'llm/openai-compatible',
-        manifest('openai-compatible', {
-          '@agent-harness/domain': 'workspace:*',
-          '@agent-harness/model': 'workspace:*',
-        }),
-      ],
-      [
-        'llm/gateway',
-        manifest('gateway', {
-          '@agent-harness/domain': 'workspace:*',
-          '@agent-harness/model': 'workspace:*',
-        }),
-      ],
+      ['kernel', manifest('kernel')],
+      ['core/agent', manifest('agent', { '@agent-harness/kernel': 'workspace:*' })],
+      ['core/session', manifest('session', { '@agent-harness/kernel': 'workspace:*' })],
+      ['core/tools', manifest('tools', { '@agent-harness/kernel': 'workspace:*' })],
+      ['runtime', manifest('runtime', {
+        '@agent-harness/kernel': 'workspace:*', '@agent-harness/agent': 'workspace:*',
+        '@agent-harness/session': 'workspace:*', '@agent-harness/tools': 'workspace:*',
+      })],
     ])
     expect(failures).toEqual([])
   })
 
-  it('限制 Platform 策略 adapter 只能依赖工具 capability 与 domain', () => {
-    const allowed = verifyArchitecture([
-      ['domain', manifest('domain')],
-      ['core/tools', manifest('tools', { '@agent-harness/domain': 'workspace:*' })],
-      [
-        'tools/platform-policy',
-        manifest('platform-policy', {
-          '@agent-harness/domain': 'workspace:*',
-          '@agent-harness/tools': 'workspace:*',
-        }),
-      ],
-    ])
-    expect(allowed).toEqual([])
-
-    const forbidden = verifyArchitecture([
-      ['domain', manifest('domain')],
-      ['runtime', manifest('runtime')],
-      [
-        'tools/platform-policy',
-        manifest('platform-policy', { '@agent-harness/runtime': 'workspace:*' }),
-      ],
-    ])
-    expect(forbidden).toContain('tools/platform-policy: adapter has forbidden dependency on runtime')
+  it('拒绝未分类 package，防止新增目录绕过规则', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['misc/unknown', manifest('unknown', { '@agent-harness/kernel': 'workspace:*' })],
+    ])).toContain('misc/unknown: package path is not classified')
   })
 
-  it('允许 Platform HTTP client 依赖 Gateway 词汇但不依赖 Runtime', () => {
-    const allowed = verifyArchitecture([
-      ['llm/model', manifest('model')],
-      ['core/agent', manifest('agent')],
-      ['domain', manifest('domain')],
-      ['core/tools', manifest('tools')],
-      ['memory/memory-gateway', manifest('memory-gateway', {
-        '@agent-harness/agent': 'workspace:*',
-        '@agent-harness/domain': 'workspace:*',
-        '@agent-harness/tools': 'workspace:*',
-      })],
-      ['platform/platform-http', manifest('platform-http', {
-        '@agent-harness/model': 'workspace:*',
-        '@agent-harness/memory-gateway': 'workspace:*',
-      })],
-    ])
-    expect(allowed).toEqual([])
-
-    const forbidden = verifyArchitecture([
-      ['runtime', manifest('runtime')],
-      ['platform/platform-http', manifest('platform-http', { '@agent-harness/runtime': 'workspace:*' })],
-    ])
-    expect(forbidden).toContain('platform/platform-http: adapter has forbidden dependency on runtime')
+  it('拒绝不存在的 workspace 依赖', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core/agent', manifest('agent', { '@agent-harness/missing': 'workspace:*' })],
+    ])).toContain('core/agent: unknown workspace dependency @agent-harness/missing')
   })
 
-  it('限制文件系统 Skill adapter 只依赖 Agent capability', () => {
-    const allowed = verifyArchitecture([
-      ['core/agent', manifest('agent')],
-      ['skills/skill-filesystem', manifest('skill-filesystem', { '@agent-harness/agent': 'workspace:*' })],
-    ])
-    expect(allowed).toEqual([])
-
-    const forbidden = verifyArchitecture([
-      ['runtime', manifest('runtime')],
-      ['skills/skill-filesystem', manifest('skill-filesystem', { '@agent-harness/runtime': 'workspace:*' })],
-    ])
-    expect(forbidden).toContain('skills/skill-filesystem: adapter has forbidden dependency on runtime')
+  it('不能通过 optionalDependency 绕过生产依赖规则', () => {
+    const kernel = manifest('kernel')
+    kernel.optionalDependencies = { '@agent-harness/agent': 'workspace:*' }
+    expect(verifyArchitecture([
+      ['kernel', kernel],
+      ['core/agent', manifest('agent', { '@agent-harness/kernel': 'workspace:*' })],
+    ])).toContain('kernel: forbidden workspace dependency on core/agent')
   })
 
-  it('限制 Skill 工具只依赖 Skill 与工具 capability', () => {
-    const allowed = verifyArchitecture([
-      ['domain', manifest('domain')],
-      ['core/agent', manifest('agent')],
-      ['core/tools', manifest('tools')],
-      ['skills/skill-tool', manifest('skill-tool', {
-        '@agent-harness/agent': 'workspace:*',
-        '@agent-harness/domain': 'workspace:*',
-        '@agent-harness/tools': 'workspace:*',
-      })],
-    ])
-    expect(allowed).toEqual([])
-
-    const forbidden = verifyArchitecture([
-      ['runtime', manifest('runtime')],
-      ['skills/skill-tool', manifest('skill-tool', { '@agent-harness/runtime': 'workspace:*' })],
-    ])
-    expect(forbidden).toContain('skills/skill-tool: adapter has forbidden dependency on runtime')
+  it('不能通过 devDependency 从 adapter 生产源码导入 core', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core/tools', manifest('tools', { '@agent-harness/kernel': 'workspace:*' })],
+      ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
+    ], [
+      ['tools/mcp', 'src/index.ts', "import { ToolRegistry } from '@agent-harness/tools'"],
+    ])).toContain('tools/mcp/src/index.ts: forbidden workspace import core/tools')
   })
 
-  it('限制 Memory Gateway adapter 只依赖 Agent capability', () => {
-    const allowed = verifyArchitecture([
-      ['core/agent', manifest('agent')],
-      ['memory/memory-gateway', manifest('memory-gateway', {
-        '@agent-harness/agent': 'workspace:*',
-      })],
-    ])
-    expect(allowed).toEqual([])
+  it('检查无插值模板形式的动态导入', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core/tools', manifest('tools', { '@agent-harness/kernel': 'workspace:*' })],
+      ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
+    ], [
+      ['tools/mcp', 'src/index.ts', 'await import(`@agent-harness/tools`)'],
+    ])).toContain('tools/mcp/src/index.ts: forbidden workspace import core/tools')
+  })
 
-    const forbidden = verifyArchitecture([
-      ['runtime', manifest('runtime')],
-      ['memory/memory-gateway', manifest('memory-gateway', {
-        '@agent-harness/runtime': 'workspace:*',
-      })],
-    ])
-    expect(forbidden).toContain('memory/memory-gateway: adapter has forbidden dependency on runtime')
+  it('忽略注释和普通字符串中的 import 文本', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core/tools', manifest('tools', { '@agent-harness/kernel': 'workspace:*' })],
+      ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
+    ], [
+      ['tools/mcp', 'src/index.ts', '// import { ToolRegistry } from "@agent-harness/tools"\nconst example = "import(\\\"@agent-harness/tools\\\")"'],
+    ])).toEqual([])
+  })
+
+  it('拒绝生产源码以相对路径跨越 package 边界', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core/agent', manifest('agent', { '@agent-harness/kernel': 'workspace:*' })],
+    ], [
+      ['core/agent', 'src/index.ts', "export * from '../../kernel/src/index.js'"],
+    ])).toContain('core/agent/src/index.ts: relative import escapes package boundary: ../../kernel/src/index.js')
+  })
+
+  it('Kernel 和 Core 生产源码不得导入 I/O 或第三方模块', () => {
+    expect(verifyArchitecture([
+      ['kernel', manifest('kernel')],
+    ], [
+      ['kernel', 'src/index.ts', "import { readFile } from 'node:fs/promises'"],
+    ])).toContain('kernel/src/index.ts: protocol-neutral source cannot import node:fs/promises')
   })
 })

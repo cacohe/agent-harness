@@ -1,6 +1,6 @@
-import type { SkillCatalog } from '@agent-harness/agent'
-import type { JsonValue } from '@agent-harness/domain'
-import type { ToolDefinition } from '@agent-harness/tools'
+import type { SkillCatalog } from '@agent-harness/kernel'
+import type { JsonValue } from '@agent-harness/kernel'
+import type { ToolDefinition } from '@agent-harness/kernel'
 
 const DEFAULT_MAX_CONTENT_BYTES = 256 * 1024
 const MAX_SKILL_ID_BYTES = 2_048

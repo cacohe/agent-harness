@@ -1,12 +1,35 @@
 import { createHash, randomUUID } from 'node:crypto'
-import type {
-  MemoryGatewayDocumentImportRequest,
-  MemoryGatewayDocumentDeleteRequest,
-  MemoryGatewayDocumentStatusRequest,
-  MemoryGatewaySearchRequest,
-  MemoryGatewayWriteRequest,
-} from '@agent-harness/memory-gateway'
-import type { ModelRequest } from '@agent-harness/model'
+import type { ModelRequest } from '@agent-harness/kernel'
+
+interface MemoryGatewayDocumentImportRequest {
+  readonly memorySpaceId: string
+  readonly fileName: string
+  readonly mediaType: string
+  readonly bytes: Uint8Array
+  readonly sizeBytes: number
+  readonly contentSha256: string
+}
+
+interface MemoryGatewayDocumentDeleteRequest {
+  readonly memorySpaceId: string
+  readonly documentId: string
+}
+
+interface MemoryGatewayDocumentStatusRequest {
+  readonly memorySpaceId: string
+  readonly documentId: string
+}
+
+interface MemoryGatewaySearchRequest {
+  readonly memorySpaceId: string
+  readonly query: string
+  readonly limit: number
+}
+
+interface MemoryGatewayWriteRequest {
+  readonly memorySpaceId: string
+  readonly statement: string
+}
 
 type FetchImplementation = (input: string | URL, init?: RequestInit) => Promise<Response>
 

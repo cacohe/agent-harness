@@ -1,23 +1,56 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/domain" },
-    { "path": "packages/session/session" },
-    { "path": "packages/session/session-jsonl" },
-    { "path": "packages/llm/model" },
-    { "path": "packages/llm/openai-compatible" },
-    { "path": "packages/llm/gateway" },
-    { "path": "packages/memory/memory-gateway" },
-    { "path": "packages/platform/platform-http" },
-    { "path": "packages/core/tools" },
-    { "path": "packages/tools/mcp" },
-    { "path": "packages/tools/sandbox-docker" },
-    { "path": "packages/skills/skill-filesystem" },
-    { "path": "packages/skills/skill-tool" },
-    { "path": "packages/tools/platform-policy" },
-    { "path": "packages/core/agent" },
-    { "path": "packages/runtime" },
-    { "path": "packages/hosts/cli" },
-    { "path": "packages/test-support" }
+    {
+      "path": "packages/kernel"
+    },
+    {
+      "path": "packages/core/session"
+    },
+    {
+      "path": "packages/session/session-jsonl"
+    },
+    {
+      "path": "packages/llm/openai-compatible"
+    },
+    {
+      "path": "packages/llm/gateway"
+    },
+    {
+      "path": "packages/memory/memory-gateway"
+    },
+    {
+      "path": "packages/platform/platform-http"
+    },
+    {
+      "path": "packages/core/tools"
+    },
+    {
+      "path": "packages/tools/mcp"
+    },
+    {
+      "path": "packages/tools/sandbox-docker"
+    },
+    {
+      "path": "packages/skills/skill-filesystem"
+    },
+    {
+      "path": "packages/skills/skill-tool"
+    },
+    {
+      "path": "packages/tools/platform-policy"
+    },
+    {
+      "path": "packages/core/agent"
+    },
+    {
+      "path": "packages/runtime"
+    },
+    {
+      "path": "packages/hosts/cli"
+    },
+    {
+      "path": "packages/test-support"
+    }
   ]
 }

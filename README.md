@@ -9,18 +9,16 @@
 依赖向内：
 
 ```text
-hosts  →  runtime  →  core/agent|tools · llm/model · session/session
-                ↑                              ↑
-     llm/* · session/* adapters          （capability 包）
-                ↓
-             domain
+hosts → runtime → core → kernel
+  |          |       |
+  +----------+-------+→ adapters → kernel
 ```
 
 
 | 层次 | 目录落点 | 职责 |
 |------|----------|------|
-| 领域词汇 | `packages/domain` | 稳定标识符、事件、消息与错误 |
-| Capability | `core/*`、`llm/model`、`session/session` | 核心行为与接口 |
+| Kernel | `packages/kernel` | Agent 概念、状态、接口、事件与错误 |
+| Core | `packages/core/*` | Agent、会话与工具的核心实现 |
 | Adapter | `llm/openai-compatible`、`llm/gateway`、`platform/platform-http`、`session/session-jsonl`、`tools/mcp`、`tools/platform-policy` | 外部系统实现 |
 | 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
 | 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
@@ -50,12 +48,12 @@ input → turn/start → step/start → model stream → assistant settlement
 ```text
 docs/                     架构与已接受决定（ADR）
 packages/
-  domain/                 纯领域类型（无 IO）
+  kernel/                 Agent 概念、状态、接口、事件与错误
   core/
-    agent/                Inbox 与 Agent 状态机
-    tools/                工具定义、注册与调度
+    agent/                Inbox、上下文组装与 Agent 状态机
+    session/              内存会话与生命周期分析
+    tools/                工具注册、组合与治理实现
   llm/
-    model/                模型 provider 接口与流事件
     openai-compatible/    OpenAI-compatible Chat Completions
     gateway/              Platform LLM Gateway adapter
   memory/
@@ -67,7 +65,6 @@ packages/
     platform-policy/      Platform 一次性工具许可 adapter
     sandbox-docker/       Docker OCI Sandbox dispatcher
   session/
-    session/              事件日志、投影、持久化接口
     session-jsonl/        JSONL 会话存储 adapter
   skills/
     skill-filesystem/     受限文件系统 Skill catalog
@@ -221,26 +218,27 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 
 | 目标             | 落点                                                         |
 | -------------- | ---------------------------------------------------------- |
-| 领域事件 / 消息形状    | `packages/domain`，并更新投影与恢复逻辑 |
-| 会话读写 / 恢复分析    | `packages/session/session`；持久化实现放 `packages/session/session-jsonl` |
-| 模型协议           | 接口在 `packages/llm/model`；实现在 `packages/llm/*` |
-| 工具             | 接口与 `ToolRegistry` 在 `packages/core/tools`；在 host/runtime 组合时注入 |
+| 领域事件 / 消息形状    | `packages/kernel`，并更新投影与恢复逻辑 |
+| 会话读写 / 恢复分析    | 接口在 `packages/kernel`，核心实现放 `packages/core/session`，持久化实现放 `packages/session/session-jsonl` |
+| 模型协议           | 接口在 `packages/kernel`；实现在 `packages/llm/*` |
+| 工具             | 接口在 `packages/kernel`，`ToolRegistry` 在 `packages/core/tools`；在 host/runtime 组合时注入 |
 | 工具治理         | 可选 `ToolExecutionPolicy` 在工具副作用前判定许可；每个 turn 可带冻结执行审计快照 |
 | Agent 循环 / 结算  | `packages/core/agent` |
 | 组合与 resume     | `packages/runtime` |
 | 进程协议（CLI/HTTP） | `packages/hosts/*` |
 
 
-新增或替换 capability 时，可遵循 `[.agents/skills/add-capability/SKILL.md](.agents/skills/add-capability/SKILL.md)`：明确 owner / provider / consumer，接口放消费方 capability 包，外部实现放对应能力域目录（如 `llm/`、`session/`），构造放 runtime 或 host；需要按 key 选择实现前不要加 registry。
+新增或替换 capability 时，可遵循 `[.agents/skills/add-capability/SKILL.md](.agents/skills/add-capability/SKILL.md)`：明确 owner / provider / consumer，协议无关契约放 `kernel`，核心实现放 `core`，外部实现放对应能力域目录，构造放 runtime 或 host；需要按 key 选择实现前不要加 registry。
 
 ### 依赖方向（不可违反）
 
 ```text
-hosts → runtime → core|llm|session capability 包 → domain
-               → llm|session adapters → capability 所属 package → domain
+hosts → runtime → core → kernel
+  |          |       |
+  +----------+-------+→ adapters → kernel
 ```
 
-`domain` 无 workspace 依赖。Capability 包不依赖具体 adapter。修改依赖后跑 `pnpm run gate:architecture`。
+`kernel` 无 workspace 依赖。Core 与 adapter 的生产依赖都只能指向 `kernel`。修改依赖后跑 `pnpm run gate:architecture`。
 
 ### 测试约定
 

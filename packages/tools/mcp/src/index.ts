@@ -6,9 +6,9 @@ import {
   type JsonValue,
   type ToolCall,
   type ToolResult,
-} from '@agent-harness/domain'
-import type { ModelToolDefinition } from '@agent-harness/model'
-import type { ToolCapability } from '@agent-harness/tools'
+} from '@agent-harness/kernel'
+import type { ModelToolDefinition } from '@agent-harness/kernel'
+import type { ToolCapability } from '@agent-harness/kernel'
 
 /** MCP Server 返回的可调用工具描述。 */
 export interface McpToolDescriptor {

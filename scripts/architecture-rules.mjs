@@ -1,81 +1,109 @@
-/**
- * 校验 workspace package 清单的依赖方向，并返回全部违反规则的诊断。
- * @param {readonly [string, Record<string, unknown>][]} manifests 已发现 package 的目录和清单。
- * @returns {string[]} 违反架构规则的诊断。
- */
-export function verifyArchitecture(manifests) {
-  const forbiddenByLeaf = {
-    domain: new Set(['session', 'model', 'tools', 'agent', 'adapters', 'runtime', 'hosts', 'test-support']),
-    session: new Set(['agent', 'adapters', 'runtime', 'hosts']),
-    model: new Set(['agent', 'adapters', 'runtime', 'hosts']),
-    tools: new Set(['agent', 'adapters', 'runtime', 'hosts']),
-    agent: new Set(['adapters', 'runtime', 'hosts']),
-    runtime: new Set(['hosts']),
-  }
-  const coreCapabilityLeaves = new Set(['domain', 'session', 'model', 'tools', 'agent'])
-  const adapterDependencies = new Map([
-    ['session/session-jsonl', new Set(['domain', 'session/session'])],
-    ['llm/openai-compatible', new Set(['domain', 'llm/model'])],
-    ['llm/gateway', new Set(['domain', 'llm/model'])],
-    ['memory/memory-gateway', new Set(['domain', 'core/agent', 'core/tools'])],
-    ['platform/platform-http', new Set(['llm/model', 'memory/memory-gateway'])],
-    ['tools/platform-policy', new Set(['domain', 'core/tools'])],
-    ['tools/sandbox-docker', new Set(['domain', 'core/tools'])],
-    ['skills/skill-filesystem', new Set(['core/agent'])],
-    ['skills/skill-tool', new Set(['domain', 'core/agent', 'core/tools'])],
+import { posix as path } from 'node:path'
+import ts from 'typescript'
+
+/** 校验 workspace package 的向内依赖方向和生产源码导入，并返回全部诊断。 */
+export function verifyArchitecture(manifests, sources = []) {
+  const adapters = [
+    'llm/gateway', 'llm/openai-compatible', 'memory/memory-gateway',
+    'platform/platform-http', 'session/session-jsonl', 'skills/skill-filesystem',
+    'skills/skill-tool', 'tools/mcp', 'tools/platform-policy', 'tools/sandbox-docker',
+  ]
+  const allowedByOwner = new Map([
+    ['kernel', new Set()],
+    ['core/agent', new Set(['kernel'])],
+    ['core/session', new Set(['kernel'])],
+    ['core/tools', new Set(['kernel'])],
+    ['runtime', new Set(['kernel', 'core/agent', 'core/session', 'core/tools'])],
+    ['test-support', new Set(['kernel', 'core/agent', 'core/session', 'core/tools'])],
+    ['hosts/cli', new Set([
+      'kernel', 'core/agent', 'core/tools', 'llm/gateway', 'llm/openai-compatible',
+      'memory/memory-gateway', 'platform/platform-http', 'runtime',
+      'session/session-jsonl', 'skills/skill-filesystem', 'skills/skill-tool', 'tools/mcp',
+    ])],
   ])
-  const hostDependencies = new Map([
-    [
-      'hosts/cli',
-      new Set([
-        'domain',
-        'core/agent',
-        'llm/gateway',
-        'llm/openai-compatible',
-        'memory/memory-gateway',
-        'platform/platform-http',
-        'tools/mcp',
-        'runtime',
-        'session/session-jsonl',
-        'skills/skill-filesystem',
-        'skills/skill-tool',
-        'core/tools',
-      ]),
-    ],
-  ])
-  const adapterPackages = new Set(adapterDependencies.keys())
+  for (const path of adapters) allowedByOwner.set(path, new Set(['kernel']))
+
   const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]))
   const failures = []
-
   for (const [owner, manifest] of manifests) {
     if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`)
     const leaf = owner.split('/').at(-1)
-    if (manifest.name !== `@agent-harness/${leaf}`) failures.push(`${owner}: package name must be @agent-harness/${leaf}`)
-    const dependencies = { ...manifest.dependencies, ...manifest.peerDependencies }
+    if (manifest.name !== `@agent-harness/${leaf}`) {
+      failures.push(`${owner}: package name must be @agent-harness/${leaf}`)
+    }
+    const allowed = allowedByOwner.get(owner)
+    if (allowed === undefined) failures.push(`${owner}: package path is not classified`)
+    const dependencies = {
+      ...manifest.dependencies,
+      ...manifest.optionalDependencies,
+      ...manifest.peerDependencies,
+    }
     for (const dependency of Object.keys(dependencies)) {
-      const match = /^@agent-harness\/(.+)$/.exec(dependency)
-      if (match === null) continue
+      if (!dependency.startsWith('@agent-harness/')) continue
       const dependencyPath = packageByName.get(dependency)
       if (dependencyPath === undefined) {
         failures.push(`${owner}: unknown workspace dependency ${dependency}`)
+      } else if (allowed !== undefined && !allowed.has(dependencyPath)) {
+        failures.push(`${owner}: forbidden workspace dependency on ${dependencyPath}`)
+      }
+    }
+  }
+  for (const [owner, file, source] of sources) {
+    const allowed = allowedByOwner.get(owner)
+    for (const specifier of importedSpecifiers(source)) {
+      if (specifier.startsWith('.')) {
+        const resolved = path.normalize(path.join(path.dirname(file), specifier))
+        if (resolved === '..' || resolved.startsWith('../')) {
+          failures.push(`${owner}/${file}: relative import escapes package boundary: ${specifier}`)
+        }
         continue
       }
-      const dependencyLeaf = match[1]
-      const dependencyGroup = dependencyPath.split('/')[0]
-      const forbidden = forbiddenByLeaf[leaf]
-      if (forbidden?.has(dependencyLeaf) || forbidden?.has(dependencyGroup)) {
-        failures.push(`${owner}: forbidden dependency on ${dependencyLeaf}`)
+      if (specifier.startsWith('@agent-harness/')) {
+        const dependencyPath = packageByName.get(specifier)
+        if (dependencyPath === undefined) {
+          failures.push(`${owner}/${file}: unknown workspace import ${specifier}`)
+        } else if (allowed !== undefined && !allowed.has(dependencyPath)) {
+          failures.push(`${owner}/${file}: forbidden workspace import ${dependencyPath}`)
+        }
+        continue
       }
-      if (coreCapabilityLeaves.has(leaf) && adapterPackages.has(dependencyPath)) {
-        failures.push(`${owner}: core package must not depend on adapter ${dependencyLeaf}`)
-      }
-      if (adapterPackages.has(owner) && !adapterDependencies.get(owner)?.has(dependencyPath)) {
-        failures.push(`${owner}: adapter has forbidden dependency on ${dependencyLeaf}`)
-      }
-      if (hostDependencies.has(owner) && !hostDependencies.get(owner)?.has(dependencyPath)) {
-        failures.push(`${owner}: host has forbidden dependency on ${dependencyLeaf}`)
+      if (owner === 'kernel' || owner.startsWith('core/')) {
+        failures.push(`${owner}/${file}: protocol-neutral source cannot import ${specifier}`)
       }
     }
   }
   return failures
+}
+
+function importedSpecifiers(source) {
+  const specifiers = []
+  const sourceFile = ts.createSourceFile(
+    'source.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  )
+  visit(sourceFile)
+  return specifiers
+
+  function visit(node) {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+      && node.moduleSpecifier !== undefined
+      && ts.isStringLiteralLike(node.moduleSpecifier)
+    ) {
+      specifiers.push(node.moduleSpecifier.text)
+    } else if (
+      ts.isCallExpression(node)
+      && node.expression.kind === ts.SyntaxKind.ImportKeyword
+      && node.arguments.length === 1
+    ) {
+      const argument = node.arguments[0]
+      if (argument !== undefined && ts.isStringLiteralLike(argument)) {
+        specifiers.push(argument.text)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
 }

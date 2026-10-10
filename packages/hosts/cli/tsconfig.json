@@ -1,16 +1,48 @@
 {
   "extends": "../../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "lib", "rootDir": "src" },
-  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "outDir": "lib",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../../core/agent" },
-    { "path": "../../domain" },
-    { "path": "../../llm/openai-compatible" },
-    { "path": "../../memory/memory-gateway" },
-    { "path": "../../runtime" },
-    { "path": "../../session/session-jsonl" },
-    { "path": "../../skills/skill-filesystem" },
-    { "path": "../../skills/skill-tool" },
-    { "path": "../../core/tools" }
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../kernel"
+    },
+    {
+      "path": "../../llm/gateway"
+    },
+    {
+      "path": "../../memory/memory-gateway"
+    },
+    {
+      "path": "../../tools/mcp"
+    },
+    {
+      "path": "../../llm/openai-compatible"
+    },
+    {
+      "path": "../../platform/platform-http"
+    },
+    {
+      "path": "../../runtime"
+    },
+    {
+      "path": "../../session/session-jsonl"
+    },
+    {
+      "path": "../../skills/skill-filesystem"
+    },
+    {
+      "path": "../../skills/skill-tool"
+    },
+    {
+      "path": "../../core/tools"
+    }
   ]
 }

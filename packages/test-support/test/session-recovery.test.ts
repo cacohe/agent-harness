@@ -9,12 +9,12 @@ import {
   type StepId,
   type ToolCallId,
   type TurnId,
-} from '@agent-harness/domain'
+  SessionLifecycleCorruptionError,
+} from '@agent-harness/kernel'
 import {
   analyzeSessionLifecycle,
-  deriveModelMessages,
-  SessionLifecycleCorruptionError,
 } from '@agent-harness/session'
+import { deriveModelMessages } from '@agent-harness/agent'
 
 const sessionId = brandId<'SessionId'>('recovery-session') as SessionId
 const turnId = brandId<'TurnId'>('turn-1') as TurnId

@@ -1,4 +1,4 @@
-import type { SessionLog } from '@agent-harness/session'
+import type { SessionLog } from '@agent-harness/kernel'
 
 /** 使用独立 deadline 刷新并关闭 writer，保证两步错误都能被 Runtime 观察。 */
 export async function flushAndClose(session: SessionLog, timeoutMs: number): Promise<void> {

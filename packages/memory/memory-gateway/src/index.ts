@@ -3,9 +3,9 @@ import {
   type MemoryMatch,
   type MemoryRetriever,
   type MemorySource,
-} from '@agent-harness/agent'
-import type { JsonValue } from '@agent-harness/domain'
-import type { ToolDefinition } from '@agent-harness/tools'
+} from '@agent-harness/kernel'
+import type { JsonValue } from '@agent-harness/kernel'
+import type { ToolDefinition } from '@agent-harness/kernel'
 import { documentFileName } from './document-importer.js'
 import { boundedText, positiveInteger, utf8ByteLength } from './validation.js'
 

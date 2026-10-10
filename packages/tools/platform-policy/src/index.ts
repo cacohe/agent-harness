@@ -5,12 +5,12 @@ import {
   type JsonObject,
   type JsonValue,
   type ToolCall,
-} from '@agent-harness/domain'
+} from '@agent-harness/kernel'
 import type {
   ToolAuthorizationDecision,
   ToolExecutionContext,
   ToolExecutionPolicy,
-} from '@agent-harness/tools'
+} from '@agent-harness/kernel'
 
 /** Platform 原子领取并记账一次工具执行许可所需的稳定请求。 */
 export interface PlatformPermitRequest {

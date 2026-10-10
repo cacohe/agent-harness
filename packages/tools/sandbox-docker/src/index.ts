@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
-import { assertJsonValue, type JsonValue } from '@agent-harness/domain'
-import type { SandboxDispatcher, SandboxTask, ToolExecutionContext } from '@agent-harness/tools'
+import { assertJsonValue, type JsonValue } from '@agent-harness/kernel'
+import type { SandboxDispatcher, SandboxTask, ToolExecutionContext } from '@agent-harness/kernel'
 
 export interface DockerSandboxOptions {
   readonly image: string

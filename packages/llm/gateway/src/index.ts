@@ -1,10 +1,10 @@
-import { brandId, type JsonValue, type ToolCall, type ToolCallId } from '@agent-harness/domain'
+import { brandId, type JsonValue, type ToolCall, type ToolCallId } from '@agent-harness/kernel'
 import type {
   ModelProvider,
   ModelRequest,
   ModelStreamEvent,
   PreparedModelCall,
-} from '@agent-harness/model'
+} from '@agent-harness/kernel'
 
 /** Platform 或 Host 已解析的单个 Gateway 模型选择。 */
 export interface LlmGatewayModelSelection {

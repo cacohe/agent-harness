@@ -1,7 +1,3 @@
-import type {
-  AgentIdGenerator,
-  SettlementSignalFactory,
-} from '@agent-harness/agent'
 import {
   brandId,
   type AttemptId,
@@ -14,23 +10,23 @@ import {
   type ToolCall,
   type ToolResult,
   type TurnId,
-} from '@agent-harness/domain'
+  type AgentIdGenerator,
+  type SettlementSignalFactory,
+  type SessionLog,
+  type SessionOperationOptions,
+  type ToolCapability,
+  type ToolDefinition,
+  type ToolExecutionContext,
+} from '@agent-harness/kernel'
 import type {
   ModelProvider,
   ModelRequest,
   ModelStreamEvent,
   PreparedModelCall,
-} from '@agent-harness/model'
+} from '@agent-harness/kernel'
 import {
   InMemorySessionLog,
-  type SessionLog,
-  type SessionOperationOptions,
 } from '@agent-harness/session'
-import type {
-  ToolCapability,
-  ToolDefinition,
-  ToolExecutionContext,
-} from '@agent-harness/tools'
 
 export interface ModelScript {
   readonly events: readonly ModelStreamEvent[]

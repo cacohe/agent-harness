@@ -1,7 +1,7 @@
 import { constants } from 'node:fs'
 import { open, realpath, type FileHandle } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
-import type { SkillCatalog, SkillDescriptor } from '@agent-harness/agent'
+import type { SkillCatalog, SkillDescriptor } from '@agent-harness/kernel'
 
 const DEFAULT_MAX_SKILL_BYTES = 256 * 1024
 const MAX_FRONTMATTER_BYTES = 16 * 1024

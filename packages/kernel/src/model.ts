@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolCall } from '@agent-harness/domain'
+import type { ModelMessage, ToolCall } from './facts.js'
 
 /** 暴露给模型的工具定义 */
 export interface ModelToolDefinition {

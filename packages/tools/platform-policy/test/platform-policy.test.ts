@@ -1,4 +1,4 @@
-import { brandId, type ExecutionId, type JsonValue, type ToolCallId } from '@agent-harness/domain'
+import { brandId, type ExecutionId, type JsonValue, type ToolCallId } from '@agent-harness/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   PlatformPermitPolicy,

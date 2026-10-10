@@ -1,4 +1,4 @@
-import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/agent'
+import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/kernel'
 import { boundedText } from './validation.js'
 
 const MAX_FAILURE_CODE_BYTES = 128

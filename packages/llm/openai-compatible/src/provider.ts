@@ -4,13 +4,13 @@ import {
   type JsonObject,
   type ToolCall,
   type ToolCallId,
-} from '@agent-harness/domain'
+} from '@agent-harness/kernel'
 import type {
   ModelProvider,
   ModelRequest,
   ModelStreamEvent,
   PreparedModelCall,
-} from '@agent-harness/model'
+} from '@agent-harness/kernel'
 import {
   OpenAiCompatibleConfigurationError,
   OpenAiCompatibleHttpError,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { brandId, type ToolCallId } from '@agent-harness/domain'
+import { brandId, type ToolCallId } from '@agent-harness/kernel'
 import { ToolRegistry } from '@agent-harness/tools'
 import { createMemoryWriterTool, MemoryGatewayRetriever } from '../src/index.ts'
 

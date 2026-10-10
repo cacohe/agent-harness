@@ -11,7 +11,7 @@ import {
   type SessionId,
   type ToolCall,
   type ToolResult,
-} from '@agent-harness/domain'
+} from '@agent-harness/kernel'
 import {
   SessionAlreadyExistsError,
   SessionAlreadyOwnedError,
@@ -31,7 +31,7 @@ import {
   type SessionRepository,
   type SessionWriteLease,
   type SessionWriteLeaseProvider,
-} from '@agent-harness/session'
+} from '@agent-harness/kernel'
 import type { JsonlFile, JsonlIo, JsonlOpenFlags } from './io.js'
 
 const FORMAT_VERSION = 1

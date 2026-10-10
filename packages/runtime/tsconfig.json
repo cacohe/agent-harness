@@ -1,12 +1,24 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "lib", "rootDir": "src" },
-  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "outDir": "lib",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../domain" },
-    { "path": "../session/session" },
-    { "path": "../llm/model" },
-    { "path": "../core/tools" },
-    { "path": "../core/agent" }
+    {
+      "path": "../core/agent"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../core/session"
+    },
+    {
+      "path": "../core/tools"
+    }
   ]
 }
