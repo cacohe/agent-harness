@@ -4,5 +4,9 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./lib/index.js" },
-  "dependencies": { "@agent-harness/agent": "workspace:*" }
+  "dependencies": {
+    "@agent-harness/agent": "workspace:*",
+    "@agent-harness/domain": "workspace:*",
+    "@agent-harness/tools": "workspace:*"
+  }
 }

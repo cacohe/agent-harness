@@ -209,6 +209,86 @@ describe('CLI Host', () => {
     })
     expect(JSON.stringify(modelRequest)).toContain('相关长期记忆')
     expect(JSON.stringify(modelRequest)).toContain('用户喜欢简洁回答')
+    expect(JSON.stringify(modelRequest)).not.toContain('remember_memory')
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
+  })
+
+  it('显式启用后通过 Platform Memory Gateway 保存长期记忆', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const modelRequests: Record<string, unknown>[] = []
+    let writeRequest: Request | undefined
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'memory-write', '--message', '请记住我喜欢简洁回答'],
+      env: { TEST_KEY: 'model-secret', MEMORY_AUTHORIZATION: 'Bearer memory-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        memory: {
+          platformBaseUrl: 'https://memory.example/v1',
+          authorizationEnv: 'MEMORY_AUTHORIZATION',
+          memorySpaceId: 'personal-memory',
+          writeEnabled: true,
+        },
+      }),
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        if (request.url.endsWith('/agent/memory-searches')) {
+          return new Response('[]', { headers: { 'content-type': 'application/json' } })
+        }
+        if (request.url.endsWith('/agent/memory-statements')) {
+          writeRequest = request
+          return new Response('{"id":"preference-1"}', {
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        modelRequests.push(JSON.parse(String(init?.body)))
+        return modelRequests.length === 1
+          ? toolCallSse('remember_memory', '{"statement":"用户喜欢简洁回答"}', 'call-memory')
+          : sse('已经记住')
+      },
+    })
+    expect(code).toBe(0)
+    expect(errors).toEqual([])
+    expect(modelRequests).toHaveLength(2)
+    expect(JSON.stringify(modelRequests[0])).toContain('remember_memory')
+    expect(JSON.stringify(modelRequests[1])).toContain('preference-1')
+    expect(writeRequest?.url).toBe('https://memory.example/v1/agent/memory-statements')
+    expect(writeRequest?.headers.get('authorization')).toBe('Bearer memory-secret')
+    expect(writeRequest?.headers.get('idempotency-key')).toBeTruthy()
+    expect(await writeRequest?.json()).toMatchObject({
+      memorySpaceId: 'personal-memory',
+      statement: '用户喜欢简洁回答',
+    })
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
+  })
+
+  it('拒绝非布尔 memory.writeEnabled', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'memory-invalid', '--message', 'x'],
+      env: { TEST_KEY: 'secret', MEMORY_AUTHORIZATION: 'Bearer memory-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        memory: {
+          platformBaseUrl: 'https://memory.example/v1',
+          authorizationEnv: 'MEMORY_AUTHORIZATION',
+          memorySpaceId: 'personal-memory',
+          writeEnabled: 'yes',
+        },
+      }),
+    })
+    expect(code).toBe(1)
+    expect(output.map(line => JSON.parse(line))).toEqual([{ type: 'error', code: 'failed' }])
+    expect(errors.join('')).toContain('memory.writeEnabled 必须是布尔值')
     expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
   })
 

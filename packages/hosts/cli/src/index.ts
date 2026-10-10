@@ -10,7 +10,10 @@ import {
 } from '@agent-harness/agent'
 import { LlmGatewayModelProvider } from '@agent-harness/gateway'
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
-import { MemoryGatewayRetriever } from '@agent-harness/memory-gateway'
+import {
+  createMemoryWriterTool,
+  MemoryGatewayRetriever,
+} from '@agent-harness/memory-gateway'
 import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
@@ -106,11 +109,11 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       : await FilesystemSkillCatalog.create(config.skills, processController.signal)
     const memory = config.memory === undefined
       ? undefined
-      : createMemoryRetriever(config.memory, dependencies)
+      : createMemoryCapabilities(config.memory, dependencies)
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
       model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
-      tools: composeTools(config, mcp, skills),
+      tools: composeTools(config, mcp, skills, memory?.writerTool),
       maxSteps: config.maxSteps,
       settlementTimeoutMs: config.settlementTimeoutMs,
       runTimeoutMs: config.runTimeoutMs,
@@ -121,7 +124,7 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
         ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
         contributors: [
           ...(skills === undefined ? [] : [new EnabledSkillsContext(skills)]),
-          ...(memory === undefined ? [] : [new RetrievedMemoryContext(memory)]),
+          ...(memory === undefined ? [] : [new RetrievedMemoryContext(memory.retriever)]),
         ],
       }),
       // chat 仅展示最终回复；run/resume 保持 JSONL stream。
@@ -204,6 +207,7 @@ function composeTools(
   config: CliConfig,
   mcp: McpToolAdapter | undefined,
   skills: FilesystemSkillCatalog | undefined,
+  memoryWriter: ToolDefinition | undefined,
 ): CompositeToolCapability {
   try {
     return new CompositeToolCapability([
@@ -212,6 +216,7 @@ function composeTools(
         ...(skills === undefined || config.skills === undefined
           ? []
           : [createSkillLoaderTool(skills, { maxContentBytes: config.skills.maxSkillBytes })]),
+        ...(memoryWriter === undefined ? [] : [memoryWriter]),
       ]),
       ...(mcp === undefined ? [] : [mcp]),
     ])
@@ -250,10 +255,10 @@ function createModelProvider(
   return new LlmGatewayModelProvider({ id: config.id, modelId: config.modelId, client })
 }
 
-function createMemoryRetriever(
+function createMemoryCapabilities(
   config: NonNullable<CliConfig['memory']>,
   dependencies: CliDependencies,
-): MemoryGatewayRetriever {
+): { readonly retriever: MemoryGatewayRetriever, readonly writerTool?: ToolDefinition } {
   const authorization = requiredEnvironment(dependencies.env, config.authorizationEnv)
   const client = new PlatformHttpClient({
     baseUrl: config.platformBaseUrl,
@@ -261,11 +266,16 @@ function createMemoryRetriever(
     maxResponseBytes: config.maxResponseBytes,
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   })
-  return new MemoryGatewayRetriever({
-    memorySpaceId: config.memorySpaceId,
-    limit: config.limit,
-    client,
-  })
+  return {
+    retriever: new MemoryGatewayRetriever({
+      memorySpaceId: config.memorySpaceId,
+      limit: config.limit,
+      client,
+    }),
+    ...(config.writeEnabled
+      ? { writerTool: createMemoryWriterTool({ memorySpaceId: config.memorySpaceId, client }) }
+      : {}),
+  }
 }
 
 function requiredEnvironment(

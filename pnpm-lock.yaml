@@ -115,6 +115,12 @@ importers:
       '@agent-harness/agent':
         specifier: workspace:*
         version: link:../../core/agent
+      '@agent-harness/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@agent-harness/tools':
+        specifier: workspace:*
+        version: link:../../core/tools
 
   packages/platform/platform-http:
     dependencies:

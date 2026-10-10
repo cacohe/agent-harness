@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
-import type { MemoryGatewaySearchRequest } from '@agent-harness/memory-gateway'
+import type {
+  MemoryGatewaySearchRequest,
+  MemoryGatewayWriteRequest,
+} from '@agent-harness/memory-gateway'
 import type { ModelRequest } from '@agent-harness/model'
 
 type FetchImplementation = (input: string | URL, init?: RequestInit) => Promise<Response>
@@ -65,6 +68,7 @@ const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
 export class PlatformHttpClient {
   readonly #modelCallsEndpoint: URL
   readonly #memorySearchesEndpoint: URL
+  readonly #memoryStatementsEndpoint: URL
   readonly #toolPermitsEndpoint: URL
   readonly #authorization: string
   readonly #fetch: FetchImplementation
@@ -75,6 +79,7 @@ export class PlatformHttpClient {
     const baseUrl = parseBaseUrl(options.baseUrl)
     this.#modelCallsEndpoint = new URL('agent/model-calls', baseUrl)
     this.#memorySearchesEndpoint = new URL('agent/memory-searches', baseUrl)
+    this.#memoryStatementsEndpoint = new URL('agent/memory-statements', baseUrl)
     this.#toolPermitsEndpoint = new URL('agent/tool-permits', baseUrl)
     this.#authorization = headerValue(options.authorization, 'authorization', PlatformHttpConfigurationError)
     this.#fetch = options.fetch ?? fetch
@@ -107,20 +112,13 @@ export class PlatformHttpClient {
     signal.throwIfAborted()
     const normalized = normalizePermitRequest(request)
     const requestId = permitRequestId(normalized)
-    const response = await this.#post(
+    return this.#postJson(
       this.#toolPermitsEndpoint,
       { requestId, ...normalized },
-      'application/json',
       requestId,
+      'Platform permit 响应',
       signal,
     )
-    try {
-      requireContentType(response, 'application/json')
-      return parseJson(await readUtf8Body(response, this.#maxResponseBytes, signal), 'Platform permit 响应')
-    } catch (error) {
-      await cancelResponseBody(response)
-      throw error
-    }
   }
 
   /** 以与 MemoryGatewayClient 兼容的方法执行已绑定范围的长期记忆检索。 */
@@ -128,19 +126,40 @@ export class PlatformHttpClient {
     signal.throwIfAborted()
     const normalized = normalizeMemorySearchRequest(request)
     const requestId = this.#nextRequestId()
-    const response = await this.#post(
+    return this.#postJson(
       this.#memorySearchesEndpoint,
       { requestId, ...normalized },
-      'application/json',
       requestId,
+      'Platform memory search 响应',
       signal,
     )
+  }
+
+  /** 以与 MemoryGatewayWriterClient 兼容的方法保存一条显式长期陈述。 */
+  async writeMemory(request: MemoryGatewayWriteRequest, signal: AbortSignal): Promise<unknown> {
+    signal.throwIfAborted()
+    const normalized = normalizeMemoryWriteRequest(request)
+    const requestId = this.#nextRequestId()
+    return this.#postJson(
+      this.#memoryStatementsEndpoint,
+      { requestId, ...normalized },
+      requestId,
+      'Platform memory write 响应',
+      signal,
+    )
+  }
+
+  async #postJson(
+    endpoint: URL,
+    body: unknown,
+    requestId: string,
+    label: string,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    const response = await this.#post(endpoint, body, 'application/json', requestId, signal)
     try {
       requireContentType(response, 'application/json')
-      return parseJson(
-        await readUtf8Body(response, this.#maxResponseBytes, signal),
-        'Platform memory search 响应',
-      )
+      return parseJson(await readUtf8Body(response, this.#maxResponseBytes, signal), label)
     } catch (error) {
       await cancelResponseBody(response)
       throw error
@@ -307,6 +326,30 @@ function normalizeMemorySearchRequest(value: MemoryGatewaySearchRequest): Memory
     ),
     query: nonEmptyString(request.query, 'memorySearch.query', PlatformHttpProtocolError),
     limit: positiveSafeInteger(request.limit, 'memorySearch.limit', PlatformHttpProtocolError),
+  })
+}
+
+function normalizeMemoryWriteRequest(value: MemoryGatewayWriteRequest): MemoryGatewayWriteRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new PlatformHttpProtocolError('Platform memory write 请求必须是对象')
+  }
+  const request = value as unknown as Record<string, unknown>
+  const expected = ['memorySpaceId', 'statement']
+  const keys = Object.keys(request)
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
+    throw new PlatformHttpProtocolError('Platform memory write 请求字段无效')
+  }
+  return Object.freeze({
+    memorySpaceId: nonEmptyString(
+      request.memorySpaceId,
+      'memoryWrite.memorySpaceId',
+      PlatformHttpProtocolError,
+    ),
+    statement: nonEmptyString(
+      request.statement,
+      'memoryWrite.statement',
+      PlatformHttpProtocolError,
+    ),
   })
 }
 

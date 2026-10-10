@@ -10,10 +10,12 @@
 
 新增 `platform/platform-http` adapter，包名 `@agent-harness/platform-http`。一个显式构造的 `PlatformHttpClient` 以结构化方法同时满足 Gateway 与 Permit 的注入接口，但不导入 Runtime、Agent 或 adapter 类型。ADR 0031 在相同认证与传输边界上增加 Memory Gateway 命令；记忆组合与响应契约以该 ADR 为准。
 
-Host 显式传入 HTTPS Platform API 根路径、完整认证头、可替换 `fetch`、请求 ID 生成器和响应字节上限。client 使用两个命令端点：
+Host 显式传入 HTTPS Platform API 根路径、完整认证头、可替换 `fetch`、请求 ID 生成器和响应字节上限。初始决定定义两个命令端点：
 
 - `POST /agent/model-calls`：请求体为 `{ requestId, modelId, request }`，响应为 `application/x-ndjson`，每行是一个 Gateway 模型流事件；
 - `POST /agent/tool-permits`：请求体为 `{ requestId, ...permitRequest }`，响应为 JSON，并由既有 permit adapter 继续校验完整绑定。
+
+ADR 0031 与 ADR 0032 随后在同一传输边界增加长期记忆检索与显式陈述写入端点。
 
 每个命令带 `Idempotency-Key`。模型调用的 key 由注入生成器生成，供一次逻辑调用的传输重试复用；工具许可 key 由执行身份、授权版本、工具调用和输入摘要稳定派生。HTTP client 严格校验成功状态、Content-Type、UTF-8、NDJSON 完整行、JSON 语法和响应总字节数，并传递取消信号。
 
