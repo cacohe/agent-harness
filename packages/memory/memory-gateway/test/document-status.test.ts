@@ -5,7 +5,7 @@ import {
 } from '../src/index.ts'
 
 describe('MemoryGatewayDocumentStatusReader', () => {
-  it.each(['queued', 'indexing', 'ready'] as const)('读取并冻结 %s 状态', async status => {
+  it.each(['queued', 'indexing', 'ready', 'deleting', 'deleted'] as const)('读取并冻结 %s 状态', async status => {
     let observed: MemoryGatewayDocumentStatusRequest | undefined
     const reader = new MemoryGatewayDocumentStatusReader({
       memorySpaceId: 'space-1',

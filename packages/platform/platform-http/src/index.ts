@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type {
   MemoryGatewayDocumentImportRequest,
+  MemoryGatewayDocumentDeleteRequest,
   MemoryGatewayDocumentStatusRequest,
   MemoryGatewaySearchRequest,
   MemoryGatewayWriteRequest,
@@ -76,6 +77,7 @@ export class PlatformHttpClient {
   readonly #memorySearchesEndpoint: URL
   readonly #memoryStatementsEndpoint: URL
   readonly #documentImportsEndpoint: URL
+  readonly #documentDeletionsEndpoint: URL
   readonly #documentStatusesEndpoint: URL
   readonly #toolPermitsEndpoint: URL
   readonly #authorization: string
@@ -90,6 +92,7 @@ export class PlatformHttpClient {
     this.#memorySearchesEndpoint = new URL('agent/memory-searches', baseUrl)
     this.#memoryStatementsEndpoint = new URL('agent/memory-statements', baseUrl)
     this.#documentImportsEndpoint = new URL('agent/document-imports', baseUrl)
+    this.#documentDeletionsEndpoint = new URL('agent/document-deletions', baseUrl)
     this.#documentStatusesEndpoint = new URL('agent/document-statuses', baseUrl)
     this.#toolPermitsEndpoint = new URL('agent/tool-permits', baseUrl)
     this.#authorization = headerValue(options.authorization, 'authorization', PlatformHttpConfigurationError)
@@ -217,6 +220,23 @@ export class PlatformHttpClient {
       { requestId, ...normalized },
       requestId,
       'Platform document status 响应',
+      signal,
+    )
+  }
+
+  /** 以与 MemoryGatewayDocumentDeleteClient 兼容的方法请求删除文档。 */
+  async deleteDocument(
+    request: MemoryGatewayDocumentDeleteRequest,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    signal.throwIfAborted()
+    const normalized = normalizeDocumentIdentityRequest(request, 'delete')
+    const requestId = this.#nextRequestId()
+    return this.#postJson(
+      this.#documentDeletionsEndpoint,
+      { requestId, ...normalized },
+      requestId,
+      'Platform document deletion 响应',
       signal,
     )
   }
@@ -499,22 +519,29 @@ function normalizeDocumentImportRequest(
 function normalizeDocumentStatusRequest(
   value: MemoryGatewayDocumentStatusRequest,
 ): MemoryGatewayDocumentStatusRequest {
+  return normalizeDocumentIdentityRequest(value, 'status')
+}
+
+function normalizeDocumentIdentityRequest(
+  value: MemoryGatewayDocumentStatusRequest,
+  operation: 'delete' | 'status',
+): MemoryGatewayDocumentStatusRequest {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new PlatformHttpProtocolError('Platform document status 请求必须是对象')
+    throw new PlatformHttpProtocolError(`Platform document ${operation} 请求必须是对象`)
   }
   const request = value as unknown as Record<string, unknown>
   const expected = ['documentId', 'memorySpaceId']
   const keys = Object.keys(request)
   if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
-    throw new PlatformHttpProtocolError('Platform document status 请求字段无效')
+    throw new PlatformHttpProtocolError(`Platform document ${operation} 请求字段无效`)
   }
   return Object.freeze({
     memorySpaceId: boundedProtocolText(
       request.memorySpaceId,
       2_048,
-      'documentStatus.memorySpaceId',
+      `document${operation}.memorySpaceId`,
     ),
-    documentId: boundedProtocolText(request.documentId, 2_048, 'documentStatus.documentId'),
+    documentId: boundedProtocolText(request.documentId, 2_048, `document${operation}.documentId`),
   })
 }
 

@@ -209,6 +209,38 @@ describe('PlatformHttpClient', () => {
     expect(calls).toBe(0)
   })
 
+  it('以已绑定 memory space 和幂等 JSON 命令删除文档', async () => {
+    let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
+    const platform = client(async (input, init) => {
+      captured = { input, init }
+      return response(['{"documentId":"document-1","status":"deleting"}'])
+    })
+    await expect(platform.deleteDocument({
+      memorySpaceId: 'space-1', documentId: 'document-1',
+    }, new AbortController().signal)).resolves.toEqual({
+      documentId: 'document-1', status: 'deleting',
+    })
+    expect(captured?.input.toString()).toBe('https://platform.test/v1/agent/document-deletions')
+    const headers = captured?.init?.headers as Record<string, string>
+    expect(headers.Accept).toBe('application/json')
+    expect(headers['Idempotency-Key']).toBe('model-1')
+    expect(JSON.parse(captured?.init?.body as string)).toEqual({
+      requestId: 'model-1', memorySpaceId: 'space-1', documentId: 'document-1',
+    })
+  })
+
+  it('在发出删除请求前拒绝未知字段与空 memory space', async () => {
+    let calls = 0
+    const platform = client(async () => { calls += 1; return response(['{}']) })
+    await expect(platform.deleteDocument({
+      memorySpaceId: '', documentId: 'document-1',
+    }, new AbortController().signal)).rejects.toBeInstanceOf(PlatformHttpProtocolError)
+    await expect(platform.deleteDocument({
+      memorySpaceId: 'space', documentId: 'document-1', extra: true,
+    } as never, new AbortController().signal)).rejects.toThrow('请求字段无效')
+    expect(calls).toBe(0)
+  })
+
   it('在发出请求前限制文档 MIME 字节数', async () => {
     let calls = 0
     const platform = client(async () => { calls += 1; return response(['{}']) })
