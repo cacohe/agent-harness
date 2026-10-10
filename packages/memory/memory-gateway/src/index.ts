@@ -5,6 +5,16 @@ import {
 } from '@agent-harness/agent'
 import type { JsonValue } from '@agent-harness/domain'
 import type { ToolDefinition } from '@agent-harness/tools'
+import { boundedText, positiveInteger, utf8ByteLength } from './validation.js'
+
+export {
+  MemoryGatewayDocumentImporter,
+  type DocumentImportResult,
+  type DocumentImportSource,
+  type MemoryGatewayDocumentClient,
+  type MemoryGatewayDocumentImporterOptions,
+  type MemoryGatewayDocumentImportRequest,
+} from './document-importer.js'
 
 const MAX_MEMORY_STATEMENT_BYTES = 4_096
 
@@ -145,14 +155,6 @@ function normalizeMatches(value: unknown, limit: number): readonly MemoryMatch[]
   return Object.freeze(matches)
 }
 
-function boundedText(value: unknown, maxBytes: number, name: string): string {
-  if (typeof value !== 'string' || value.length === 0) throw new TypeError(`${name} 必须是非空字符串`)
-  if (value.length > maxBytes || utf8ByteLength(value) > maxBytes) {
-    throw new RangeError(`${name} 不能超过 ${maxBytes} UTF-8 字节`)
-  }
-  return value
-}
-
 function readMemoryStatement(input: JsonValue): string {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     throw new TypeError('remember_memory 输入必须是对象')
@@ -180,17 +182,6 @@ function normalizeWriteResponse(value: unknown): JsonValue {
   return Object.freeze({
     id: boundedText(fields.id, MEMORY_CONTEXT_LIMITS.maxFieldBytes, 'Memory Gateway 写入响应.id'),
   })
-}
-
-function utf8ByteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength
-}
-
-function positiveInteger(value: unknown, name: string): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
-    throw new TypeError(`${name} 必须是正安全整数`)
-  }
-  return value
 }
 
 function isMemoryGatewayClient(value: unknown): value is MemoryGatewayClient {

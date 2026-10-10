@@ -59,7 +59,7 @@ packages/
     openai-compatible/    OpenAI-compatible Chat Completions
     gateway/              Platform LLM Gateway adapter
   memory/
-    memory-gateway/       Platform 长期记忆 Gateway adapter
+    memory-gateway/       Platform 长期记忆与文件导入 Gateway adapter
   platform/
     platform-http/        Platform Gateway 与 Permit HTTP adapter
   tools/
