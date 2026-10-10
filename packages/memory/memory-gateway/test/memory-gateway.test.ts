@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { MemoryGatewayRetriever } from '../src/index.ts'
+import { brandId, type ToolCallId } from '@agent-harness/domain'
+import { ToolRegistry } from '@agent-harness/tools'
+import { createMemoryWriterTool, MemoryGatewayRetriever } from '../src/index.ts'
+
+const callId = brandId<'ToolCallId'>('memory-call') as ToolCallId
 
 describe('MemoryGatewayRetriever', () => {
   it('发送冻结的已选 memory space，并复制冻结检索结果', async () => {
@@ -90,5 +94,82 @@ describe('MemoryGatewayRetriever', () => {
       },
     })
     await expect(cancelled.search('query', during.signal)).rejects.toThrow('during')
+  })
+})
+
+describe('createMemoryWriterTool', () => {
+  it('保存冻结的显式陈述并只返回权威记录 ID', async () => {
+    let observed: unknown
+    const tools = new ToolRegistry([createMemoryWriterTool({
+      memorySpaceId: 'space-1',
+      client: {
+        async writeMemory(request) {
+          observed = request
+          expect(Object.isFrozen(request)).toBe(true)
+          return { id: 'memory-1' }
+        },
+      },
+    })])
+    await expect(tools.execute({
+      id: callId,
+      name: 'remember_memory',
+      input: { statement: '用户喜欢简洁回答' },
+    }, new AbortController().signal)).resolves.toEqual({
+      status: 'success', callId, output: { id: 'memory-1' },
+    })
+    expect(observed).toEqual({ memorySpaceId: 'space-1', statement: '用户喜欢简洁回答' })
+  })
+
+  it('在网络调用前拒绝未知字段、空陈述和超长陈述', async () => {
+    let writes = 0
+    const tools = new ToolRegistry([createMemoryWriterTool({
+      memorySpaceId: 'space-1',
+      client: { async writeMemory() { writes += 1; return { id: 'memory-1' } } },
+    })])
+    const signal = new AbortController().signal
+    for (const input of [
+      { statement: '偏好', extra: true },
+      { statement: '' },
+      { statement: 'x'.repeat(4_097) },
+    ]) {
+      await expect(tools.execute({ id: callId, name: 'remember_memory', input }, signal))
+        .resolves.toMatchObject({ status: 'failure' })
+    }
+    expect(writes).toBe(0)
+  })
+
+  it.each([
+    ['非对象', [], '必须是对象'],
+    ['未知字段', { id: 'memory-1', extra: true }, '只能包含 id'],
+    ['空 ID', { id: '' }, '必须是非空字符串'],
+  ])('拒绝%s写入响应', async (_name, response, message) => {
+    const tools = new ToolRegistry([createMemoryWriterTool({
+      memorySpaceId: 'space-1',
+      client: { writeMemory: async () => response },
+    })])
+    await expect(tools.execute({
+      id: callId, name: 'remember_memory', input: { statement: '偏好' },
+    }, new AbortController().signal)).resolves.toMatchObject({
+      status: 'failure', error: { message: expect.stringContaining(message) },
+    })
+  })
+
+  it('透传取消并将写入后的取消结算为 cancelled', async () => {
+    const controller = new AbortController()
+    let observedSignal: AbortSignal | undefined
+    const tools = new ToolRegistry([createMemoryWriterTool({
+      memorySpaceId: 'space-1',
+      client: {
+        async writeMemory(_request, signal) {
+          observedSignal = signal
+          controller.abort(new Error('停止写入'))
+          return { id: 'memory-1' }
+        },
+      },
+    })])
+    await expect(tools.execute({
+      id: callId, name: 'remember_memory', input: { statement: '偏好' },
+    }, controller.signal)).resolves.toEqual({ status: 'cancelled', callId, reason: '停止写入' })
+    expect(observedSignal).toBe(controller.signal)
   })
 })

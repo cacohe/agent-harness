@@ -31,6 +31,7 @@ interface MemoryConfig {
   readonly memorySpaceId: string
   readonly limit: number
   readonly maxResponseBytes: number
+  readonly writeEnabled: boolean
 }
 
 interface OpenAiCompatibleCliModelConfig {
@@ -104,7 +105,7 @@ export async function readConfig(
 function readMemoryConfig(value: unknown): MemoryConfig {
   const memory = object(value, 'memory 配置')
   exact(memory, ['platformBaseUrl', 'authorizationEnv', 'memorySpaceId'], 'memory 配置', [
-    'limit', 'maxResponseBytes',
+    'limit', 'maxResponseBytes', 'writeEnabled',
   ])
   const limit = memory.limit === undefined ? 8 : positive(memory.limit, 'memory.limit')
   if (limit > 8) throw new CliUsageError('memory.limit 不能超过 8')
@@ -116,6 +117,9 @@ function readMemoryConfig(value: unknown): MemoryConfig {
     maxResponseBytes: memory.maxResponseBytes === undefined
       ? 1_048_576
       : positive(memory.maxResponseBytes, 'memory.maxResponseBytes'),
+    writeEnabled: memory.writeEnabled === undefined
+      ? false
+      : boolean(memory.writeEnabled, 'memory.writeEnabled'),
   }
 }
 

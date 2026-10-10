@@ -110,6 +110,44 @@ describe('PlatformHttpClient', () => {
     })
   })
 
+  it('以已绑定 memory space 和幂等命令保存长期记忆陈述', async () => {
+    let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
+    const platform = client(async (input, init) => {
+      captured = { input, init }
+      return response(['{"id":"memory-1"}'])
+    })
+    await expect(platform.writeMemory({
+      memorySpaceId: 'space-1', statement: '用户喜欢简洁回答',
+    }, new AbortController().signal)).resolves.toEqual({ id: 'memory-1' })
+    expect(captured?.input.toString()).toBe('https://platform.test/v1/agent/memory-statements')
+    const headers = captured?.init?.headers as Record<string, string>
+    expect(headers.Accept).toBe('application/json')
+    expect(headers['Idempotency-Key']).toBe('model-1')
+    expect(JSON.parse(captured?.init?.body as string)).toEqual({
+      requestId: 'model-1', memorySpaceId: 'space-1', statement: '用户喜欢简洁回答',
+    })
+  })
+
+  it('拒绝无效 Memory 写入请求并在响应取消竞态释放 body', async () => {
+    const platform = client(async () => response(['{}']))
+    await expect(platform.writeMemory({
+      memorySpaceId: 'space', statement: '',
+    }, new AbortController().signal)).rejects.toBeInstanceOf(PlatformHttpProtocolError)
+
+    let cancelled = false
+    const controller = new AbortController()
+    const cancelling = client(async () => {
+      controller.abort(new Error('停止写入'))
+      return new Response(new ReadableStream<Uint8Array>({
+        cancel() { cancelled = true },
+      }), { headers: { 'Content-Type': 'application/json' } })
+    })
+    await expect(cancelling.writeMemory({
+      memorySpaceId: 'space', statement: '偏好',
+    }, controller.signal)).rejects.toThrow('停止写入')
+    expect(cancelled).toBe(true)
+  })
+
   it('拒绝无效 Memory 请求并在响应取消竞态释放 body', async () => {
     const platform = client(async () => response(['[]']))
     await expect(platform.searchMemory({

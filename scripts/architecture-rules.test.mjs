@@ -73,7 +73,13 @@ describe('架构依赖规则', () => {
     const allowed = verifyArchitecture([
       ['llm/model', manifest('model')],
       ['core/agent', manifest('agent')],
-      ['memory/memory-gateway', manifest('memory-gateway', { '@agent-harness/agent': 'workspace:*' })],
+      ['domain', manifest('domain')],
+      ['core/tools', manifest('tools')],
+      ['memory/memory-gateway', manifest('memory-gateway', {
+        '@agent-harness/agent': 'workspace:*',
+        '@agent-harness/domain': 'workspace:*',
+        '@agent-harness/tools': 'workspace:*',
+      })],
       ['platform/platform-http', manifest('platform-http', {
         '@agent-harness/model': 'workspace:*',
         '@agent-harness/memory-gateway': 'workspace:*',
