@@ -18,6 +18,16 @@ export {
   type MemoryGatewayDocumentImportRequest,
 } from './document-importer.js'
 
+export {
+  MemoryGatewayDocumentStatusReader,
+  type DocumentActiveStatus,
+  type DocumentFailedStatus,
+  type DocumentIndexStatus,
+  type MemoryGatewayDocumentStatusClient,
+  type MemoryGatewayDocumentStatusReaderOptions,
+  type MemoryGatewayDocumentStatusRequest,
+} from './document-status.js'
+
 const MAX_MEMORY_STATEMENT_BYTES = 4_096
 
 /** Host 已解析的 memory space 与一次受限检索请求。 */

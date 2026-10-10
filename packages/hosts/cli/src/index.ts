@@ -13,6 +13,7 @@ import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
 import {
   createMemoryWriterTool,
   MemoryGatewayDocumentImporter,
+  MemoryGatewayDocumentStatusReader,
   MemoryGatewayRetriever,
 } from '@agent-harness/memory-gateway'
 import { PlatformHttpClient } from '@agent-harness/platform-http'
@@ -78,6 +79,7 @@ type CliCommand =
   | { readonly mode: 'run' | 'resume', readonly configPath: string, readonly session: string, readonly message: string }
   | { readonly mode: 'chat', readonly configPath: string, readonly session: string, readonly message: string | undefined }
   | { readonly mode: 'import', readonly configPath: string, readonly filePath: string, readonly mediaType: string }
+  | { readonly mode: 'document-status', readonly configPath: string, readonly documentId: string }
 
 /** 执行一次 CLI 命令，并返回适合进程退出码的结果。 */
 export async function runCli(dependencies: CliDependencies): Promise<number> {
@@ -122,6 +124,15 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
         bytes: document.bytes,
       }, processController.signal)
       writeJson(dependencies.stdout, { type: 'document.imported', ...result })
+    } else if (command.mode === 'document-status') {
+      if (memory === undefined) {
+        throw new CliUsageError('document-status 命令要求 memory 配置')
+      }
+      const result = await memory.documentStatuses.get(
+        command.documentId,
+        processController.signal,
+      )
+      writeJson(dependencies.stdout, { type: 'document.status', ...result })
     } else {
       mcp = config.mcp === undefined
         ? undefined
@@ -282,6 +293,7 @@ function createMemoryCapabilities(
 ): {
   readonly retriever: MemoryGatewayRetriever
   readonly importer: MemoryGatewayDocumentImporter
+  readonly documentStatuses: MemoryGatewayDocumentStatusReader
   readonly writerTool?: ToolDefinition
 } {
   const authorization = requiredEnvironment(dependencies.env, config.authorizationEnv)
@@ -301,6 +313,10 @@ function createMemoryCapabilities(
     importer: new MemoryGatewayDocumentImporter({
       memorySpaceId: config.memorySpaceId,
       maxDocumentBytes: config.maxDocumentBytes,
+      client,
+    }),
+    documentStatuses: new MemoryGatewayDocumentStatusReader({
+      memorySpaceId: config.memorySpaceId,
       client,
     }),
     ...(config.writeEnabled
@@ -462,6 +478,7 @@ function createStdinLines(signal: AbortSignal): AsyncIterable<string> {
 function parseArgv(argv: readonly string[]): CliCommand {
   const [mode, ...rest] = argv
   if (mode === 'import') return parseImportCommand(rest)
+  if (mode === 'document-status') return parseDocumentStatusCommand(rest)
   if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') throw usageError()
   const values = parseOptionPairs(rest, ['--config', '--session', '--message'])
   const configPath = absoluteOption(values, '--config')
@@ -477,6 +494,15 @@ function parseArgv(argv: readonly string[]): CliCommand {
     throw new CliUsageError('run/resume 必须提供非空 --message')
   }
   return { mode, configPath, session, message }
+}
+
+function parseDocumentStatusCommand(rest: readonly string[]): CliCommand {
+  const values = parseOptionPairs(rest, ['--config', '--document'])
+  return {
+    mode: 'document-status',
+    configPath: absoluteOption(values, '--config'),
+    documentId: requiredOption(values, '--document'),
+  }
 }
 
 function parseImportCommand(rest: readonly string[]): CliCommand {
@@ -519,7 +545,8 @@ function requiredOption(values: ReadonlyMap<string, string>, name: string): stri
 function usageError(): CliUsageError {
   return new CliUsageError(
     '用法：run|resume|chat --config 绝对路径 --session ID [--message 内容]；'
-    + '或 import --config 绝对路径 --file 绝对路径 --media-type MIME',
+    + '或 import --config 绝对路径 --file 绝对路径 --media-type MIME；'
+    + '或 document-status --config 绝对路径 --document ID',
   )
 }
 
