@@ -2,9 +2,11 @@ import {
   MEMORY_CONTEXT_LIMITS,
   type MemoryMatch,
   type MemoryRetriever,
+  type MemorySource,
 } from '@agent-harness/agent'
 import type { JsonValue } from '@agent-harness/domain'
 import type { ToolDefinition } from '@agent-harness/tools'
+import { documentFileName } from './document-importer.js'
 import { boundedText, positiveInteger, utf8ByteLength } from './validation.js'
 
 export {
@@ -133,8 +135,11 @@ function normalizeMatches(value: unknown, limit: number): readonly MemoryMatch[]
     }
     const fields = candidate as Record<string, unknown>
     const keys = Object.keys(fields)
-    if (keys.length !== 2 || !keys.includes('id') || !keys.includes('content')) {
-      throw new TypeError(`Memory Gateway 结果 ${index} 只能包含 id 与 content`)
+    if ((keys.length !== 2 && keys.length !== 3)
+      || !keys.includes('id')
+      || !keys.includes('content')
+      || (keys.length === 3 && !keys.includes('source'))) {
+      throw new TypeError(`Memory Gateway 结果 ${index} 只能包含 id、content 与可选 source`)
     }
     const id = boundedText(fields.id, MEMORY_CONTEXT_LIMITS.maxFieldBytes, `Memory Gateway 结果 ${index}.id`)
     const content = boundedText(
@@ -144,7 +149,8 @@ function normalizeMatches(value: unknown, limit: number): readonly MemoryMatch[]
     )
     if (ids.has(id)) throw new TypeError(`Memory Gateway 结果 ID 重复：${id}`)
     ids.add(id)
-    return Object.freeze({ id, content })
+    const source = keys.includes('source') ? normalizeMemorySource(fields.source, index) : undefined
+    return Object.freeze(source === undefined ? { id, content } : { id, content, source })
   })
   const summary = JSON.stringify(matches).replaceAll('<', '\\u003c')
   if (utf8ByteLength(summary) > MEMORY_CONTEXT_LIMITS.maxSummaryBytes) {
@@ -153,6 +159,43 @@ function normalizeMatches(value: unknown, limit: number): readonly MemoryMatch[]
     )
   }
   return Object.freeze(matches)
+}
+
+function normalizeMemorySource(value: unknown, index: number): Readonly<MemorySource> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`Memory Gateway 结果 ${index}.source 必须是对象`)
+  }
+  const fields = value as Record<string, unknown>
+  if (fields.type === 'statement') {
+    if (Object.keys(fields).length !== 1) {
+      throw new TypeError(`Memory Gateway 结果 ${index}.source 的 statement 只能包含 type`)
+    }
+    return Object.freeze({ type: 'statement' })
+  }
+  if (fields.type !== 'document') {
+    throw new TypeError(`Memory Gateway 结果 ${index}.source.type 必须是 statement 或 document`)
+  }
+  const keys = Object.keys(fields)
+  const expected = ['chunkId', 'documentId', 'fileName', 'type']
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
+    throw new TypeError(
+      `Memory Gateway 结果 ${index}.source 的 document 只能包含 type、documentId、fileName 与 chunkId`,
+    )
+  }
+  return Object.freeze({
+    type: 'document',
+    documentId: boundedText(
+      fields.documentId,
+      MEMORY_CONTEXT_LIMITS.maxFieldBytes,
+      `Memory Gateway 结果 ${index}.source.documentId`,
+    ),
+    fileName: documentFileName(fields.fileName),
+    chunkId: boundedText(
+      fields.chunkId,
+      MEMORY_CONTEXT_LIMITS.maxFieldBytes,
+      `Memory Gateway 结果 ${index}.source.chunkId`,
+    ),
+  })
 }
 
 function readMemoryStatement(input: JsonValue): string {

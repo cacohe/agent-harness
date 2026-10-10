@@ -190,7 +190,16 @@ describe('CLI Host', () => {
         if (request.url.endsWith('/agent/memory-searches')) {
           memoryRequest = request
           return new Response(JSON.stringify([
-            { id: 'preference-1', content: '用户喜欢简洁回答' },
+            {
+              id: 'chunk-match-1',
+              content: '用户喜欢简洁回答',
+              source: {
+                type: 'document',
+                documentId: 'document-1',
+                fileName: 'preferences.md',
+                chunkId: 'chunk-1',
+              },
+            },
           ]), { headers: { 'content-type': 'application/json' } })
         }
         modelRequest = JSON.parse(String(init?.body))
@@ -209,6 +218,8 @@ describe('CLI Host', () => {
     })
     expect(JSON.stringify(modelRequest)).toContain('相关长期记忆')
     expect(JSON.stringify(modelRequest)).toContain('用户喜欢简洁回答')
+    expect(JSON.stringify(modelRequest)).toContain('preferences.md')
+    expect(JSON.stringify(modelRequest)).toContain('chunk-1')
     expect(JSON.stringify(modelRequest)).not.toContain('remember_memory')
     expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
   })

@@ -7,7 +7,16 @@ const callId = brandId<'ToolCallId'>('memory-call') as ToolCallId
 
 describe('MemoryGatewayRetriever', () => {
   it('发送冻结的已选 memory space，并复制冻结检索结果', async () => {
-    const source = [{ id: 'memory-1', content: '用户喜欢简洁回答' }]
+    const source = [{
+      id: 'memory-1',
+      content: '用户喜欢简洁回答',
+      source: {
+        type: 'document',
+        documentId: 'document-1',
+        fileName: 'preferences.md',
+        chunkId: 'chunk-1',
+      },
+    }]
     let observed: unknown
     const retriever = new MemoryGatewayRetriever({
       memorySpaceId: 'space-1',
@@ -22,17 +31,33 @@ describe('MemoryGatewayRetriever', () => {
     })
     const matches = await retriever.search('回答偏好', new AbortController().signal)
     source[0]!.content = '被事后修改'
+    source[0]!.source.fileName = '被事后修改.md'
     expect(observed).toEqual({ memorySpaceId: 'space-1', query: '回答偏好', limit: 3 })
-    expect(matches).toEqual([{ id: 'memory-1', content: '用户喜欢简洁回答' }])
+    expect(matches).toEqual([{
+      id: 'memory-1',
+      content: '用户喜欢简洁回答',
+      source: {
+        type: 'document',
+        documentId: 'document-1',
+        fileName: 'preferences.md',
+        chunkId: 'chunk-1',
+      },
+    }])
     expect(Object.isFrozen(matches)).toBe(true)
     expect(Object.isFrozen(matches[0])).toBe(true)
+    expect(Object.isFrozen(matches[0]?.source)).toBe(true)
   })
 
   it.each([
     ['非数组', {}, '必须是数组', 1],
     ['超出 limit', [{ id: '1', content: 'a' }, { id: '2', content: 'b' }], '不能超过请求 limit', 1],
-    ['未知字段', [{ id: '1', content: 'a', score: 1 }], '只能包含 id 与 content', 1],
+    ['未知字段', [{ id: '1', content: 'a', score: 1 }], '只能包含 id、content 与可选 source', 1],
     ['重复 ID', [{ id: '1', content: 'a' }, { id: '1', content: 'b' }], 'ID 重复', 2],
+    ['未知 source 类型', [{ id: '1', content: 'a', source: { type: 'web' } }], 'source.type 必须是 statement 或 document', 1],
+    ['source 多余字段', [{ id: '1', content: 'a', source: { type: 'statement', extra: true } }], 'statement 只能包含 type', 1],
+    ['document source 缺字段', [{ id: '1', content: 'a', source: { type: 'document', documentId: 'd', fileName: 'f' } }], 'document 只能包含', 1],
+    ['document source 路径文件名', [{ id: '1', content: 'a', source: { type: 'document', documentId: 'd', fileName: '../f', chunkId: 'c' } }], '必须是不含路径', 1],
+    ['显式 undefined source', [{ id: '1', content: 'a', source: undefined }], 'source 必须是对象', 1],
   ])('拒绝%s响应', async (_name, response, message, limit) => {
     const retriever = new MemoryGatewayRetriever({
       memorySpaceId: 'space-1',
@@ -54,6 +79,22 @@ describe('MemoryGatewayRetriever', () => {
     })
     await expect(retriever.search('x'.repeat(4_097), new AbortController().signal))
       .rejects.toThrow('query 不能超过 4096')
+  })
+
+  it('兼容无来源结果并规范化显式陈述来源', async () => {
+    const retriever = new MemoryGatewayRetriever({
+      memorySpaceId: 'space',
+      client: {
+        searchMemory: async () => [
+          { id: 'legacy', content: '旧协议结果' },
+          { id: 'statement', content: '显式陈述', source: { type: 'statement' } },
+        ],
+      },
+    })
+    await expect(retriever.search('query', new AbortController().signal)).resolves.toEqual([
+      { id: 'legacy', content: '旧协议结果' },
+      { id: 'statement', content: '显式陈述', source: { type: 'statement' } },
+    ])
   })
 
   it('在 adapter 边界限制 Context 的完整 JSON 摘要预算', async () => {
