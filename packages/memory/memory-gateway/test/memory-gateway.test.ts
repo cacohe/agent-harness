@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { brandId, type ToolCallId } from '@agent-harness/kernel'
-import { ToolRegistry } from '@agent-harness/tools'
+import { ToolRegistry } from '@agent-harness/tool-runtime'
 import { createMemoryWriterTool, MemoryGatewayRetriever } from '../src/index.ts'
 
 const callId = brandId<'ToolCallId'>('memory-call') as ToolCallId

@@ -1,5 +1,5 @@
 {
-  "name": "@agent-harness/session",
+  "name": "@agent-harness/tool-runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",

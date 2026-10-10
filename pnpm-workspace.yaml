@@ -1,6 +1,5 @@
 packages:
   - packages/*
-  - packages/core/*
   - packages/tools/*
   - packages/llm/*
   - packages/memory/*

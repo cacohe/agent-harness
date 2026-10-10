@@ -26,7 +26,7 @@ import type {
 } from '@agent-harness/kernel'
 import {
   InMemorySessionLog,
-} from '@agent-harness/session'
+} from '@agent-harness/session-memory'
 
 export interface ModelScript {
   readonly events: readonly ModelStreamEvent[]

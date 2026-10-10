@@ -16,7 +16,7 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 - 依赖通过构造函数或函数参数显式传入，不得引入服务定位器或进程全局运行时。
 - 模型可见状态从 append-only 会话事件日志重建。
 - `kernel` 集中定义 Agent 循环使用的协议无关概念、状态、接口、事件与错误，且不得导入其他 workspace package、文件系统、网络、进程或模型 SDK。
-- `core` 只包含核心循环实现并且只依赖 `kernel`；adapter 只包含外部能力实现并且只依赖 `kernel`。
+- `core` 是单一 Agent 核心循环 package，只依赖 `kernel`。会话、工具等非循环实现放回各自能力域；这些实现与 adapter 的生产依赖都只能指向 `kernel`。
 - Adapter 把外部系统转换为 capability 接口，并放在对应能力域目录（如 `llm/`、`session/`）。
 - Host 组合运行时并拥有进程生命周期。
 - 每个已经开始的 turn 和 step 必须在取消与失败路径上也恰好结算一次。
@@ -52,14 +52,14 @@ workspace 按能力域分组（ADR 0011）；npm 包名为 `@agent-harness/<目�
 docs/                              架构与决定
 packages/
   kernel/                          Agent 概念、状态、接口、事件与错误
-  core/
-    agent/                         Inbox、上下文组装与 Agent 状态机
-    session/                       内存会话、生命周期分析与投影
-    tools/                         工具注册、组合与治理实现
+  core/                            Inbox、上下文组装与 Agent 状态机
   llm/
     openai-compatible/             OpenAI-compatible 模型 adapter
   session/
+    session-memory/                内存会话实现
+    session-lifecycle/             会话恢复分析实现
     session-jsonl/                 JSONL 会话存储 adapter
+  tools/tool-runtime/              工具注册、组合与治理实现
   runtime/                         显式组合与生命周期
   hosts/cli/                       CLI 等进程入口
   test-support/                    确定性 fake 与 fixture

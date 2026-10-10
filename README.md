@@ -11,14 +11,15 @@
 ```text
 hosts → runtime → core → kernel
   |          |       |
-  +----------+-------+→ adapters → kernel
+  +----------+-------+→ capability implementations / adapters → kernel
 ```
 
 
 | 层次 | 目录落点 | 职责 |
 |------|----------|------|
 | Kernel | `packages/kernel` | Agent 概念、状态、接口、事件与错误 |
-| Core | `packages/core/*` | Agent、会话与工具的核心实现 |
+| Core | `packages/core` | Agent 核心循环、上下文组装与消息投影 |
+| Capability 实现 | `session/session-memory`、`session/session-lifecycle`、`tools/tool-runtime` | 会话与工具的协议无关实现 |
 | Adapter | `llm/openai-compatible`、`llm/gateway`、`platform/platform-http`、`session/session-jsonl`、`tools/mcp`、`tools/platform-policy` | 外部系统实现 |
 | 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
 | 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
@@ -49,10 +50,7 @@ input → turn/start → step/start → model stream → assistant settlement
 docs/                     架构与已接受决定（ADR）
 packages/
   kernel/                 Agent 概念、状态、接口、事件与错误
-  core/
-    agent/                Inbox、上下文组装与 Agent 状态机
-    session/              内存会话与生命周期分析
-    tools/                工具注册、组合与治理实现
+  core/                   Inbox、上下文组装与 Agent 状态机
   llm/
     openai-compatible/    OpenAI-compatible Chat Completions
     gateway/              Platform LLM Gateway adapter
@@ -61,10 +59,13 @@ packages/
   platform/
     platform-http/        Platform Gateway 与 Permit HTTP adapter
   tools/
+    tool-runtime/         工具注册、组合与治理实现
     mcp/                  MCP 工具 adapter
     platform-policy/      Platform 一次性工具许可 adapter
     sandbox-docker/       Docker OCI Sandbox dispatcher
   session/
+    session-memory/       内存会话实现
+    session-lifecycle/    会话恢复分析实现
     session-jsonl/        JSONL 会话存储 adapter
   skills/
     skill-filesystem/     受限文件系统 Skill catalog
@@ -219,26 +220,26 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 | 目标             | 落点                                                         |
 | -------------- | ---------------------------------------------------------- |
 | 领域事件 / 消息形状    | `packages/kernel`，并更新投影与恢复逻辑 |
-| 会话读写 / 恢复分析    | 接口在 `packages/kernel`，核心实现放 `packages/core/session`，持久化实现放 `packages/session/session-jsonl` |
+| 会话读写 / 恢复分析    | 接口在 `packages/kernel`，内存实现放 `session-memory`，恢复分析放 `session-lifecycle`，持久化实现放 `session-jsonl` |
 | 模型协议           | 接口在 `packages/kernel`；实现在 `packages/llm/*` |
-| 工具             | 接口在 `packages/kernel`，`ToolRegistry` 在 `packages/core/tools`；在 host/runtime 组合时注入 |
+| 工具             | 接口在 `packages/kernel`，`ToolRegistry` 在 `packages/tools/tool-runtime`；在 host/runtime 组合时注入 |
 | 工具治理         | 可选 `ToolExecutionPolicy` 在工具副作用前判定许可；每个 turn 可带冻结执行审计快照 |
-| Agent 循环 / 结算  | `packages/core/agent` |
+| Agent 循环 / 结算  | `packages/core` |
 | 组合与 resume     | `packages/runtime` |
 | 进程协议（CLI/HTTP） | `packages/hosts/*` |
 
 
-新增或替换 capability 时，可遵循 `[.agents/skills/add-capability/SKILL.md](.agents/skills/add-capability/SKILL.md)`：明确 owner / provider / consumer，协议无关契约放 `kernel`，核心实现放 `core`，外部实现放对应能力域目录，构造放 runtime 或 host；需要按 key 选择实现前不要加 registry。
+新增或替换 capability 时，可遵循 `[.agents/skills/add-capability/SKILL.md](.agents/skills/add-capability/SKILL.md)`：明确 owner / provider / consumer，协议无关契约放 `kernel`，只有 Agent 循环实现放 `core`，其他实现放对应能力域目录，构造放 runtime 或 host；需要按 key 选择实现前不要加 registry。
 
 ### 依赖方向（不可违反）
 
 ```text
 hosts → runtime → core → kernel
   |          |       |
-  +----------+-------+→ adapters → kernel
+  +----------+-------+→ capability implementations / adapters → kernel
 ```
 
-`kernel` 无 workspace 依赖。Core 与 adapter 的生产依赖都只能指向 `kernel`。修改依赖后跑 `pnpm run gate:architecture`。
+`kernel` 无 workspace 依赖。Core、能力实现与 adapter 的生产依赖都只能指向 `kernel`。修改依赖后跑 `pnpm run gate:architecture`。
 
 ### 测试约定
 

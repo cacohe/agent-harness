@@ -13,7 +13,7 @@ import {
   BoundedPromptAssembler,
   EnabledSkillsContext,
   RetrievedMemoryContext,
-} from '@agent-harness/agent'
+} from '@agent-harness/core'
 import { LlmGatewayModelProvider } from '@agent-harness/gateway'
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
 import {
@@ -32,7 +32,7 @@ import {
   CompositeToolCapability,
   DuplicateToolNameError,
   ToolRegistry,
-} from '@agent-harness/tools'
+} from '@agent-harness/tool-runtime'
 import { McpToolAdapter, type McpClient } from '@agent-harness/mcp'
 import { StdioMcpClient, type StdioMcpClientOptions } from './mcp-stdio.js'
 import { readBoundedDocumentFile } from './document-file.js'
