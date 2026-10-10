@@ -266,6 +266,78 @@ describe('CLI Host', () => {
     expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
   })
 
+  it('通过独立 import 命令上传文件且不启动 Agent Runtime', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    let uploadRequest: Request | undefined
+    let observedRead: { readonly path: string, readonly maxBytes: number, readonly signal: AbortSignal } | undefined
+    const code = await runCli({
+      argv: [
+        'import', '--config', '/config.json', '--file', '/documents/guide.txt',
+        '--media-type', 'text/plain',
+      ],
+      env: { MEMORY_AUTHORIZATION: 'Bearer memory-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        memory: {
+          platformBaseUrl: 'https://memory.example/v1',
+          authorizationEnv: 'MEMORY_AUTHORIZATION',
+          memorySpaceId: 'personal-memory',
+          maxDocumentBytes: 123,
+        },
+      }),
+      readDocumentFile: async (path, maxBytes, signal) => {
+        observedRead = { path, maxBytes, signal }
+        return { fileName: 'guide.txt', bytes: new TextEncoder().encode('hello') }
+      },
+      fetch: async (input, init) => {
+        uploadRequest = new Request(input, init)
+        return new Response('{"documentId":"document-1","status":"queued"}', {
+          headers: { 'content-type': 'application/json' },
+        })
+      },
+    })
+    expect(code).toBe(0)
+    expect(errors).toEqual([])
+    expect(observedRead).toMatchObject({ path: '/documents/guide.txt', maxBytes: 123 })
+    expect(uploadRequest?.url).toBe('https://memory.example/v1/agent/document-imports')
+    expect(uploadRequest?.headers.get('authorization')).toBe('Bearer memory-secret')
+    expect(uploadRequest?.headers.get('content-type')).toBe('text/plain')
+    expect(new TextDecoder().decode(await uploadRequest?.arrayBuffer())).toBe('hello')
+    expect(output.map(line => JSON.parse(line))).toEqual([{
+      type: 'document.imported', documentId: 'document-1', status: 'queued',
+    }])
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
+  })
+
+  it('import 要求 memory 配置和绝对文件路径', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const relative = await runCli({
+      argv: ['import', '--config', '/config.json', '--file', 'guide.txt', '--media-type', 'text/plain'],
+      env: { TEST_KEY: 'secret' }, stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) }, signals: new Signals(),
+    })
+    const missingMemory = await runCli({
+      argv: ['import', '--config', '/config.json', '--file', '/guide.txt', '--media-type', 'text/plain'],
+      env: { TEST_KEY: 'secret' }, stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) }, signals: new Signals(),
+      readFile: async () => config(sessionRoot),
+    })
+    expect(relative).toBe(1)
+    expect(missingMemory).toBe(1)
+    expect(errors.join('')).toContain('--file 必须是绝对路径')
+    expect(errors.join('')).toContain('import 命令要求 memory 配置')
+    expect(output.map(line => JSON.parse(line))).toEqual([
+      { type: 'error', code: 'failed' }, { type: 'error', code: 'failed' },
+    ])
+  })
+
   it('拒绝非布尔 memory.writeEnabled', async () => {
     const output: string[] = []
     const errors: string[] = []

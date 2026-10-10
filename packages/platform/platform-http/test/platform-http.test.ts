@@ -128,6 +128,69 @@ describe('PlatformHttpClient', () => {
     })
   })
 
+  it('以二进制 body 和安全编码元数据导入文档', async () => {
+    let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
+    const platform = client(async (input, init) => {
+      captured = { input, init }
+      return response(['{"documentId":"document-1","status":"queued"}'])
+    })
+    const bytes = encoder.encode('hello')
+    await expect(platform.importDocument({
+      memorySpaceId: 'space-1',
+      fileName: '用户指南.txt',
+      mediaType: 'text/plain',
+      bytes,
+      sizeBytes: 5,
+      contentSha256: 'sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+    }, new AbortController().signal)).resolves.toEqual({
+      documentId: 'document-1', status: 'queued',
+    })
+    bytes[0] = 0
+    expect(captured?.input.toString()).toBe('https://platform.test/v1/agent/document-imports')
+    const headers = captured?.init?.headers as Record<string, string>
+    expect(headers.Accept).toBe('application/json')
+    expect(headers.Authorization).toBe('Bearer service-token')
+    expect(headers['Content-Type']).toBe('text/plain')
+    expect(headers['Idempotency-Key']).toBe('model-1')
+    expect(JSON.parse(Buffer.from(headers['X-Agent-Document-Metadata']!, 'base64url').toString('utf8')))
+      .toEqual({
+        requestId: 'model-1',
+        memorySpaceId: 'space-1',
+        fileName: '用户指南.txt',
+        sizeBytes: 5,
+        contentSha256: 'sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+      })
+    expect(new TextDecoder().decode(captured?.init?.body as Uint8Array)).toBe('hello')
+  })
+
+  it('在发出请求前拒绝不一致文档元数据', async () => {
+    let calls = 0
+    const platform = client(async () => { calls += 1; return response(['{}']) })
+    await expect(platform.importDocument({
+      memorySpaceId: 'space',
+      fileName: 'file.txt',
+      mediaType: 'text/plain',
+      bytes: encoder.encode('hello'),
+      sizeBytes: 4,
+      contentSha256: 'sha256:invalid',
+    }, new AbortController().signal)).rejects.toThrow('sizeBytes 与 bytes 长度不一致')
+    expect(calls).toBe(0)
+  })
+
+  it('在发出请求前限制文档 MIME 字节数', async () => {
+    let calls = 0
+    const platform = client(async () => { calls += 1; return response(['{}']) })
+    await expect(platform.importDocument({
+      memorySpaceId: 'space',
+      fileName: 'file.bin',
+      mediaType: `application/${'x'.repeat(245)}`,
+      bytes: encoder.encode('hello'),
+      sizeBytes: 5,
+      contentSha256: 'sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+    }, new AbortController().signal)).rejects.toThrow('不能超过 255 UTF-8 字节')
+    expect(calls).toBe(0)
+  })
+
   it('拒绝无效 Memory 写入请求并在响应取消竞态释放 body', async () => {
     const platform = client(async () => response(['{}']))
     await expect(platform.writeMemory({
@@ -173,6 +236,7 @@ describe('PlatformHttpClient', () => {
     ['明文 HTTP 根地址', { baseUrl: 'http://platform.test/v1' }],
     ['非 HTTPS 根地址', { baseUrl: 'file:///tmp/platform' }],
     ['零响应上限', { maxResponseBytes: 0 }],
+    ['零文档上限', { maxDocumentBytes: 0 }],
     ['无效幂等键生成器', { requestIds: {} }],
   ])('拒绝%s配置', (_name, override) => {
     expect(() => new PlatformHttpClient({

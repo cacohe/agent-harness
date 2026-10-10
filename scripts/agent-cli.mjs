@@ -33,7 +33,7 @@ async function ensureLocalConfig() {
 function injectDefaultConfig(argv) {
   if (argv.includes('--config')) return [...argv]
   const mode = argv[0]
-  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') return [...argv]
+  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat' && mode !== 'import') return [...argv]
   return [mode, '--config', configPath, ...argv.slice(1)]
 }
 
@@ -56,7 +56,7 @@ async function main() {
   const argv = injectDefaultConfig(process.argv.slice(2))
   if (argv.length === 0) {
     process.stderr.write(
-      '用法：\n  pnpm agent run --session <id> --message <文本>\n  pnpm agent resume --session <id> --message <文本>\n  pnpm agent chat --session <id> [--message <文本>]\n',
+      '用法：\n  pnpm agent run --session <id> --message <文本>\n  pnpm agent resume --session <id> --message <文本>\n  pnpm agent chat --session <id> [--message <文本>]\n  pnpm agent import --file <绝对路径> --media-type <MIME>\n',
     )
     process.exitCode = 1
     return

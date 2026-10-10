@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type {
+  MemoryGatewayDocumentImportRequest,
   MemoryGatewaySearchRequest,
   MemoryGatewayWriteRequest,
 } from '@agent-harness/memory-gateway'
@@ -32,6 +33,8 @@ export interface PlatformHttpClientOptions {
   readonly requestIds?: PlatformRequestIdGenerator
   /** 单次 JSON 或 NDJSON 响应允许接收的最大 UTF-8 字节数。 */
   readonly maxResponseBytes?: number
+  /** 单次文档导入请求允许发送的最大字节数。 */
+  readonly maxDocumentBytes?: number
 }
 
 /** Platform HTTP 配置在构造阶段不满足前提时抛出。 */
@@ -58,6 +61,8 @@ export class PlatformHttpProtocolError extends Error {
 }
 
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
+const DEFAULT_MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+const MEDIA_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/
 
 /**
  * 单实例 Host 可复用的 Platform HTTP client。
@@ -69,17 +74,20 @@ export class PlatformHttpClient {
   readonly #modelCallsEndpoint: URL
   readonly #memorySearchesEndpoint: URL
   readonly #memoryStatementsEndpoint: URL
+  readonly #documentImportsEndpoint: URL
   readonly #toolPermitsEndpoint: URL
   readonly #authorization: string
   readonly #fetch: FetchImplementation
   readonly #requestIds: PlatformRequestIdGenerator
   readonly #maxResponseBytes: number
+  readonly #maxDocumentBytes: number
 
   constructor(options: PlatformHttpClientOptions) {
     const baseUrl = parseBaseUrl(options.baseUrl)
     this.#modelCallsEndpoint = new URL('agent/model-calls', baseUrl)
     this.#memorySearchesEndpoint = new URL('agent/memory-searches', baseUrl)
     this.#memoryStatementsEndpoint = new URL('agent/memory-statements', baseUrl)
+    this.#documentImportsEndpoint = new URL('agent/document-imports', baseUrl)
     this.#toolPermitsEndpoint = new URL('agent/tool-permits', baseUrl)
     this.#authorization = headerValue(options.authorization, 'authorization', PlatformHttpConfigurationError)
     this.#fetch = options.fetch ?? fetch
@@ -90,6 +98,11 @@ export class PlatformHttpClient {
     this.#maxResponseBytes = positiveSafeInteger(
       options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
       'maxResponseBytes',
+      PlatformHttpConfigurationError,
+    )
+    this.#maxDocumentBytes = positiveSafeInteger(
+      options.maxDocumentBytes ?? DEFAULT_MAX_DOCUMENT_BYTES,
+      'maxDocumentBytes',
       PlatformHttpConfigurationError,
     )
   }
@@ -149,6 +162,45 @@ export class PlatformHttpClient {
     )
   }
 
+  /** 以与 MemoryGatewayDocumentClient 兼容的方法上传一个受限文档。 */
+  async importDocument(
+    request: MemoryGatewayDocumentImportRequest,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    signal.throwIfAborted()
+    const normalized = normalizeDocumentImportRequest(request, this.#maxDocumentBytes)
+    const requestId = this.#nextRequestId()
+    const metadata = Buffer.from(JSON.stringify({
+      requestId,
+      memorySpaceId: normalized.memorySpaceId,
+      fileName: normalized.fileName,
+      sizeBytes: normalized.sizeBytes,
+      contentSha256: normalized.contentSha256,
+    }), 'utf8').toString('base64url')
+    const response = await this.#send(this.#documentImportsEndpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: this.#authorization,
+        'Content-Type': normalized.mediaType,
+        'Idempotency-Key': requestId,
+        'X-Agent-Document-Metadata': metadata,
+      },
+      body: normalized.bytes,
+      signal,
+    }, signal)
+    try {
+      requireContentType(response, 'application/json')
+      return parseJson(
+        await readUtf8Body(response, this.#maxResponseBytes, signal),
+        'Platform document import 响应',
+      )
+    } catch (error) {
+      await cancelResponseBody(response)
+      throw error
+    }
+  }
+
   async #postJson(
     endpoint: URL,
     body: unknown,
@@ -196,7 +248,7 @@ export class PlatformHttpClient {
     requestId: string,
     signal: AbortSignal,
   ): Promise<Response> {
-    const response = await this.#fetch(endpoint, {
+    return this.#send(endpoint, {
       method: 'POST',
       headers: {
         Accept: accept,
@@ -206,7 +258,11 @@ export class PlatformHttpClient {
       },
       body: JSON.stringify(body),
       signal,
-    })
+    }, signal)
+  }
+
+  async #send(endpoint: URL, init: RequestInit, signal: AbortSignal): Promise<Response> {
+    const response = await this.#fetch(endpoint, init)
     if (signal.aborted) {
       await cancelResponseBody(response)
       signal.throwIfAborted()
@@ -222,6 +278,15 @@ export class PlatformHttpClient {
   #nextRequestId(): string {
     return headerValue(this.#requestIds.next(), 'requestIds.next()', PlatformHttpProtocolError)
   }
+}
+
+interface NormalizedDocumentImportRequest {
+  readonly memorySpaceId: string
+  readonly fileName: string
+  readonly mediaType: string
+  readonly bytes: Uint8Array<ArrayBuffer>
+  readonly sizeBytes: number
+  readonly contentSha256: string
 }
 
 function parseBaseUrl(value: string): URL {
@@ -351,6 +416,72 @@ function normalizeMemoryWriteRequest(value: MemoryGatewayWriteRequest): MemoryGa
       PlatformHttpProtocolError,
     ),
   })
+}
+
+function normalizeDocumentImportRequest(
+  value: MemoryGatewayDocumentImportRequest,
+  maxDocumentBytes: number,
+): NormalizedDocumentImportRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new PlatformHttpProtocolError('Platform document import 请求必须是对象')
+  }
+  const request = value as unknown as Record<string, unknown>
+  const expected = [
+    'bytes', 'contentSha256', 'fileName', 'mediaType', 'memorySpaceId', 'sizeBytes',
+  ]
+  const keys = Object.keys(request)
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
+    throw new PlatformHttpProtocolError('Platform document import 请求字段无效')
+  }
+  const bytes = request.bytes
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+    throw new PlatformHttpProtocolError('documentImport.bytes 必须是非空 Uint8Array')
+  }
+  if (bytes.byteLength > maxDocumentBytes) {
+    throw new PlatformHttpProtocolError(`documentImport.bytes 不能超过 ${maxDocumentBytes} 字节`)
+  }
+  const sizeBytes = positiveSafeInteger(
+    request.sizeBytes,
+    'documentImport.sizeBytes',
+    PlatformHttpProtocolError,
+  )
+  if (sizeBytes !== bytes.byteLength) {
+    throw new PlatformHttpProtocolError('documentImport.sizeBytes 与 bytes 长度不一致')
+  }
+  const contentSha256 = nonEmptyString(
+    request.contentSha256,
+    'documentImport.contentSha256',
+    PlatformHttpProtocolError,
+  )
+  const copiedBytes = Uint8Array.from(bytes)
+  const expectedDigest = `sha256:${createHash('sha256').update(copiedBytes).digest('hex')}`
+  if (contentSha256 !== expectedDigest) {
+    throw new PlatformHttpProtocolError('documentImport.contentSha256 与 bytes 不一致')
+  }
+  const mediaType = boundedProtocolText(
+    request.mediaType,
+    255,
+    'documentImport.mediaType',
+  ).toLowerCase()
+  if (!MEDIA_TYPE.test(mediaType)) {
+    throw new PlatformHttpProtocolError('documentImport.mediaType 必须是规范 MIME type')
+  }
+  return Object.freeze({
+    memorySpaceId: boundedProtocolText(request.memorySpaceId, 2_048, 'documentImport.memorySpaceId'),
+    fileName: boundedProtocolText(request.fileName, 512, 'documentImport.fileName'),
+    mediaType,
+    bytes: copiedBytes,
+    sizeBytes,
+    contentSha256,
+  })
+}
+
+function boundedProtocolText(value: unknown, maxBytes: number, name: string): string {
+  const result = nonEmptyString(value, name, PlatformHttpProtocolError)
+  if (result.length > maxBytes || new TextEncoder().encode(result).byteLength > maxBytes) {
+    throw new PlatformHttpProtocolError(`${name} 不能超过 ${maxBytes} UTF-8 字节`)
+  }
+  return result
 }
 
 function headerValue<T extends Error>(value: unknown, name: string, ErrorType: new (message: string) => T): string {
