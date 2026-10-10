@@ -137,7 +137,7 @@ pnpm run build
 - `shell`（可选）：`enabled`、`cwd`（绝对路径）、`timeoutMs`、`maxOutputBytes`；控制本机 `run_shell` 工具
 - `mcp`（可选）：`command`、`args`、可选绝对 `cwd` 与 `environment` 映射；启动一个 MCP stdio server。`environment` 的键是子进程变量名，值是 Host 中保存实际值的环境变量名，避免将密钥写进配置。
 - `skills`（Linux，可选）：`root`、明确启用的 `enabled` ID 数组与可选 `maxSkillBytes`；prompt 只包含 Skill 名称、ID 和描述，模型通过 `load_skill` 工具按需读取正文。
-- `memory`（可选）：`platformBaseUrl`、`authorizationEnv`、`memorySpaceId`，以及可选 `limit`、`maxResponseBytes`、`writeEnabled`；通过 Platform HTTP 检索长期记忆并作为不可信参考上下文加入当前请求。`writeEnabled` 默认为 `false`，显式设为 `true` 后注册 `remember_memory` 工具，只用于用户明确要求长期记住的陈述。
+- `memory`（可选）：`platformBaseUrl`、`authorizationEnv`、`memorySpaceId`，以及可选 `limit`、`maxResponseBytes`、`maxDocumentBytes`、`writeEnabled`；通过 Platform HTTP 检索长期记忆并作为不可信参考上下文加入当前请求。`writeEnabled` 默认为 `false`，显式设为 `true` 后注册 `remember_memory` 工具，只用于用户明确要求长期记住的陈述。`maxDocumentBytes` 默认 10 MiB，限制独立 `import` 命令的文件读取与上传。
 
 密钥只放在环境变量 / `.env` 中，不要写进 JSON 配置。`run_shell` 默认关闭；显式启用后仍以当前用户权限执行命令，无沙箱，仅适合本地实验。
 
@@ -177,6 +177,8 @@ pnpm agent run --session demo-1 --message "你好，介绍一下你自己"
 pnpm agent resume --session demo-1 --message "继续上一次的话题"
 # chat：同一进程多轮交互（会话不存在则创建，已存在则恢复）
 pnpm agent chat --session demo-1 --message "你好"
+# import：通过 Platform Memory 配置导入文件，不创建 Agent 会话
+pnpm agent import --file /绝对路径/资料.pdf --media-type application/pdf
 ```
 
 `chat` 模式下在 stderr 提示后循环读取输入；输入 `/exit` 或 `/quit` 结束。可通过 `shell.enabled: true` 显式注册本机 `run_shell` 工具。
@@ -195,7 +197,7 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 
 ### 3. 输出约定
 
-- **stdout**：仅 JSONL（`stream` / `result` / `error`）
+- **stdout**：仅 JSONL（`stream` / `result` / `document.imported` / `error`）
 - **stderr**：usage 与不含密钥的诊断
 - **SIGINT / SIGTERM**：取消当前 run，并在 finally 中关闭资源
 

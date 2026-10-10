@@ -12,6 +12,7 @@ import { LlmGatewayModelProvider } from '@agent-harness/gateway'
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
 import {
   createMemoryWriterTool,
+  MemoryGatewayDocumentImporter,
   MemoryGatewayRetriever,
 } from '@agent-harness/memory-gateway'
 import { PlatformHttpClient } from '@agent-harness/platform-http'
@@ -27,6 +28,7 @@ import {
 } from '@agent-harness/tools'
 import { McpToolAdapter, type McpClient } from '@agent-harness/mcp'
 import { StdioMcpClient, type StdioMcpClientOptions } from './mcp-stdio.js'
+import { readBoundedDocumentFile } from './document-file.js'
 import { createShellTool } from './shell-tool.js'
 import { CliUsageError, readConfig, type CliConfig, type CliModelConfig } from './config.js'
 
@@ -49,6 +51,7 @@ export interface CliDependencies {
   readonly signals: CliSignals
   readonly readFile?: (path: string, encoding: 'utf8') => Promise<string>
   readonly fetch?: FetchImplementation
+  readonly readDocumentFile?: typeof readBoundedDocumentFile
   readonly createMcpClient?: (options: StdioMcpClientOptions) => McpClient
   /** 多轮交互的行输入；缺省时从 process.stdin 读取。 */
   readonly lines?: AsyncIterable<string>
@@ -74,6 +77,7 @@ export { createShellTool } from './shell-tool.js'
 type CliCommand =
   | { readonly mode: 'run' | 'resume', readonly configPath: string, readonly session: string, readonly message: string }
   | { readonly mode: 'chat', readonly configPath: string, readonly session: string, readonly message: string | undefined }
+  | { readonly mode: 'import', readonly configPath: string, readonly filePath: string, readonly mediaType: string }
 
 /** 执行一次 CLI 命令，并返回适合进程退出码的结果。 */
 export async function runCli(dependencies: CliDependencies): Promise<number> {
@@ -100,66 +104,83 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       dependencies.readFile ?? nodeReadFile,
       dependencies.cwd ?? process.cwd(),
     )
-    mcp = config.mcp === undefined
-      ? undefined
-      : createMcpAdapter(config, dependencies.env, dependencies.createMcpClient)
-    await mcp?.start(processController.signal)
-    const skills = config.skills === undefined
-      ? undefined
-      : await FilesystemSkillCatalog.create(config.skills, processController.signal)
     const memory = config.memory === undefined
       ? undefined
       : createMemoryCapabilities(config.memory, dependencies)
-    runtime = new AgentRuntime({
-      sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
-      model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
-      tools: composeTools(config, mcp, skills, memory?.writerTool),
-      maxSteps: config.maxSteps,
-      settlementTimeoutMs: config.settlementTimeoutMs,
-      runTimeoutMs: config.runTimeoutMs,
-      maxModelOutputBytes: config.maxModelOutputBytes,
-      maxInputBytes: config.maxInputBytes,
-      prompts: new BoundedPromptAssembler({
-        maxInputBytes: config.maxInputBytes,
-        ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
-        contributors: [
-          ...(skills === undefined ? [] : [new EnabledSkillsContext(skills)]),
-          ...(memory === undefined ? [] : [new RetrievedMemoryContext(memory.retriever)]),
-        ],
-      }),
-      // chat 仅展示最终回复；run/resume 保持 JSONL stream。
-      observers: command.mode === 'chat'
-        ? []
-        : [{ onStream: event => writeJson(dependencies.stdout, { type: 'stream', event }) }],
-    })
-    const sessionId = brandId<'SessionId'>(command.session) as SessionId
-    if (command.mode === 'chat') {
-      handle = await openChatSession(runtime, sessionId, processController.signal)
-      await runChatLoop({
-        handle,
-        firstMessage: command.message,
-        lines: dependencies.lines ?? createStdinLines(processController.signal),
-        stderr: dependencies.stderr,
-        processSignal: processController.signal,
-        beginTurn: () => {
-          turnController = new AbortController()
-          return turnController
-        },
-        endTurn: () => {
-          turnController = undefined
-        },
-      })
-    } else {
-      turnController = processController
-      handle = command.mode === 'run'
-        ? await runtime.create(sessionId, { signal: processController.signal })
-        : await runtime.resume(sessionId, { signal: processController.signal })
-      const message = await handle.agent.run({
-        id: brandId<'MessageId'>(crypto.randomUUID()) as MessageId,
-        role: 'user',
-        content: command.message,
+    if (command.mode === 'import') {
+      if (memory === undefined || config.memory === undefined) {
+        throw new CliUsageError('import 命令要求 memory 配置')
+      }
+      const document = await (dependencies.readDocumentFile ?? readBoundedDocumentFile)(
+        command.filePath,
+        config.memory.maxDocumentBytes,
+        processController.signal,
+      )
+      const result = await memory.importer.import({
+        fileName: document.fileName,
+        mediaType: command.mediaType,
+        bytes: document.bytes,
       }, processController.signal)
-      writeJson(dependencies.stdout, { type: 'result', sessionId, message })
+      writeJson(dependencies.stdout, { type: 'document.imported', ...result })
+    } else {
+      mcp = config.mcp === undefined
+        ? undefined
+        : createMcpAdapter(config, dependencies.env, dependencies.createMcpClient)
+      await mcp?.start(processController.signal)
+      const skills = config.skills === undefined
+        ? undefined
+        : await FilesystemSkillCatalog.create(config.skills, processController.signal)
+      runtime = new AgentRuntime({
+        sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
+        model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
+        tools: composeTools(config, mcp, skills, memory?.writerTool),
+        maxSteps: config.maxSteps,
+        settlementTimeoutMs: config.settlementTimeoutMs,
+        runTimeoutMs: config.runTimeoutMs,
+        maxModelOutputBytes: config.maxModelOutputBytes,
+        maxInputBytes: config.maxInputBytes,
+        prompts: new BoundedPromptAssembler({
+          maxInputBytes: config.maxInputBytes,
+          ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
+          contributors: [
+            ...(skills === undefined ? [] : [new EnabledSkillsContext(skills)]),
+            ...(memory === undefined ? [] : [new RetrievedMemoryContext(memory.retriever)]),
+          ],
+        }),
+        // chat 仅展示最终回复；run/resume 保持 JSONL stream。
+        observers: command.mode === 'chat'
+          ? []
+          : [{ onStream: event => writeJson(dependencies.stdout, { type: 'stream', event }) }],
+      })
+      const sessionId = brandId<'SessionId'>(command.session) as SessionId
+      if (command.mode === 'chat') {
+        handle = await openChatSession(runtime, sessionId, processController.signal)
+        await runChatLoop({
+          handle,
+          firstMessage: command.message,
+          lines: dependencies.lines ?? createStdinLines(processController.signal),
+          stderr: dependencies.stderr,
+          processSignal: processController.signal,
+          beginTurn: () => {
+            turnController = new AbortController()
+            return turnController
+          },
+          endTurn: () => {
+            turnController = undefined
+          },
+        })
+      } else {
+        turnController = processController
+        handle = command.mode === 'run'
+          ? await runtime.create(sessionId, { signal: processController.signal })
+          : await runtime.resume(sessionId, { signal: processController.signal })
+        const message = await handle.agent.run({
+          id: brandId<'MessageId'>(crypto.randomUUID()) as MessageId,
+          role: 'user',
+          content: command.message,
+        }, processController.signal)
+        writeJson(dependencies.stdout, { type: 'result', sessionId, message })
+      }
     }
   } catch (error) {
     failure = error
@@ -258,18 +279,28 @@ function createModelProvider(
 function createMemoryCapabilities(
   config: NonNullable<CliConfig['memory']>,
   dependencies: CliDependencies,
-): { readonly retriever: MemoryGatewayRetriever, readonly writerTool?: ToolDefinition } {
+): {
+  readonly retriever: MemoryGatewayRetriever
+  readonly importer: MemoryGatewayDocumentImporter
+  readonly writerTool?: ToolDefinition
+} {
   const authorization = requiredEnvironment(dependencies.env, config.authorizationEnv)
   const client = new PlatformHttpClient({
     baseUrl: config.platformBaseUrl,
     authorization,
     maxResponseBytes: config.maxResponseBytes,
+    maxDocumentBytes: config.maxDocumentBytes,
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   })
   return {
     retriever: new MemoryGatewayRetriever({
       memorySpaceId: config.memorySpaceId,
       limit: config.limit,
+      client,
+    }),
+    importer: new MemoryGatewayDocumentImporter({
+      memorySpaceId: config.memorySpaceId,
+      maxDocumentBytes: config.maxDocumentBytes,
       client,
     }),
     ...(config.writeEnabled
@@ -430,27 +461,12 @@ function createStdinLines(signal: AbortSignal): AsyncIterable<string> {
 
 function parseArgv(argv: readonly string[]): CliCommand {
   const [mode, ...rest] = argv
-  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') {
-    throw new CliUsageError('用法：run|resume|chat --config 绝对路径 --session ID [--message 内容]')
-  }
-  if (rest.length % 2 !== 0) throw new CliUsageError('命令参数必须成对出现')
-  const values = new Map<string, string>()
-  for (let index = 0; index < rest.length; index += 2) {
-    const key = rest[index]
-    const value = rest[index + 1]
-    if (key === undefined || value === undefined || values.has(key)) {
-      throw new CliUsageError('命令参数无效')
-    }
-    if (key !== '--config' && key !== '--session' && key !== '--message') {
-      throw new CliUsageError(`未知参数 ${key}`)
-    }
-    values.set(key, value)
-  }
-  const configPath = values.get('--config')
-  const session = values.get('--session')
+  if (mode === 'import') return parseImportCommand(rest)
+  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') throw usageError()
+  const values = parseOptionPairs(rest, ['--config', '--session', '--message'])
+  const configPath = absoluteOption(values, '--config')
+  const session = requiredOption(values, '--session')
   const message = values.get('--message')
-  if (configPath === undefined || !isAbsolute(configPath)) throw new CliUsageError('--config 必须是绝对路径')
-  if (session === undefined || session.length === 0) throw new CliUsageError('--session 必须是非空字符串')
   if (mode === 'chat') {
     if (message !== undefined && message.length === 0) {
       throw new CliUsageError('--message 若提供则不能为空')
@@ -461,6 +477,50 @@ function parseArgv(argv: readonly string[]): CliCommand {
     throw new CliUsageError('run/resume 必须提供非空 --message')
   }
   return { mode, configPath, session, message }
+}
+
+function parseImportCommand(rest: readonly string[]): CliCommand {
+  const values = parseOptionPairs(rest, ['--config', '--file', '--media-type'])
+  return {
+    mode: 'import',
+    configPath: absoluteOption(values, '--config'),
+    filePath: absoluteOption(values, '--file'),
+    mediaType: requiredOption(values, '--media-type'),
+  }
+}
+
+function parseOptionPairs(rest: readonly string[], allowed: readonly string[]): Map<string, string> {
+  if (rest.length % 2 !== 0) throw new CliUsageError('命令参数必须成对出现')
+  const values = new Map<string, string>()
+  for (let index = 0; index < rest.length; index += 2) {
+    const key = rest[index]
+    const value = rest[index + 1]
+    if (key === undefined || value === undefined || values.has(key)) {
+      throw new CliUsageError('命令参数无效')
+    }
+    if (!allowed.includes(key)) throw new CliUsageError(`未知参数 ${key}`)
+    values.set(key, value)
+  }
+  return values
+}
+
+function absoluteOption(values: ReadonlyMap<string, string>, name: string): string {
+  const value = requiredOption(values, name)
+  if (!isAbsolute(value)) throw new CliUsageError(`${name} 必须是绝对路径`)
+  return value
+}
+
+function requiredOption(values: ReadonlyMap<string, string>, name: string): string {
+  const value = values.get(name)
+  if (value === undefined || value.length === 0) throw new CliUsageError(`${name} 必须是非空字符串`)
+  return value
+}
+
+function usageError(): CliUsageError {
+  return new CliUsageError(
+    '用法：run|resume|chat --config 绝对路径 --session ID [--message 内容]；'
+    + '或 import --config 绝对路径 --file 绝对路径 --media-type MIME',
+  )
 }
 
 function writeJson(output: CliOutput, value: unknown): void { output.write(`${JSON.stringify(value)}\n`) }
