@@ -5,6 +5,7 @@
   "type": "module",
   "exports": { ".": "./lib/index.js" },
   "dependencies": {
+    "@agent-harness/memory-gateway": "workspace:*",
     "@agent-harness/model": "workspace:*"
   }
 }

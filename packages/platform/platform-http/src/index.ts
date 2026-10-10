@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import type { MemoryGatewaySearchRequest } from '@agent-harness/memory-gateway'
 import type { ModelRequest } from '@agent-harness/model'
 
 type FetchImplementation = (input: string | URL, init?: RequestInit) => Promise<Response>
@@ -58,11 +59,12 @@ const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
 /**
  * 单实例 Host 可复用的 Platform HTTP client。
  *
- * 它以结构化方法同时满足 LLM Gateway 与工具许可 adapter 的注入接口。Platform
+ * 它以结构化方法同时满足 LLM Gateway、Memory Gateway 与工具许可 adapter 的注入接口。Platform
  * 服务端必须在接收幂等请求时原子写入计费、审计与可重试 outbox；Harness 不保存账务状态。
  */
 export class PlatformHttpClient {
   readonly #modelCallsEndpoint: URL
+  readonly #memorySearchesEndpoint: URL
   readonly #toolPermitsEndpoint: URL
   readonly #authorization: string
   readonly #fetch: FetchImplementation
@@ -72,6 +74,7 @@ export class PlatformHttpClient {
   constructor(options: PlatformHttpClientOptions) {
     const baseUrl = parseBaseUrl(options.baseUrl)
     this.#modelCallsEndpoint = new URL('agent/model-calls', baseUrl)
+    this.#memorySearchesEndpoint = new URL('agent/memory-searches', baseUrl)
     this.#toolPermitsEndpoint = new URL('agent/tool-permits', baseUrl)
     this.#authorization = headerValue(options.authorization, 'authorization', PlatformHttpConfigurationError)
     this.#fetch = options.fetch ?? fetch
@@ -114,6 +117,30 @@ export class PlatformHttpClient {
     try {
       requireContentType(response, 'application/json')
       return parseJson(await readUtf8Body(response, this.#maxResponseBytes, signal), 'Platform permit 响应')
+    } catch (error) {
+      await cancelResponseBody(response)
+      throw error
+    }
+  }
+
+  /** 以与 MemoryGatewayClient 兼容的方法执行已绑定范围的长期记忆检索。 */
+  async searchMemory(request: MemoryGatewaySearchRequest, signal: AbortSignal): Promise<unknown> {
+    signal.throwIfAborted()
+    const normalized = normalizeMemorySearchRequest(request)
+    const requestId = this.#nextRequestId()
+    const response = await this.#post(
+      this.#memorySearchesEndpoint,
+      { requestId, ...normalized },
+      'application/json',
+      requestId,
+      signal,
+    )
+    try {
+      requireContentType(response, 'application/json')
+      return parseJson(
+        await readUtf8Body(response, this.#maxResponseBytes, signal),
+        'Platform memory search 响应',
+      )
     } catch (error) {
       await cancelResponseBody(response)
       throw error
@@ -259,6 +286,27 @@ function normalizePermitRequest(value: PlatformHttpPermitRequest): PlatformHttpP
     toolCallId: nonEmptyString(request.toolCallId, 'permit.toolCallId', PlatformHttpProtocolError),
     toolName: nonEmptyString(request.toolName, 'permit.toolName', PlatformHttpProtocolError),
     inputDigest: nonEmptyString(request.inputDigest, 'permit.inputDigest', PlatformHttpProtocolError),
+  })
+}
+
+function normalizeMemorySearchRequest(value: MemoryGatewaySearchRequest): MemoryGatewaySearchRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new PlatformHttpProtocolError('Platform memory search 请求必须是对象')
+  }
+  const request = value as unknown as Record<string, unknown>
+  const expected = ['limit', 'memorySpaceId', 'query']
+  const keys = Object.keys(request)
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
+    throw new PlatformHttpProtocolError('Platform memory search 请求字段无效')
+  }
+  return Object.freeze({
+    memorySpaceId: nonEmptyString(
+      request.memorySpaceId,
+      'memorySearch.memorySpaceId',
+      PlatformHttpProtocolError,
+    ),
+    query: nonEmptyString(request.query, 'memorySearch.query', PlatformHttpProtocolError),
+    limit: positiveSafeInteger(request.limit, 'memorySearch.limit', PlatformHttpProtocolError),
   })
 }
 

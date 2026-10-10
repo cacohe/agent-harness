@@ -3,9 +3,14 @@ import { readFile as nodeReadFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { brandId, isAbortError, type MessageId, type SessionId } from '@agent-harness/domain'
-import { BoundedPromptAssembler, EnabledSkillsContext } from '@agent-harness/agent'
+import {
+  BoundedPromptAssembler,
+  EnabledSkillsContext,
+  RetrievedMemoryContext,
+} from '@agent-harness/agent'
 import { LlmGatewayModelProvider } from '@agent-harness/gateway'
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
+import { MemoryGatewayRetriever } from '@agent-harness/memory-gateway'
 import { PlatformHttpClient } from '@agent-harness/platform-http'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
@@ -99,6 +104,9 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     const skills = config.skills === undefined
       ? undefined
       : await FilesystemSkillCatalog.create(config.skills, processController.signal)
+    const memory = config.memory === undefined
+      ? undefined
+      : createMemoryRetriever(config.memory, dependencies)
     runtime = new AgentRuntime({
       sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
       model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
@@ -111,7 +119,10 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       prompts: new BoundedPromptAssembler({
         maxInputBytes: config.maxInputBytes,
         ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
-        ...(skills === undefined ? {} : { contributors: [new EnabledSkillsContext(skills)] }),
+        contributors: [
+          ...(skills === undefined ? [] : [new EnabledSkillsContext(skills)]),
+          ...(memory === undefined ? [] : [new RetrievedMemoryContext(memory)]),
+        ],
       }),
       // chat 仅展示最终回复；run/resume 保持 JSONL stream。
       observers: command.mode === 'chat'
@@ -237,6 +248,24 @@ function createModelProvider(
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   })
   return new LlmGatewayModelProvider({ id: config.id, modelId: config.modelId, client })
+}
+
+function createMemoryRetriever(
+  config: NonNullable<CliConfig['memory']>,
+  dependencies: CliDependencies,
+): MemoryGatewayRetriever {
+  const authorization = requiredEnvironment(dependencies.env, config.authorizationEnv)
+  const client = new PlatformHttpClient({
+    baseUrl: config.platformBaseUrl,
+    authorization,
+    maxResponseBytes: config.maxResponseBytes,
+    ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
+  })
+  return new MemoryGatewayRetriever({
+    memorySpaceId: config.memorySpaceId,
+    limit: config.limit,
+    client,
+  })
 }
 
 function requiredEnvironment(

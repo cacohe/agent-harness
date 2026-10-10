@@ -164,6 +164,54 @@ describe('CLI Host', () => {
     expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('platform-secret')
   })
 
+  it('通过 Platform Memory Gateway 检索长期记忆并注入当前模型步骤', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    let memoryRequest: Request | undefined
+    let modelRequest: Record<string, unknown> | undefined
+    const code = await runCli({
+      argv: ['run', '--config', '/config.json', '--session', 'memory-1', '--message', '如何回答我？'],
+      env: { TEST_KEY: 'model-secret', MEMORY_AUTHORIZATION: 'Bearer memory-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        memory: {
+          platformBaseUrl: 'https://memory.example/v1',
+          authorizationEnv: 'MEMORY_AUTHORIZATION',
+          memorySpaceId: 'personal-memory',
+          limit: 4,
+        },
+      }),
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        if (request.url.endsWith('/agent/memory-searches')) {
+          memoryRequest = request
+          return new Response(JSON.stringify([
+            { id: 'preference-1', content: '用户喜欢简洁回答' },
+          ]), { headers: { 'content-type': 'application/json' } })
+        }
+        modelRequest = JSON.parse(String(init?.body))
+        return sse('明白')
+      },
+    })
+    expect(code).toBe(0)
+    expect(errors).toEqual([])
+    expect(memoryRequest?.url).toBe('https://memory.example/v1/agent/memory-searches')
+    expect(memoryRequest?.headers.get('authorization')).toBe('Bearer memory-secret')
+    expect(memoryRequest?.headers.get('idempotency-key')).toBeTruthy()
+    expect(await memoryRequest?.json()).toMatchObject({
+      memorySpaceId: 'personal-memory',
+      query: '如何回答我？',
+      limit: 4,
+    })
+    expect(JSON.stringify(modelRequest)).toContain('相关长期记忆')
+    expect(JSON.stringify(modelRequest)).toContain('用户喜欢简洁回答')
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
+  })
+
   it('将参数和密钥失败写为不含密钥的 JSONL error', async () => {
     const output: string[] = []; const errors: string[] = []
     const relative = await runCli({ argv: ['run', '--config', 'config.json', '--session', 's', '--message', 'x'], env: { TEST_KEY: 'top-secret' }, stdout: { write: value => output.push(value) }, stderr: { write: value => errors.push(value) }, signals: new Signals() })

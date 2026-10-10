@@ -25,6 +25,14 @@ interface SkillsConfig {
   readonly maxSkillBytes: number
 }
 
+interface MemoryConfig {
+  readonly platformBaseUrl: string
+  readonly authorizationEnv: string
+  readonly memorySpaceId: string
+  readonly limit: number
+  readonly maxResponseBytes: number
+}
+
 interface OpenAiCompatibleCliModelConfig {
   readonly id: string
   readonly baseUrl: string
@@ -53,6 +61,7 @@ export interface CliConfig {
   readonly shell: ShellConfig
   readonly mcp?: McpConfig
   readonly skills?: SkillsConfig
+  readonly memory?: MemoryConfig
 }
 
 /** 读取并严格校验 CLI 配置文件。 */
@@ -69,7 +78,7 @@ export async function readConfig(
   }
   const root = object(value, '配置')
   exact(root, ['sessionRoot', 'maxSteps', 'settlementTimeoutMs', 'model'], '配置', [
-    'shell', 'mcp', 'skills', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
+    'shell', 'mcp', 'skills', 'memory', 'runTimeoutMs', 'maxModelOutputBytes', 'maxInputBytes', 'systemPrompt',
   ])
   const model = object(root.model, 'model 配置')
   const sessionRoot = text(root.sessionRoot, 'sessionRoot')
@@ -88,6 +97,25 @@ export async function readConfig(
     shell: readShellConfig(root.shell, defaultCwd),
     ...(root.mcp === undefined ? {} : { mcp: readMcpConfig(root.mcp) }),
     ...(root.skills === undefined ? {} : { skills: readSkillsConfig(root.skills) }),
+    ...(root.memory === undefined ? {} : { memory: readMemoryConfig(root.memory) }),
+  }
+}
+
+function readMemoryConfig(value: unknown): MemoryConfig {
+  const memory = object(value, 'memory 配置')
+  exact(memory, ['platformBaseUrl', 'authorizationEnv', 'memorySpaceId'], 'memory 配置', [
+    'limit', 'maxResponseBytes',
+  ])
+  const limit = memory.limit === undefined ? 8 : positive(memory.limit, 'memory.limit')
+  if (limit > 8) throw new CliUsageError('memory.limit 不能超过 8')
+  return {
+    platformBaseUrl: text(memory.platformBaseUrl, 'memory.platformBaseUrl'),
+    authorizationEnv: environmentName(memory.authorizationEnv, 'memory.authorizationEnv'),
+    memorySpaceId: text(memory.memorySpaceId, 'memory.memorySpaceId'),
+    limit,
+    maxResponseBytes: memory.maxResponseBytes === undefined
+      ? 1_048_576
+      : positive(memory.maxResponseBytes, 'memory.maxResponseBytes'),
   }
 }
 

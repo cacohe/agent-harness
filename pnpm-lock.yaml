@@ -58,6 +58,9 @@ importers:
       '@agent-harness/mcp':
         specifier: workspace:*
         version: link:../../tools/mcp
+      '@agent-harness/memory-gateway':
+        specifier: workspace:*
+        version: link:../../memory/memory-gateway
       '@agent-harness/openai-compatible':
         specifier: workspace:*
         version: link:../../llm/openai-compatible
@@ -115,6 +118,9 @@ importers:
 
   packages/platform/platform-http:
     dependencies:
+      '@agent-harness/memory-gateway':
+        specifier: workspace:*
+        version: link:../../memory/memory-gateway
       '@agent-harness/model':
         specifier: workspace:*
         version: link:../../llm/model
