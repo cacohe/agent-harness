@@ -27,7 +27,7 @@ packages/
     openai-compatible/         Chat Completions adapter
     gateway/                   Platform LLM Gateway adapter
   memory/
-    memory-gateway/            Platform 长期记忆 Gateway adapter
+    memory-gateway/            Platform 长期记忆与文件导入 Gateway adapter
   platform/
     platform-http/             Platform Gateway 与 Permit HTTP adapter
   session/
@@ -111,7 +111,7 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 
 `llm/gateway` 让 Host 或 Platform 把一个已经解析、已授权的模型选择注入为单个 `ModelProvider`。Gateway client 拥有身份、密钥、模型授权、调用协议与计费；adapter 只严格校验 Gateway 流并转换为模型 capability 事件。工具输入在复制前限制规范 JSON 字节数和嵌套深度，避免不可信流绕过 Runtime 后续的输出预算。Runtime 不包含模型 registry、租户或计费逻辑，用户输入也不能在运行中选择任意模型。
 
-`memory/memory-gateway` 让 Host 或 Platform 把一个已解析、已授权的 memory space 注入为单个 `MemoryRetriever`。Gateway client 拥有认证、租户、PG/Qdrant/OSS 组合、检索协议与计费；adapter 限制查询和结果并严格转换为 `MemoryMatch`。同一 adapter 可以提供默认关闭的 `remember_memory` function tool，只将用户明确要求保存的有界陈述交给 Platform，并严格校验返回的权威记录 ID。Runtime 不包含 memory registry、租户或向量数据库逻辑，用户输入不能切换 memory space。
+`memory/memory-gateway` 让 Host 或 Platform 把一个已解析、已授权的 memory space 注入为单个 `MemoryRetriever`。Gateway client 拥有认证、租户、PG/Qdrant/OSS 组合、检索协议与计费；adapter 限制查询和结果并严格转换为 `MemoryMatch`。同一 adapter 可以提供默认关闭的 `remember_memory` function tool，只将用户明确要求保存的有界陈述交给 Platform，并严格校验返回的权威记录 ID。它还提供独立于 Agent loop 的 `MemoryGatewayDocumentImporter`：Host 提交受限文件名、MIME type 和完整字节，adapter 复制字节并附加大小与 SHA-256，Platform 负责 OSS、PG 元数据以及分块向量索引。Runtime 不包含 memory registry、租户或向量数据库逻辑，用户输入不能切换 memory space。
 
 `platform/platform-http` 为单实例 Host 实现 Gateway、Memory 与 Permit 的 HTTPS Platform HTTP 命令协议。它向模型调用发送 NDJSON 流命令，向长期记忆检索、显式记忆写入与工具许可发送 JSON 命令，并使用幂等键、响应大小限制、严格 Content-Type/UTF-8/JSON 校验与取消传播保护网络边界；任何未完整读取的响应 body 都会取消。Platform 服务端必须把计费、审计和可靠 outbox 作为命令处理事务的一部分；记忆写入在 PG 事务中提交权威记录与向量索引 outbox，Qdrant consumer 再按权威 ID 幂等写入整条陈述向量。Harness observer 只用于观测和对账。CLI 可以独立配置 Platform 模型和 Platform Memory；它不创建工具许可策略，因为本地 CLI 没有 Platform 冻结的执行身份。
 
