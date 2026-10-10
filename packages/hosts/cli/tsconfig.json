@@ -6,6 +6,7 @@
     { "path": "../../core/agent" },
     { "path": "../../domain" },
     { "path": "../../llm/openai-compatible" },
+    { "path": "../../memory/memory-gateway" },
     { "path": "../../runtime" },
     { "path": "../../session/session-jsonl" },
     { "path": "../../skills/skill-filesystem" },

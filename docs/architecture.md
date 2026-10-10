@@ -113,7 +113,7 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 
 `memory/memory-gateway` 让 Host 或 Platform 把一个已解析、已授权的 memory space 注入为单个 `MemoryRetriever`。Gateway client 拥有认证、租户、PG/Qdrant/OSS 组合、检索协议与计费；adapter 限制查询和结果并严格转换为 `MemoryMatch`。Runtime 不包含 memory registry、租户或向量数据库逻辑，用户输入不能切换 memory space。
 
-`platform/platform-http` 为单实例 Host 实现 Gateway 与 Permit 的 HTTPS Platform HTTP 命令协议。它向模型调用发送 NDJSON 流命令，向工具许可发送 JSON 命令，并使用幂等键、响应大小限制、严格 Content-Type/UTF-8/JSON 校验与取消传播保护网络边界；任何未完整读取的响应 body 都会取消。Platform 服务端必须把计费、审计和可靠 outbox 作为命令处理事务的一部分；Harness observer 只用于观测和对账。CLI 可以通过 `platformBaseUrl`、`modelId` 与认证环境变量把同一 client 注入 Gateway provider；它不创建工具许可策略，因为本地 CLI 没有 Platform 冻结的执行身份。
+`platform/platform-http` 为单实例 Host 实现 Gateway、Memory 与 Permit 的 HTTPS Platform HTTP 命令协议。它向模型调用发送 NDJSON 流命令，向长期记忆检索与工具许可发送 JSON 命令，并使用幂等键、响应大小限制、严格 Content-Type/UTF-8/JSON 校验与取消传播保护网络边界；任何未完整读取的响应 body 都会取消。Platform 服务端必须把计费、审计和可靠 outbox 作为命令处理事务的一部分；Harness observer 只用于观测和对账。CLI 可以独立配置 Platform 模型和 Platform Memory；它不创建工具许可策略，因为本地 CLI 没有 Platform 冻结的执行身份。
 
 `hosts/cli` 是单进程 JSON 配置入口。它接受绝对 `--config` 路径及 `run`、`resume`、`chat`、`--session`、可选 `--message` 参数，显式组合 JSONL repository、OpenAI-compatible provider、可选 `run_shell` 工具和 Runtime。`runTimeoutMs`、`maxModelOutputBytes` 和 `maxInputBytes` 分别限制一个 turn 的协作式执行期限、模型输出与输入上下文；超时按取消路径结算。所有 provider 与工具都必须响应传入的 `AbortSignal`；不受进程隔离的任意第三方实现无法获得硬超时保证。shell 默认不注册，显式启用时只继承最小环境，并在 Unix 中终止整个进程组；它仍仅适合本地实验 Host，不以沙箱为安全边界。
 

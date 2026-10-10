@@ -90,6 +90,46 @@ describe('PlatformHttpClient', () => {
     expect(JSON.parse(captured?.init?.body as string)).toMatchObject({ ...permit, requestId: headers['Idempotency-Key'] })
   })
 
+  it('以已绑定 memory space 和 JSON 命令调用长期记忆检索', async () => {
+    let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
+    const platform = client(async (input, init) => {
+      captured = { input, init }
+      return response(['[{"id":"memory-1","content":"偏好简洁回答"}]'])
+    })
+    await expect(platform.searchMemory({
+      memorySpaceId: 'space-1', query: '回答偏好', limit: 4,
+    }, new AbortController().signal)).resolves.toEqual([
+      { id: 'memory-1', content: '偏好简洁回答' },
+    ])
+    expect(captured?.input.toString()).toBe('https://platform.test/v1/agent/memory-searches')
+    const headers = captured?.init?.headers as Record<string, string>
+    expect(headers.Accept).toBe('application/json')
+    expect(headers['Idempotency-Key']).toBe('model-1')
+    expect(JSON.parse(captured?.init?.body as string)).toEqual({
+      requestId: 'model-1', memorySpaceId: 'space-1', query: '回答偏好', limit: 4,
+    })
+  })
+
+  it('拒绝无效 Memory 请求并在响应取消竞态释放 body', async () => {
+    const platform = client(async () => response(['[]']))
+    await expect(platform.searchMemory({
+      memorySpaceId: '', query: 'q', limit: 1,
+    }, new AbortController().signal)).rejects.toBeInstanceOf(PlatformHttpProtocolError)
+
+    let cancelled = false
+    const controller = new AbortController()
+    const cancelling = client(async () => {
+      controller.abort(new Error('停止检索'))
+      return new Response(new ReadableStream<Uint8Array>({
+        cancel() { cancelled = true },
+      }), { headers: { 'Content-Type': 'application/json' } })
+    })
+    await expect(cancelling.searchMemory({
+      memorySpaceId: 'space', query: 'q', limit: 1,
+    }, controller.signal)).rejects.toThrow('停止检索')
+    expect(cancelled).toBe(true)
+  })
+
   it.each([
     ['空认证', { authorization: '' }],
     ['明文 HTTP 根地址', { baseUrl: 'http://platform.test/v1' }],

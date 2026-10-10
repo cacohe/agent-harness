@@ -8,7 +8,7 @@
 
 ## 决策
 
-新增 `platform/platform-http` adapter，包名 `@agent-harness/platform-http`。一个显式构造的 `PlatformHttpClient` 以结构化方法同时满足 Gateway 与 Permit 的注入接口，但不导入 Runtime、Agent 或 adapter 类型。
+新增 `platform/platform-http` adapter，包名 `@agent-harness/platform-http`。一个显式构造的 `PlatformHttpClient` 以结构化方法同时满足 Gateway 与 Permit 的注入接口，但不导入 Runtime、Agent 或 adapter 类型。ADR 0031 在相同认证与传输边界上增加 Memory Gateway 命令；记忆组合与响应契约以该 ADR 为准。
 
 Host 显式传入 HTTPS Platform API 根路径、完整认证头、可替换 `fetch`、请求 ID 生成器和响应字节上限。client 使用两个命令端点：
 
