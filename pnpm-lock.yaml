@@ -20,41 +20,33 @@ importers:
 
   packages/core/agent:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/model':
+        version: link:../../kernel
+
+  packages/core/session:
+    dependencies:
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../llm/model
-      '@agent-harness/session':
-        specifier: workspace:*
-        version: link:../../session/session
-      '@agent-harness/tools':
-        specifier: workspace:*
-        version: link:../tools
+        version: link:../../kernel
 
   packages/core/tools:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../../llm/model
-
-  packages/domain: {}
+        version: link:../../kernel
 
   packages/hosts/cli:
     dependencies:
       '@agent-harness/agent':
         specifier: workspace:*
         version: link:../../core/agent
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../../domain
       '@agent-harness/gateway':
         specifier: workspace:*
         version: link:../../llm/gateway
+      '@agent-harness/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
       '@agent-harness/mcp':
         specifier: workspace:*
         version: link:../../tools/mcp
@@ -86,65 +78,47 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
 
+  packages/kernel: {}
+
   packages/llm/gateway:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../model
-
-  packages/llm/model:
-    dependencies:
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../../domain
+        version: link:../../kernel
 
   packages/llm/openai-compatible:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../model
+        version: link:../../kernel
 
   packages/memory/memory-gateway:
     dependencies:
-      '@agent-harness/agent':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../core/agent
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../../domain
+        version: link:../../kernel
+    devDependencies:
       '@agent-harness/tools':
         specifier: workspace:*
         version: link:../../core/tools
 
   packages/platform/platform-http:
     dependencies:
-      '@agent-harness/memory-gateway':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../memory/memory-gateway
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../../llm/model
+        version: link:../../kernel
 
   packages/runtime:
     dependencies:
       '@agent-harness/agent':
         specifier: workspace:*
         version: link:../core/agent
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../llm/model
+        version: link:../kernel
       '@agent-harness/session':
         specifier: workspace:*
-        version: link:../session/session
+        version: link:../core/session
       '@agent-harness/tools':
         specifier: workspace:*
         version: link:../core/tools
@@ -156,35 +130,24 @@ importers:
         specifier: workspace:*
         version: link:../test-support
 
-  packages/session/session:
-    dependencies:
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../../domain
-
   packages/session/session-jsonl:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/session':
-        specifier: workspace:*
-        version: link:../session
+        version: link:../../kernel
 
   packages/skills/skill-filesystem:
     dependencies:
-      '@agent-harness/agent':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../core/agent
+        version: link:../../kernel
 
   packages/skills/skill-tool:
     dependencies:
-      '@agent-harness/agent':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../core/agent
-      '@agent-harness/domain':
-        specifier: workspace:*
-        version: link:../../domain
+        version: link:../../kernel
+    devDependencies:
       '@agent-harness/tools':
         specifier: workspace:*
         version: link:../../core/tools
@@ -194,48 +157,33 @@ importers:
       '@agent-harness/agent':
         specifier: workspace:*
         version: link:../core/agent
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../llm/model
+        version: link:../kernel
       '@agent-harness/session':
         specifier: workspace:*
-        version: link:../session/session
+        version: link:../core/session
       '@agent-harness/tools':
         specifier: workspace:*
         version: link:../core/tools
 
   packages/tools/mcp:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/model':
-        specifier: workspace:*
-        version: link:../../llm/model
-      '@agent-harness/tools':
-        specifier: workspace:*
-        version: link:../../core/tools
+        version: link:../../kernel
 
   packages/tools/platform-policy:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/tools':
-        specifier: workspace:*
-        version: link:../../core/tools
+        version: link:../../kernel
 
   packages/tools/sandbox-docker:
     dependencies:
-      '@agent-harness/domain':
+      '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../domain
-      '@agent-harness/tools':
-        specifier: workspace:*
-        version: link:../../core/tools
+        version: link:../../kernel
 
 packages:
 

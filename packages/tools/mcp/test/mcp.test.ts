@@ -1,4 +1,4 @@
-import { brandId, type ToolCallId } from '@agent-harness/domain'
+import { brandId, type ToolCallId } from '@agent-harness/kernel'
 import { describe, expect, it } from 'vitest'
 import { McpToolAdapter, McpToolsNotStartedError, type McpClient } from '../src/index.ts'
 

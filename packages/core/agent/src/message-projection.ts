@@ -3,7 +3,7 @@ import {
   type EventEnvelope,
   type ModelMessage,
   type ToolMessage,
-} from '@agent-harness/domain'
+} from '@agent-harness/kernel'
 
 /** 从持久事件中重建下一次模型请求可见的完整消息历史。 */
 export function deriveModelMessages(

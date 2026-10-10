@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./lib/index.js" },
+  "exports": {
+    ".": "./lib/index.js"
+  },
   "dependencies": {
-    "@agent-harness/memory-gateway": "workspace:*",
-    "@agent-harness/model": "workspace:*"
+    "@agent-harness/kernel": "workspace:*"
   }
 }

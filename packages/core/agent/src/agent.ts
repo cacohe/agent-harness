@@ -21,136 +21,36 @@ import {
   type TurnOutcome,
   type UserMessage,
   type ExecutionMetadata,
-} from '@agent-harness/domain'
-import type {
-  ModelProvider,
-  ModelStreamEvent,
-} from '@agent-harness/model'
-import type { SessionLog } from '@agent-harness/session'
-import { executeWithContext, type ToolCapability } from '@agent-harness/tools'
-import {
-  BoundedPromptAssembler,
+  AgentClosedError,
+  AgentIdCollisionError,
+  SettlementPersistenceError,
+  type AgentExecutionEvent,
+  type AgentIdGenerator,
+  type AgentIdReservationSeed,
+  type AgentObserver,
+  type AgentOptions,
+  type AgentPhase,
+  type AgentRunOptions,
+  type ModelProvider,
+  type ModelStreamEvent,
   type PromptAssembler,
-} from './context.js'
-
-/** Agent 对外可见的阶段：空闲，或正在执行某个 turn/step。 */
-export type AgentPhase =
-  | { readonly kind: 'idle' }
-  | {
-      readonly kind: 'running'
-      readonly turnId: TurnId
-      readonly stepId?: StepId
-    }
-
-/** 为 turn、step、attempt、message 生成新标识符；冲突检查由 Agent 统一 reservation 负责。 */
-export interface AgentIdGenerator {
-  turn(): TurnId
-  step(): StepId
-  attempt(): AttemptId
-  message(): MessageId
-}
-
-/** 接收瞬态模型流事件；失败不得影响 Agent 生命周期。 */
-export interface AgentObserver {
-  onStream?(event: ModelStreamEvent): void | Promise<void>
-  onExecution?(event: AgentExecutionEvent): void | Promise<void>
-}
-
-/** 为审计、指标与计费 adapter 提供的结构化执行通知。 */
-export type AgentExecutionEvent =
-  | { readonly type: 'session.event', readonly envelope: EventEnvelope }
-  | {
-    readonly type: 'model.usage'
-    readonly sessionId: SessionId
-    readonly turnId: TurnId
-    readonly stepId: StepId
-    readonly attemptId: AttemptId
-    /** 在该 attempt 内从一开始递增的 usage 报告序号。 */
-    readonly usageSequence: number
-    /** 相对上一条累计 usage 的输入 token 增量。 */
-    readonly inputTokensDelta: number
-    /** 相对上一条累计 usage 的输出 token 增量。 */
-    readonly outputTokensDelta: number
-  }
-
-/** 为当前 run 的结算链创建新信号；Agent 对一条链只调用一次。 */
-export interface SettlementSignalFactory {
-  create(): AbortSignal
-}
-
-/** 初始化 Agent 实例内统一标识符 reservation 的不可变快照。 */
-export interface AgentIdReservationSeed {
-  readonly turnIds: readonly TurnId[]
-  readonly stepIds: readonly StepId[]
-  readonly attemptIds: readonly AttemptId[]
-  readonly messageIds: readonly MessageId[]
-  readonly toolCallIds: readonly ToolCallId[]
-}
-
-/** 构造 Agent 所需的全部显式依赖与运行限制。 */
-export interface AgentOptions {
-  readonly model: ModelProvider
-  readonly session: SessionLog
-  readonly tools: ToolCapability
-  readonly ids: AgentIdGenerator
-  readonly maxSteps: number
-  readonly settlementSignals: SettlementSignalFactory
-  readonly prompts?: PromptAssembler
-  readonly runTimeoutMs?: number
-  readonly maxModelOutputBytes?: number
-  readonly observers?: readonly AgentObserver[]
-  /** 初始化恢复历史已经占用的各类 ID；Agent 会继续保留实时 reservation。 */
-  readonly reservedIds?: AgentIdReservationSeed
-}
-
-/** 一次 turn 的调用选项；执行上下文只在本次 run 内有效。 */
-export interface AgentRunOptions {
-  readonly signal?: AbortSignal
-  readonly execution?: ExecutionMetadata
-}
-
-/** 表示 Agent 已停止接纳新的 run。 */
-export class AgentClosedError extends Error {
-  override readonly name = 'AgentClosedError'
-}
-
-/** 表示实时路径准备持久化的 ID 已在历史或当前 Agent 中占用。 */
-export class AgentIdCollisionError extends Error {
-  override readonly name = 'AgentIdCollisionError'
-  readonly kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall'
-  readonly value: string
-
-  constructor(
-    kind: 'turn' | 'step' | 'attempt' | 'message' | 'toolCall',
-    value: string,
-  ) {
-    super(`${kind} 标识符与会话历史或当前 Agent 已保留的值冲突：${value}`)
-    this.kind = kind
-    this.value = value
-  }
-}
+  type SessionLog,
+  type SettlementSignalFactory,
+  type ToolCapability,
+} from '@agent-harness/kernel'
+import { BoundedPromptAssembler } from './context.js'
 
 type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>
 
-/** 同时保留原始运行结果和 terminal settlement 持久化失败。 */
-export class SettlementPersistenceError extends Error {
-  readonly originalError: unknown
-  readonly persistenceError: unknown
-  readonly outcome: RuntimeFailureOutcome
-
-  constructor(
-    originalError: unknown,
-    persistenceError: unknown,
-    outcome: RuntimeFailureOutcome,
-  ) {
-    super(`failed to persist ${outcome} terminal settlement`, {
-      cause: persistenceError,
-    })
-    this.name = 'SettlementPersistenceError'
-    this.originalError = originalError
-    this.persistenceError = persistenceError
-    this.outcome = outcome
+function executeWithContext(
+  tools: ToolCapability,
+  call: ToolCall,
+  context: { readonly signal: AbortSignal, readonly execution?: ExecutionMetadata },
+): Promise<ToolResult> {
+  if ('executeWithContext' in tools && typeof tools.executeWithContext === 'function') {
+    return tools.executeWithContext(call, context)
   }
+  return tools.execute(call, context.signal)
 }
 
 /** 保持尚未纳入 turn 的用户输入，并确保每条输入至多领取一次。 */

@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import {
   Agent,
-  AgentIdCollisionError,
   BoundedPromptAssembler,
   CurrentTimeContext,
   EnabledSkillsContext,
   RetrievedMemoryContext,
-  SettlementPersistenceError,
-  type AgentExecutionEvent,
 } from '@agent-harness/agent'
 import {
   brandId,
+  AgentIdCollisionError,
+  SettlementPersistenceError,
+  type AgentExecutionEvent,
   type ExecutionId,
   type EventEnvelope,
   type MessageId,
   type SessionId,
   type ToolCallId,
   type UserMessage,
-} from '@agent-harness/domain'
+  type SessionLog,
+} from '@agent-harness/kernel'
 import {
   analyzeSessionLifecycle,
   InMemorySessionLog,
-  type SessionLog,
 } from '@agent-harness/session'
 import {
   ScriptedModelProvider,

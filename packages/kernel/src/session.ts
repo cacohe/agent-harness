@@ -1,10 +1,14 @@
 import {
-  assertJsonValue,
+  type AttemptId,
   type EventEnvelope,
+  type MessageId,
   type SessionBatchId,
   type SessionEvent,
   type SessionId,
-} from '@agent-harness/domain'
+  type StepId,
+  type ToolCallId,
+  type TurnId,
+} from './facts.js'
 
 /** 提供不可变的会话事件快照。 */
 export interface SessionReader {
@@ -137,89 +141,18 @@ export interface SessionClock {
   now(): string
 }
 
-/** 面向测试和进程内运行时的 append-only 会话实现。 */
-export class InMemorySessionLog implements SessionLog {
-  readonly sessionId: SessionId
-  readonly #clock: SessionClock
-  readonly #events: EventEnvelope[] = []
-  readonly #batchIds = new Set<SessionBatchId>()
-  #closed = false
-
-  constructor(sessionId: SessionId, clock: SessionClock = systemSessionClock) {
-    this.sessionId = sessionId
-    this.#clock = clock
-  }
-
-  async append(
-    events: readonly SessionEvent[],
-    options: SessionAppendOptions,
-  ): Promise<readonly EventEnvelope[]> {
-    this.#assertOpen()
-    options.signal.throwIfAborted()
-    if (events.length === 0) return []
-    if (
-      options.expectedSequence !== undefined
-      && options.expectedSequence !== this.#events.length
-    ) {
-      throw new SessionSequenceConflictError('expected sequence 与当前日志不一致')
-    }
-    if (options.batchId !== undefined && this.#batchIds.has(options.batchId)) {
-      throw new SessionSequenceConflictError('batchId 已存在')
-    }
-    for (const event of events) assertJsonValue(event)
-    const firstSequence = this.#events.length + 1
-    const envelopes = events.map((event, index): EventEnvelope =>
-      immutableSnapshot({
-        version: 1,
-        sessionId: this.sessionId,
-        sequence: firstSequence + index,
-        timestamp: this.#clock.now(),
-        event,
-      }),
-    )
-    options.signal.throwIfAborted()
-    this.#events.push(...envelopes)
-    if (options.batchId !== undefined) this.#batchIds.add(options.batchId)
-    return envelopes
-  }
-
-  async read(options: SessionOperationOptions): Promise<readonly EventEnvelope[]> {
-    this.#assertOpen()
-    options.signal.throwIfAborted()
-    return this.#events.slice()
-  }
-
-  async flush(options: SessionOperationOptions): Promise<void> {
-    this.#assertOpen()
-    options.signal.throwIfAborted()
-  }
-
-  async close(options: SessionOperationOptions): Promise<void> {
-    if (this.#closed) return
-    this.#closed = true
-    options.signal.throwIfAborted()
-  }
-
-  #assertOpen(): void {
-    if (this.#closed) throw new SessionClosedError('会话句柄已关闭')
-  }
+/** 描述恢复前必须作为一个原子批次追加的最小生命周期修复。 */
+export interface SessionLifecycleRepairPlan {
+  readonly expectedSequence: number
+  readonly events: readonly SessionEvent[]
+  readonly usedIds: SessionLifecycleIdNamespaces
 }
 
-const systemSessionClock: SessionClock = {
-  now: () => new Date().toISOString(),
+/** 恢复历史中已经占用的 Agent 标识符命名空间。 */
+export interface SessionLifecycleIdNamespaces {
+  readonly turnIds: readonly TurnId[]
+  readonly stepIds: readonly StepId[]
+  readonly attemptIds: readonly AttemptId[]
+  readonly messageIds: readonly MessageId[]
+  readonly toolCallIds: readonly ToolCallId[]
 }
-
-function immutableSnapshot<T>(value: T): T {
-  return deepFreeze(structuredClone(value))
-}
-
-function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
-  if (typeof value !== 'object' || value === null || seen.has(value)) return value
-  seen.add(value)
-  for (const key of Reflect.ownKeys(value)) {
-    deepFreeze(Reflect.get(value, key), seen)
-  }
-  return Object.freeze(value)
-}
-
-/** 从持久事件中重建下一次模型请求可见的完整消息历史。 */

@@ -2,46 +2,21 @@ import {
   assertJsonValue,
   isAbortError,
   serializeError,
-  type ToolCall,
-  type ToolResult,
-  type JsonValue,
+  type ExecutionAwareToolCapability,
   type ExecutionMetadata,
-} from '@agent-harness/domain'
-import type { ModelToolDefinition } from '@agent-harness/model'
-
-export interface ToolExecutionContext {
-  readonly signal: AbortSignal
-  /** 本次 turn 的冻结执行上下文；未经策略包装的既有工具可忽略它。 */
-  readonly execution?: ExecutionMetadata
-}
-
-export interface ToolDefinition {
-  readonly name: string
-  readonly description: string
-  readonly inputSchema: Readonly<Record<string, unknown>>
-
-  /** 在任何副作用前把不可信模型 JSON 解析为已验证输入。 */
-  parseInput(input: JsonValue): JsonValue
-  execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>
-}
-
-/** 向模型公开当前可用工具，不暴露具体注册方式。 */
-export interface ToolCatalog {
-  list(): readonly ModelToolDefinition[]
-}
-
-/** 执行规范化工具调用，不暴露工具查找与调度实现。 */
-export interface ToolExecutor {
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult>
-}
-
-/** Agent loop 所需的最小工具 capability。 */
-export interface ToolCapability extends ToolCatalog, ToolExecutor {}
-
-/** 支持接收冻结执行上下文的工具 capability；保留旧 execute 签名以兼容现有工具。 */
-export interface ExecutionAwareToolCapability extends ToolCapability {
-  executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>
-}
+  type JsonValue,
+  type ModelToolDefinition,
+  type SandboxDispatcher,
+  type SandboxResourceLimits,
+  type SandboxToolRegistryOptions,
+  type ToolAuthorizationDecision,
+  type ToolCall,
+  type ToolCapability,
+  type ToolDefinition,
+  type ToolExecutionContext,
+  type ToolExecutionPolicy,
+  type ToolResult,
+} from '@agent-harness/kernel'
 
 /** 工具来源在组合时暴露了重复名称。 */
 export class DuplicateToolNameError extends Error {
@@ -92,42 +67,6 @@ export class CompositeToolCapability implements ExecutionAwareToolCapability {
     if (capability === undefined) return Promise.resolve(unknownToolResult(call))
     return executeWithContext(capability, call, context)
   }
-}
-
-/** 平台、审批或本地策略在任何副作用前作出的闭合许可决定。 */
-export type ToolAuthorizationDecision =
-  | { readonly status: 'allowed' }
-  | { readonly status: 'denied', readonly reason: string }
-
-/** 工具执行前的可替换策略；远程调用实现必须响应 context.signal。 */
-export interface ToolExecutionPolicy {
-  authorize(
-    call: ToolCall,
-    context: ToolExecutionContext & { readonly execution: ExecutionMetadata },
-  ): Promise<ToolAuthorizationDecision>
-}
-
-/** Sandbox 运行一次工具所需的、可传递给外部执行器的稳定任务描述。 */
-export interface SandboxTask {
-  readonly call: ToolCall
-  readonly workspace?: string
-  readonly limits?: SandboxResourceLimits
-}
-
-/** Sandbox 任务的资源边界；具体强制方式由 dispatcher adapter 决定。 */
-export interface SandboxResourceLimits {
-  readonly timeoutMs: number
-  readonly maxOutputBytes: number
-}
-
-/** 将已验证工具任务派发到隔离执行环境的 capability。 */
-export interface SandboxDispatcher {
-  dispatch(task: SandboxTask, context: ToolExecutionContext): Promise<JsonValue>
-}
-
-export interface SandboxToolRegistryOptions {
-  readonly workspace?: string
-  readonly limits?: SandboxResourceLimits
 }
 
 /** 不可变的工具注册表，也是第一阶段的顺序工具执行器。 */
@@ -294,8 +233,8 @@ function denialReason(decision: unknown): string {
   return '执行策略返回无效授权决定'
 }
 
-/** 统一调用支持上下文的新 capability 与保留旧签名的既有 capability。 */
-export function executeWithContext(
+/** 统一调用支持上下文的新 capability 与保留基础签名的既有 capability。 */
+function executeWithContext(
   tools: ToolCapability,
   call: ToolCall,
   context: ToolExecutionContext,

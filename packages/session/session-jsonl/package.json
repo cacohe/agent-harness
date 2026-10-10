@@ -8,7 +8,6 @@
     "./testing": "./lib/testing.js"
   },
   "dependencies": {
-    "@agent-harness/domain": "workspace:*",
-    "@agent-harness/session": "workspace:*"
+    "@agent-harness/kernel": "workspace:*"
   }
 }

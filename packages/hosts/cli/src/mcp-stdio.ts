@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/client'
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio'
-import { assertJsonValue, type JsonValue } from '@agent-harness/domain'
+import { assertJsonValue, type JsonValue } from '@agent-harness/kernel'
 import type { McpClient, McpToolDescriptor } from '@agent-harness/mcp'
 
 export interface StdioMcpClientOptions {

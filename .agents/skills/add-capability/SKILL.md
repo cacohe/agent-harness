@@ -7,7 +7,7 @@ description: 新增或替换 Agent Harness Lab capability 时，同时处理接�
 
 编辑前阅读 `AGENTS.md`、`packages/AGENTS.md` 和 `docs/architecture.md`。
 
-明确 capability 的 owner、provider 和 consumer。接口放入面向消费者的 capability package（如 `packages/core/*`、`packages/llm/model`、`packages/session/session`）；外部实现放入对应能力域分组（如 `packages/llm/`、`packages/session/`）；构造逻辑放入 `packages/runtime` 或相关 host。在需要按 key 选择实现前，不要增加 registry。
+明确 capability 的 owner、provider 和 consumer。Agent 循环使用的协议无关概念、状态、接口与错误放入 `packages/kernel`；核心行为实现放入 `packages/core/*`；外部实现放入对应能力域分组（如 `packages/llm/`、`packages/session/`）；构造逻辑放入 `packages/runtime` 或相关 host。Core 与 adapter 的生产依赖都只能指向 `kernel`。在需要按 key 选择实现前，不要增加 registry。
 
 实现前判断 capability 是否改变模型可见输入或持久行为。若会改变，先定义或更新会话事件及其投影。如果变更影响依赖方向、事件兼容性、生命周期所有权或公共 capability 接口，则在 `docs/decisions/` 记录决定。
 

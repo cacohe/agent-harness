@@ -1,5 +1,5 @@
-import { brandId, type MessageId } from '@agent-harness/domain'
-import type { ModelRequest, ModelStreamEvent } from '@agent-harness/model'
+import { brandId, type MessageId } from '@agent-harness/kernel'
+import type { ModelRequest, ModelStreamEvent } from '@agent-harness/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   LlmGatewayConfigurationError,

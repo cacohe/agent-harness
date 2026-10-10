@@ -8,8 +8,9 @@ import {
   type StepId,
   type ToolCallId,
   type TurnId,
-} from '@agent-harness/domain'
-import { deriveModelMessages, InMemorySessionLog } from '@agent-harness/session'
+} from '@agent-harness/kernel'
+import { deriveModelMessages } from '@agent-harness/agent'
+import { InMemorySessionLog } from '@agent-harness/session'
 
 describe('InMemorySessionLog', () => {
   it('保存不可变快照，不受输入和读取结果修改影响', async () => {

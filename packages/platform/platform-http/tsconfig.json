@@ -6,9 +6,12 @@
     "outDir": "lib",
     "tsBuildInfoFile": "tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../../memory/memory-gateway" },
-    { "path": "../../llm/model" }
+    {
+      "path": "../../kernel"
+    }
   ]
 }

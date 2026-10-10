@@ -6,28 +6,14 @@ import {
   type MessageId,
   type SessionEvent,
   type SessionId,
+  type SessionLifecycleIdNamespaces,
+  type SessionLifecycleRepairPlan,
   type StepId,
   type StepOutcome,
   type ToolCallId,
   type TurnId,
-} from '@agent-harness/domain'
-import { SessionLifecycleCorruptionError } from './session.js'
-
-/** 描述恢复前必须作为一个原子批次追加的最小生命周期修复。 */
-export interface SessionLifecycleRepairPlan {
-  readonly expectedSequence: number
-  readonly events: readonly SessionEvent[]
-  readonly usedIds: SessionLifecycleIdNamespaces
-}
-
-/** 恢复历史中已经占用的 Agent 标识符命名空间。 */
-export interface SessionLifecycleIdNamespaces {
-  readonly turnIds: readonly TurnId[]
-  readonly stepIds: readonly StepId[]
-  readonly attemptIds: readonly AttemptId[]
-  readonly messageIds: readonly MessageId[]
-  readonly toolCallIds: readonly ToolCallId[]
-}
+} from '@agent-harness/kernel'
+import { SessionLifecycleCorruptionError } from '@agent-harness/kernel'
 
 /**
  * 验证完整事件日志的生命周期关系，并为唯一允许的尾部中断生成修复。

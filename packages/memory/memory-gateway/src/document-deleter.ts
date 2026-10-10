@@ -1,4 +1,4 @@
-import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/agent'
+import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/kernel'
 import { boundedText } from './validation.js'
 
 /** Host 已绑定的 memory space 与要删除的权威文档 ID。 */

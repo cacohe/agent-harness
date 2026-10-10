@@ -1,1 +1,15 @@
-{ "extends": "../../../tsconfig.base.json", "compilerOptions": { "rootDir": "src", "outDir": "lib" }, "references": [{ "path": "../../domain" }, { "path": "../../core/tools" }], "include": ["src"] }
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "references": [
+    {
+      "path": "../../kernel"
+    }
+  ],
+  "include": [
+    "src"
+  ]
+}

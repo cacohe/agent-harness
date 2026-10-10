@@ -2,12 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   Agent,
   BoundedPromptAssembler,
-  type AgentIdGenerator,
-  type AgentObserver,
-  type PromptAssembler,
-  type SettlementSignalFactory,
 } from '@agent-harness/agent'
-export { AgentIdCollisionError } from '@agent-harness/agent'
 import {
   brandId,
   type AttemptId,
@@ -15,19 +10,22 @@ import {
   type SessionId,
   type StepId,
   type TurnId,
-} from '@agent-harness/domain'
-import type { ModelProvider } from '@agent-harness/model'
-import {
-  analyzeSessionLifecycle,
-  type SessionLifecycleIdNamespaces,
+  AgentIdCollisionError,
+  type AgentIdGenerator,
+  type AgentObserver,
+  type ModelProvider,
+  type PromptAssembler,
   type SessionLog,
+  type SessionLifecycleIdNamespaces,
   type SessionRepository,
-} from '@agent-harness/session'
-import {
-  PolicyControlledTools,
+  type SettlementSignalFactory,
   type ToolCapability,
   type ToolExecutionPolicy,
-} from '@agent-harness/tools'
+} from '@agent-harness/kernel'
+import {
+  analyzeSessionLifecycle,
+} from '@agent-harness/session'
+import { PolicyControlledTools } from '@agent-harness/tools'
 import { flushAndClose, waitFor } from './lifecycle.js'
 
 const neverAbortedSignal = new AbortController().signal

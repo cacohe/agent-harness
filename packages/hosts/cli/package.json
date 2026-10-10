@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@agent-harness/agent": "workspace:*",
-    "@agent-harness/domain": "workspace:*",
+    "@agent-harness/kernel": "workspace:*",
     "@agent-harness/gateway": "workspace:*",
     "@agent-harness/memory-gateway": "workspace:*",
     "@agent-harness/mcp": "workspace:*",

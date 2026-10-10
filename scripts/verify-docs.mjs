@@ -3,6 +3,7 @@ import { access, readFile, readdir } from 'node:fs/promises'
 const required = [
   new URL('../AGENTS.md', import.meta.url),
   new URL('../packages/AGENTS.md', import.meta.url),
+  new URL('../packages/README.md', import.meta.url),
   new URL('../docs/AGENTS.md', import.meta.url),
   new URL('../docs/architecture.md', import.meta.url),
 ]
