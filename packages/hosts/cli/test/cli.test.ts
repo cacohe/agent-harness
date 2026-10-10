@@ -420,6 +420,75 @@ describe('CLI Host', () => {
     ])
   })
 
+  it('通过独立 document-delete 命令提交删除且不启动 Agent Runtime', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    let deleteRequest: Request | undefined
+    let calls = 0
+    const code = await runCli({
+      argv: [
+        'document-delete', '--config', '/config.json', '--document', 'document-1',
+      ],
+      env: { MEMORY_AUTHORIZATION: 'Bearer memory-secret' },
+      stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) },
+      signals: new Signals(),
+      readFile: async () => JSON.stringify({
+        ...JSON.parse(config(sessionRoot)),
+        memory: {
+          platformBaseUrl: 'https://memory.example/v1',
+          authorizationEnv: 'MEMORY_AUTHORIZATION',
+          memorySpaceId: 'personal-memory',
+        },
+      }),
+      fetch: async (input, init) => {
+        calls += 1
+        deleteRequest = new Request(input, init)
+        return new Response('{"documentId":"document-1","status":"deleting"}', {
+          headers: { 'content-type': 'application/json' },
+        })
+      },
+    })
+    expect(code).toBe(0)
+    expect(errors).toEqual([])
+    expect(calls).toBe(1)
+    expect(deleteRequest?.url).toBe('https://memory.example/v1/agent/document-deletions')
+    expect(deleteRequest?.headers.get('authorization')).toBe('Bearer memory-secret')
+    expect(deleteRequest?.headers.get('idempotency-key')).toBeTruthy()
+    expect(await deleteRequest?.json()).toMatchObject({
+      memorySpaceId: 'personal-memory', documentId: 'document-1',
+    })
+    expect(output.map(line => JSON.parse(line))).toEqual([{
+      type: 'document.deletion', documentId: 'document-1', status: 'deleting',
+    }])
+    expect(`${errors.join('')} ${output.join(' ')}`).not.toContain('memory-secret')
+  })
+
+  it('document-delete 要求 memory 配置与非空文档 ID', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+    const sessionRoot = await root()
+    const emptyId = await runCli({
+      argv: ['document-delete', '--config', '/config.json', '--document', ''],
+      env: {}, stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) }, signals: new Signals(),
+    })
+    const missingMemory = await runCli({
+      argv: ['document-delete', '--config', '/config.json', '--document', 'document-1'],
+      env: { TEST_KEY: 'secret' }, stdout: { write: value => output.push(value) },
+      stderr: { write: value => errors.push(value) }, signals: new Signals(),
+      readFile: async () => config(sessionRoot),
+    })
+    expect(emptyId).toBe(1)
+    expect(missingMemory).toBe(1)
+    expect(errors.join('')).toContain('--document 必须是非空字符串')
+    expect(errors.join('')).toContain('document-delete 命令要求 memory 配置')
+    expect(output.map(line => JSON.parse(line))).toEqual([
+      { type: 'error', code: 'failed' }, { type: 'error', code: 'failed' },
+    ])
+  })
+
   it('拒绝非布尔 memory.writeEnabled', async () => {
     const output: string[] = []
     const errors: string[] = []

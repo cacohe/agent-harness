@@ -19,10 +19,18 @@ export {
 } from './document-importer.js'
 
 export {
+  MemoryGatewayDocumentDeleter,
+  type DocumentDeleteResult,
+  type MemoryGatewayDocumentDeleteClient,
+  type MemoryGatewayDocumentDeleterOptions,
+  type MemoryGatewayDocumentDeleteRequest,
+} from './document-deleter.js'
+
+export {
   MemoryGatewayDocumentStatusReader,
-  type DocumentActiveStatus,
   type DocumentFailedStatus,
-  type DocumentIndexStatus,
+  type DocumentNonFailedStatus,
+  type DocumentStatus,
   type MemoryGatewayDocumentStatusClient,
   type MemoryGatewayDocumentStatusReaderOptions,
   type MemoryGatewayDocumentStatusRequest,

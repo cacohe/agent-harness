@@ -19,13 +19,13 @@ export interface MemoryGatewayDocumentStatusClient {
 }
 
 /** Platform 对文档索引生命周期的受限投影。 */
-export type DocumentIndexStatus =
-  | DocumentActiveStatus
+export type DocumentStatus =
+  | DocumentNonFailedStatus
   | DocumentFailedStatus
 
-export interface DocumentActiveStatus {
+export interface DocumentNonFailedStatus {
   readonly documentId: string
-  readonly status: 'queued' | 'indexing' | 'ready'
+  readonly status: 'queued' | 'indexing' | 'ready' | 'deleting' | 'deleted'
 }
 
 export interface DocumentFailedStatus {
@@ -56,7 +56,7 @@ export class MemoryGatewayDocumentStatusReader {
     this.#client = options.client
   }
 
-  async get(documentId: string, signal: AbortSignal): Promise<DocumentIndexStatus> {
+  async get(documentId: string, signal: AbortSignal): Promise<DocumentStatus> {
     signal.throwIfAborted()
     const request = Object.freeze({
       memorySpaceId: this.#memorySpaceId,
@@ -72,7 +72,7 @@ export class MemoryGatewayDocumentStatusReader {
   }
 }
 
-function normalizeDocumentStatus(value: unknown, requestedDocumentId: string): DocumentIndexStatus {
+function normalizeDocumentStatus(value: unknown, requestedDocumentId: string): DocumentStatus {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new TypeError('Document Gateway 状态响应必须是对象')
   }
@@ -97,8 +97,14 @@ function normalizeDocumentStatus(value: unknown, requestedDocumentId: string): D
     }
     return Object.freeze({ documentId, status: 'failed', failureCode })
   }
-  if (fields.status !== 'queued' && fields.status !== 'indexing' && fields.status !== 'ready') {
-    throw new TypeError('Document Gateway 状态响应.status 必须是 queued、indexing、ready 或 failed')
+  if (fields.status !== 'queued'
+    && fields.status !== 'indexing'
+    && fields.status !== 'ready'
+    && fields.status !== 'deleting'
+    && fields.status !== 'deleted') {
+    throw new TypeError(
+      'Document Gateway 状态响应.status 必须是 queued、indexing、ready、deleting、deleted 或 failed',
+    )
   }
   assertExactKeys(fields, ['documentId', 'status'])
   return Object.freeze({ documentId, status: fields.status })

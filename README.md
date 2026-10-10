@@ -181,6 +181,8 @@ pnpm agent chat --session demo-1 --message "你好"
 pnpm agent import --file /绝对路径/资料.pdf --media-type application/pdf
 # document-status：查询异步索引状态，不创建 Agent 会话
 pnpm agent document-status --document document-id
+# document-delete：提交受 Platform 授权与保留策略约束的文档删除
+pnpm agent document-delete --document document-id
 ```
 
 `chat` 模式下在 stderr 提示后循环读取输入；输入 `/exit` 或 `/quit` 结束。可通过 `shell.enabled: true` 显式注册本机 `run_shell` 工具。
@@ -199,7 +201,7 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 
 ### 3. 输出约定
 
-- **stdout**：仅 JSONL（`stream` / `result` / `document.imported` / `document.status` / `error`）
+- **stdout**：仅 JSONL（`stream` / `result` / `document.imported` / `document.status` / `document.deletion` / `error`）
 - **stderr**：usage 与不含密钥的诊断
 - **SIGINT / SIGTERM**：取消当前 run，并在 finally 中关闭资源
 
