@@ -177,6 +177,38 @@ describe('PlatformHttpClient', () => {
     expect(calls).toBe(0)
   })
 
+  it('以已绑定 memory space 和 JSON 命令查询文档索引状态', async () => {
+    let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
+    const platform = client(async (input, init) => {
+      captured = { input, init }
+      return response(['{"documentId":"document-1","status":"indexing"}'])
+    })
+    await expect(platform.getDocumentStatus({
+      memorySpaceId: 'space-1', documentId: 'document-1',
+    }, new AbortController().signal)).resolves.toEqual({
+      documentId: 'document-1', status: 'indexing',
+    })
+    expect(captured?.input.toString()).toBe('https://platform.test/v1/agent/document-statuses')
+    const headers = captured?.init?.headers as Record<string, string>
+    expect(headers.Accept).toBe('application/json')
+    expect(headers['Idempotency-Key']).toBe('model-1')
+    expect(JSON.parse(captured?.init?.body as string)).toEqual({
+      requestId: 'model-1', memorySpaceId: 'space-1', documentId: 'document-1',
+    })
+  })
+
+  it('在发出状态请求前拒绝未知字段与空文档 ID', async () => {
+    let calls = 0
+    const platform = client(async () => { calls += 1; return response(['{}']) })
+    await expect(platform.getDocumentStatus({
+      memorySpaceId: 'space', documentId: '',
+    }, new AbortController().signal)).rejects.toBeInstanceOf(PlatformHttpProtocolError)
+    await expect(platform.getDocumentStatus({
+      memorySpaceId: 'space', documentId: 'document-1', extra: true,
+    } as never, new AbortController().signal)).rejects.toThrow('请求字段无效')
+    expect(calls).toBe(0)
+  })
+
   it('在发出请求前限制文档 MIME 字节数', async () => {
     let calls = 0
     const platform = client(async () => { calls += 1; return response(['{}']) })
