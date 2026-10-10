@@ -3,7 +3,6 @@ import { MEMORY_CONTEXT_LIMITS } from '@agent-harness/agent'
 import { boundedText, positiveInteger } from './validation.js'
 
 const DEFAULT_MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
-const MAX_FILE_NAME_BYTES = 512
 const MAX_MEDIA_TYPE_BYTES = 255
 const MEDIA_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/
 
@@ -92,14 +91,15 @@ function normalizeSource(value: unknown, maxBytes: number): DocumentImportSource
     throw new TypeError('document 只能包含 fileName、mediaType 与 bytes')
   }
   return {
-    fileName: fileNameValue(fields.fileName),
+    fileName: documentFileName(fields.fileName),
     mediaType: mediaTypeValue(fields.mediaType),
     bytes: documentBytes(fields.bytes, maxBytes),
   }
 }
 
-function fileNameValue(value: unknown): string {
-  const fileName = boundedText(value, MAX_FILE_NAME_BYTES, 'document.fileName')
+/** 校验导入与检索来源共享的、不会被解释为路径的展示文件名。 */
+export function documentFileName(value: unknown): string {
+  const fileName = boundedText(value, MEMORY_CONTEXT_LIMITS.maxFileNameBytes, 'document.fileName')
   if (fileName === '.' || fileName === '..' || /[\\/\u0000-\u001f\u007f]/.test(fileName)) {
     throw new TypeError('document.fileName 必须是不含路径或控制字符的文件名')
   }
