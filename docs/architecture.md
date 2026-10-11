@@ -4,7 +4,7 @@ Agent Harness Lab 使用 append-only 会话事件日志和显式 Agent 状态机
 
 ## 依赖层次
 
-`kernel` 定义 Agent 循环使用的协议无关概念、状态、接口、事件与错误。单一 `core` package 只实现 Agent 核心循环、上下文组装和消息投影。会话与工具实现分别属于 `session/` 和 `tools/` 能力域；adapter 实现外部存储与模型协议。`runtime` 校验并组合 Agent 循环及协议无关实现，`hosts` 组合外部 adapter 并通过进程协议暴露应用。
+`kernel` 定义 Agent 循环使用的全部协议无关概念、状态、接口、事件与错误。单一 `core` package 只实现 Agent 核心循环状态机。上下文、会话和工具实现分别属于 `context/`、`session/` 和 `tools/` 能力域；adapter 实现外部存储与模型协议。`runtime` 校验并组合 Agent 循环及协议无关实现，`hosts` 组合外部 adapter 并通过进程协议暴露应用。
 
 依赖统一指向 `kernel`。Core、能力实现和 adapter 都只依赖内核契约，彼此不建立生产依赖；Runtime 和 Host 在组合点注入具体实现。
 
@@ -15,7 +15,9 @@ workspace 按能力域分组（见 ADR 0011），npm 包名仍为 `@agent-harnes
 ```text
 packages/
   kernel/                      Agent 概念、状态、接口、事件与错误
-  core/                        Agent 状态机、上下文组装与消息投影
+  core/                        Agent 核心循环状态机
+  context/
+    context-runtime/           Prompt 组装、时间上下文与模型消息投影
   tools/
     tool-runtime/              工具注册、组合与治理实现
     mcp/                       MCP 工具 adapter
@@ -25,6 +27,7 @@ packages/
     openai-compatible/         Chat Completions adapter
     gateway/                   Platform LLM Gateway adapter
   memory/
+    memory-context/            长期记忆上下文贡献器
     memory-gateway/            Platform 长期记忆与文件导入 Gateway adapter
   platform/
     platform-http/             Platform Gateway 与 Permit HTTP adapter
@@ -33,6 +36,7 @@ packages/
     session-lifecycle/         会话恢复分析实现
     session-jsonl/             JSONL 会话 adapter
   skills/
+    skill-context/             已启用 Skill 摘要上下文贡献器
     skill-filesystem/          受限文件系统 Skill catalog
     skill-tool/                Skill 正文加载工具 adapter
   runtime/                     显式组合根
@@ -73,7 +77,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 ## 替换接缝
 
-首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`kernel` 拥有这些协议无关接口；`core` 的默认 prompt 实现以完整用户 turn 为边界裁剪历史，并限制输入字节数。组合方可提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；异步贡献器接收本次 run 的取消信号。当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`EnabledSkillsContext` 只注入名称、ID 和描述，不读取正文。`MemoryRetriever` 可以检索长期记忆，`RetrievedMemoryContext` 仅将有限的临时检索结果加入系统上下文，不将其写入会话事件。会话事件日志继续只保存对话事实。每个接缝包含 `kernel` 契约、至少一个实现，以及 `runtime` 或 host 中的组合点。
+首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`kernel` 拥有这些协议无关接口；`context/context-runtime` 的默认 prompt 实现以完整用户 turn 为边界裁剪历史，并限制输入字节数。组合方必须为 Agent 显式注入 `PromptAssembler`，可以提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；异步贡献器接收本次 run 的取消信号。当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`skills/skill-context` 的 `EnabledSkillsContext` 只注入名称、ID 和描述，不读取正文。`MemoryRetriever` 可以检索长期记忆，`memory/memory-context` 的 `RetrievedMemoryContext` 仅将有限的临时检索结果加入系统上下文，不将其写入会话事件。会话事件日志继续只保存对话事实。每个接缝包含 `kernel` 契约、至少一个实现，以及 `runtime` 或 host 中的组合点。
 
 `skills/skill-filesystem` 从 Host 明确配置的根目录和启用列表构建 `SkillCatalog`。adapter 在 Linux Host 上根据已打开文件描述符校验真实路径，在目录边界内限制元数据与正文读取并校验 frontmatter；初始化只保存摘要，正文由工具或其他明确调用方按 ID 读取。CLI 负责创建该 adapter，并通过 `EnabledSkillsContext` 将摘要接入 prompt。
 
@@ -91,7 +95,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。`AgentObserver.onExecution` 在每批会话事件成功追加后逐条通知 `session.event`，因此 Platform 可以以 session sequence 重建审计状态；模型 capability 的 usage 是同一 attempt 内单调不减的累计 token，Agent 将其转换为带 session、turn、step、attempt 与单调 `usageSequence` 的 `model.usage` token 增量通知，供 Platform 去重后累加。observer 投递不具备可靠性保证，需要可靠投递的 Platform adapter 必须自行持久化 outbox 并以 sequence 去重。
 
-内核契约位于 `kernel`；Agent 循环只位于 `core`。`session/session-memory` 实现进程内事件日志，`session/session-lifecycle` 实现恢复分析，`tools/tool-runtime` 实现工具注册、组合和执行治理。模型消息投影属于每一步 Agent 请求的派生逻辑，因此保留在 Core。真实模型与持久化集成由 `llm/`、`session/` 下的 adapter 提供，动态插件系统仍不属于当前范围。
+Agent 概念和接口位于 `kernel`；Agent 循环只位于 `core`。`context/context-runtime` 实现 prompt 组装和模型消息投影，`session/session-memory` 实现进程内事件日志，`session/session-lifecycle` 实现恢复分析，`tools/tool-runtime` 实现工具注册、组合和执行治理。真实模型与持久化集成由 `llm/`、`session/` 下的 adapter 提供，动态插件系统仍不属于当前范围。
 
 `kernel` 拥有 reader、writer、repository 与 writer lease capability。`session/session-jsonl` 是独立 adapter，只依赖 `kernel`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
 

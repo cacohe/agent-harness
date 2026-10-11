@@ -1,13 +1,11 @@
 import { readFile as nodeReadFile } from 'node:fs/promises'
 import { brandId, type MessageId, type SessionId } from '@agent-harness/kernel'
-import {
-  BoundedPromptAssembler,
-  EnabledSkillsContext,
-  RetrievedMemoryContext,
-} from '@agent-harness/core'
+import { BoundedPromptAssembler } from '@agent-harness/context-runtime'
+import { RetrievedMemoryContext } from '@agent-harness/memory-context'
 import { AgentRuntime } from '@agent-harness/runtime'
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl'
 import { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem'
+import { EnabledSkillsContext } from '@agent-harness/skill-context'
 import { McpToolAdapter } from '@agent-harness/mcp'
 import { createStdinLines, openChatSession, runChatLoop } from './chat.js'
 import { parseArgv } from './command.js'

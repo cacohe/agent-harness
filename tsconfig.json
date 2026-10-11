@@ -2,6 +2,9 @@
   "files": [],
   "references": [
     {
+      "path": "packages/context/context-runtime"
+    },
+    {
       "path": "packages/core"
     },
     {
@@ -20,6 +23,9 @@
       "path": "packages/memory/memory-gateway"
     },
     {
+      "path": "packages/memory/memory-context"
+    },
+    {
       "path": "packages/platform/platform-http"
     },
     {
@@ -36,6 +42,9 @@
     },
     {
       "path": "packages/skills/skill-filesystem"
+    },
+    {
+      "path": "packages/skills/skill-context"
     },
     {
       "path": "packages/skills/skill-tool"
