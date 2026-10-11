@@ -18,6 +18,7 @@ hosts -> runtime -> core -> kernel
 
 ## 公共 API
 
+- package 根部的 `src/index.ts` 只定义稳定公共导出；可执行 Host 允许保留最小启动代码。实现放入按职责命名的模块，内部目录不得为缩短路径堆叠 barrel。
 - 从每个 package 入口审慎导出领域词汇和 capability 接口。
 - 实现辅助函数保持私有，除非已经存在真实外部消费者。
 - 封闭状态与事件集合使用可辨识联合类型和穷尽 switch。

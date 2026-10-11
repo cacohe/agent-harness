@@ -1,3 +1,10 @@
 /** OpenAI-compatible Chat Completions adapter 的稳定公共入口。 */
-export * from './errors.js'
-export * from './provider.js'
+export {
+  OpenAiCompatibleConfigurationError,
+  OpenAiCompatibleHttpError,
+  OpenAiCompatibleProtocolError,
+} from './errors.js'
+export {
+  OpenAiCompatibleModelProvider,
+  type OpenAiCompatibleModelProviderOptions,
+} from './provider.js'
