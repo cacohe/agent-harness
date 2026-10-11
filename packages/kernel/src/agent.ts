@@ -62,7 +62,8 @@ export interface AgentOptions {
   readonly ids: AgentIdGenerator
   readonly maxSteps: number
   readonly settlementSignals: SettlementSignalFactory
-  readonly prompts?: PromptAssembler
+  /** 由 Runtime 或 Host 显式注入；Core 不拥有默认 prompt 策略。 */
+  readonly prompts: PromptAssembler
   readonly runTimeoutMs?: number
   readonly maxModelOutputBytes?: number
   readonly observers?: readonly AgentObserver[]

@@ -1,0 +1,12 @@
+{
+  "name": "@agent-harness/context-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "dependencies": {
+    "@agent-harness/kernel": "workspace:*"
+  }
+}

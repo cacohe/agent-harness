@@ -12,7 +12,7 @@ import {
   SessionLifecycleCorruptionError,
 } from '@agent-harness/kernel'
 import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle'
-import { deriveModelMessages } from '@agent-harness/core'
+import { deriveModelMessages } from '@agent-harness/context-runtime'
 
 const sessionId = brandId<'SessionId'>('recovery-session') as SessionId
 const turnId = brandId<'TurnId'>('turn-1') as TurnId

@@ -18,8 +18,8 @@ hosts → runtime → core → kernel
 | 层次 | 目录落点 | 职责 |
 |------|----------|------|
 | Kernel | `packages/kernel` | Agent 概念、状态、接口、事件与错误 |
-| Core | `packages/core` | Agent 核心循环、上下文组装与消息投影 |
-| Capability 实现 | `session/session-memory`、`session/session-lifecycle`、`tools/tool-runtime` | 会话与工具的协议无关实现 |
+| Core | `packages/core` | Agent 核心循环状态机 |
+| Capability 实现 | `context/context-runtime`、`memory/memory-context`、`session/session-memory`、`session/session-lifecycle`、`skills/skill-context`、`tools/tool-runtime` | 上下文、会话与工具的协议无关实现 |
 | Adapter | `llm/openai-compatible`、`llm/gateway`、`platform/platform-http`、`session/session-jsonl`、`tools/mcp`、`tools/platform-policy` | 外部系统实现 |
 | 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
 | 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
@@ -50,11 +50,14 @@ input → turn/start → step/start → model stream → assistant settlement
 docs/                     架构与已接受决定（ADR）
 packages/
   kernel/                 Agent 概念、状态、接口、事件与错误
-  core/                   Inbox、上下文组装与 Agent 状态机
+  core/                   Inbox 与 Agent 核心循环状态机
+  context/
+    context-runtime/      Prompt 组装、时间上下文与模型消息投影
   llm/
     openai-compatible/    OpenAI-compatible Chat Completions
     gateway/              Platform LLM Gateway adapter
   memory/
+    memory-context/       长期记忆上下文贡献器
     memory-gateway/       Platform 长期记忆与文件导入 Gateway adapter
   platform/
     platform-http/        Platform Gateway 与 Permit HTTP adapter
@@ -68,6 +71,7 @@ packages/
     session-lifecycle/    会话恢复分析实现
     session-jsonl/        JSONL 会话存储 adapter
   skills/
+    skill-context/        已启用 Skill 摘要上下文贡献器
     skill-filesystem/     受限文件系统 Skill catalog
     skill-tool/           Skill 正文加载工具 adapter
   runtime/                显式组合与 handle 生命周期
@@ -220,6 +224,7 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 | 目标             | 落点                                                         |
 | -------------- | ---------------------------------------------------------- |
 | 领域事件 / 消息形状    | `packages/kernel`，并更新投影与恢复逻辑 |
+| Prompt / 上下文实现  | 接口在 `packages/kernel`，默认组装与投影放 `packages/context/context-runtime`，能力贡献器放对应能力域 |
 | 会话读写 / 恢复分析    | 接口在 `packages/kernel`，内存实现放 `session-memory`，恢复分析放 `session-lifecycle`，持久化实现放 `session-jsonl` |
 | 模型协议           | 接口在 `packages/kernel`；实现在 `packages/llm/*` |
 | 工具             | 接口在 `packages/kernel`，`ToolRegistry` 在 `packages/tools/tool-runtime`；在 host/runtime 组合时注入 |

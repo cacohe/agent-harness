@@ -18,6 +18,12 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@24.13.6)
 
+  packages/context/context-runtime:
+    dependencies:
+      '@agent-harness/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+
   packages/core:
     dependencies:
       '@agent-harness/kernel':
@@ -26,6 +32,9 @@ importers:
 
   packages/hosts/cli:
     dependencies:
+      '@agent-harness/context-runtime':
+        specifier: workspace:*
+        version: link:../../context/context-runtime
       '@agent-harness/core':
         specifier: workspace:*
         version: link:../../core
@@ -38,6 +47,9 @@ importers:
       '@agent-harness/mcp':
         specifier: workspace:*
         version: link:../../tools/mcp
+      '@agent-harness/memory-context':
+        specifier: workspace:*
+        version: link:../../memory/memory-context
       '@agent-harness/memory-gateway':
         specifier: workspace:*
         version: link:../../memory/memory-gateway
@@ -53,6 +65,9 @@ importers:
       '@agent-harness/session-jsonl':
         specifier: workspace:*
         version: link:../../session/session-jsonl
+      '@agent-harness/skill-context':
+        specifier: workspace:*
+        version: link:../../skills/skill-context
       '@agent-harness/skill-filesystem':
         specifier: workspace:*
         version: link:../../skills/skill-filesystem
@@ -80,6 +95,12 @@ importers:
         specifier: workspace:*
         version: link:../../kernel
 
+  packages/memory/memory-context:
+    dependencies:
+      '@agent-harness/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+
   packages/memory/memory-gateway:
     dependencies:
       '@agent-harness/kernel':
@@ -98,6 +119,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@agent-harness/context-runtime':
+        specifier: workspace:*
+        version: link:../context/context-runtime
       '@agent-harness/core':
         specifier: workspace:*
         version: link:../core
@@ -139,6 +163,12 @@ importers:
         specifier: workspace:*
         version: link:../../kernel
 
+  packages/skills/skill-context:
+    dependencies:
+      '@agent-harness/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+
   packages/skills/skill-filesystem:
     dependencies:
       '@agent-harness/kernel':
@@ -170,9 +200,18 @@ importers:
         specifier: workspace:*
         version: link:../tools/tool-runtime
     devDependencies:
+      '@agent-harness/context-runtime':
+        specifier: workspace:*
+        version: link:../context/context-runtime
+      '@agent-harness/memory-context':
+        specifier: workspace:*
+        version: link:../memory/memory-context
       '@agent-harness/session-lifecycle':
         specifier: workspace:*
         version: link:../session/session-lifecycle
+      '@agent-harness/skill-context':
+        specifier: workspace:*
+        version: link:../skills/skill-context
 
   packages/tools/mcp:
     dependencies:

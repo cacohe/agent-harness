@@ -23,6 +23,54 @@ describe('架构依赖规则', () => {
     expect(failures).toContain('core: forbidden workspace dependency on tools/tool-runtime')
   })
 
+  it('core 不得依赖 prompt、memory 或 skill 的具体实现', () => {
+    const manifests = [
+      ['kernel', manifest('kernel')],
+      ['context/context-runtime', manifest('context-runtime', {
+        '@agent-harness/kernel': 'workspace:*',
+      })],
+      ['memory/memory-context', manifest('memory-context', {
+        '@agent-harness/kernel': 'workspace:*',
+      })],
+      ['skills/skill-context', manifest('skill-context', {
+        '@agent-harness/kernel': 'workspace:*',
+      })],
+      ['core', manifest('core', {
+        '@agent-harness/kernel': 'workspace:*',
+        '@agent-harness/context-runtime': 'workspace:*',
+      })],
+    ]
+    expect(verifyArchitecture(manifests)).toContain(
+      'core: forbidden workspace dependency on context/context-runtime',
+    )
+  })
+
+  it('core 只能包含并导出 Agent 核心循环', () => {
+    const manifests = [
+      ['kernel', manifest('kernel')],
+      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
+    ]
+    expect(verifyArchitecture(manifests, [
+      ['core', 'src/context.ts', [
+        "import type { PromptAssembler } from '@agent-harness/kernel'",
+        'export class BoundedPromptAssembler implements PromptAssembler {}',
+      ].join('\n')],
+    ])).toEqual(expect.arrayContaining([
+      'core/src/context.ts: source file is outside the Agent loop allowlist',
+      'core/src/context.ts: core can only export Agent, found BoundedPromptAssembler',
+    ]))
+    expect(verifyArchitecture(manifests, [
+      ['core', 'src/index.ts', "export { Agent, BoundedPromptAssembler } from './agent.js'"],
+    ])).toContain('core/src/index.ts: core can only export Agent, found BoundedPromptAssembler')
+    expect(verifyArchitecture(manifests, [
+      ['core', 'src/index.ts', 'export const { BoundedPromptAssembler } = {} as never'],
+      ['core', 'src/agent.ts', 'export const [EnabledSkillsContext] = [] as never'],
+    ])).toEqual(expect.arrayContaining([
+      'core/src/index.ts: core can only export Agent, found BoundedPromptAssembler',
+      'core/src/agent.ts: core can only export Agent, found EnabledSkillsContext',
+    ]))
+  })
+
   it('协议无关能力实现只能依赖 kernel', () => {
     const failures = verifyArchitecture([
       ['kernel', manifest('kernel')],
@@ -38,6 +86,27 @@ describe('架构依赖规则', () => {
     expect(failures).toContain(
       'tools/tool-runtime: forbidden workspace dependency on session/session-memory',
     )
+  })
+
+  it('上下文能力实现只能依赖 kernel', () => {
+    const failures = verifyArchitecture([
+      ['kernel', manifest('kernel')],
+      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
+      ['context/context-runtime', manifest('context-runtime', {
+        '@agent-harness/core': 'workspace:*',
+      })],
+      ['memory/memory-context', manifest('memory-context', {
+        '@agent-harness/context-runtime': 'workspace:*',
+      })],
+      ['skills/skill-context', manifest('skill-context', {
+        '@agent-harness/memory-context': 'workspace:*',
+      })],
+    ])
+    expect(failures).toEqual(expect.arrayContaining([
+      'context/context-runtime: forbidden workspace dependency on core',
+      'memory/memory-context: forbidden workspace dependency on context/context-runtime',
+      'skills/skill-context: forbidden workspace dependency on memory/memory-context',
+    ]))
   })
 
   it('协议无关 package 不得声明第三方生产依赖', () => {
@@ -70,15 +139,17 @@ describe('架构依赖规则', () => {
     ])).toContain('tools/mcp: forbidden workspace dependency on tools/tool-runtime')
   })
 
-  it('runtime 可以组合 kernel 与 core 实现', () => {
+  it('runtime 可以组合 kernel、core 与默认 prompt 实现', () => {
     const failures = verifyArchitecture([
       ['kernel', manifest('kernel')],
       ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
+      ['context/context-runtime', manifest('context-runtime', { '@agent-harness/kernel': 'workspace:*' })],
       ['session/session-lifecycle', manifest('session-lifecycle', { '@agent-harness/kernel': 'workspace:*' })],
       ['session/session-memory', manifest('session-memory', { '@agent-harness/kernel': 'workspace:*' })],
       ['tools/tool-runtime', manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' })],
       ['runtime', manifest('runtime', {
         '@agent-harness/kernel': 'workspace:*', '@agent-harness/core': 'workspace:*',
+        '@agent-harness/context-runtime': 'workspace:*',
         '@agent-harness/session-lifecycle': 'workspace:*', '@agent-harness/tool-runtime': 'workspace:*',
       })],
     ])

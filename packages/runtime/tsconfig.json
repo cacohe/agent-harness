@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../context/context-runtime"
+    },
+    {
       "path": "../core"
     },
     {

@@ -9,7 +9,7 @@ import {
   type ToolCallId,
   type TurnId,
 } from '@agent-harness/kernel'
-import { deriveModelMessages } from '@agent-harness/core'
+import { deriveModelMessages } from '@agent-harness/context-runtime'
 import { InMemorySessionLog } from '@agent-harness/session-memory'
 
 describe('InMemorySessionLog', () => {

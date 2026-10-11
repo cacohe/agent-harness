@@ -13,6 +13,9 @@
     "@agent-harness/tool-runtime": "workspace:*"
   },
   "devDependencies": {
-    "@agent-harness/session-lifecycle": "workspace:*"
+    "@agent-harness/context-runtime": "workspace:*",
+    "@agent-harness/memory-context": "workspace:*",
+    "@agent-harness/session-lifecycle": "workspace:*",
+    "@agent-harness/skill-context": "workspace:*"
   }
 }

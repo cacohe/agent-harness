@@ -52,13 +52,16 @@ workspace 按能力域分组（ADR 0011）；npm 包名为 `@agent-harness/<目�
 docs/                              架构与决定
 packages/
   kernel/                          Agent 概念、状态、接口、事件与错误
-  core/                            Inbox、上下文组装与 Agent 状态机
+  core/                            Inbox 与 Agent 核心循环状态机
+  context/context-runtime/         Prompt 组装、时间上下文与模型消息投影
   llm/
     openai-compatible/             OpenAI-compatible 模型 adapter
   session/
     session-memory/                内存会话实现
     session-lifecycle/             会话恢复分析实现
     session-jsonl/                 JSONL 会话存储 adapter
+  memory/memory-context/           长期记忆上下文贡献器
+  skills/skill-context/            已启用 Skill 摘要上下文贡献器
   tools/tool-runtime/              工具注册、组合与治理实现
   runtime/                         显式组合与生命周期
   hosts/cli/                       CLI 等进程入口

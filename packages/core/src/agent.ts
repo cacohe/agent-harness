@@ -1,7 +1,4 @@
-/**
- * Agent 核心循环状态机
- * 只依赖 model / session / tools 的 capability 接口；
- */
+/** Agent 核心循环状态机，只依赖 Kernel 定义并由组合方注入的 capability 接口。 */
 import {
   assertNever,
   isAbortError,
@@ -38,7 +35,6 @@ import {
   type SettlementSignalFactory,
   type ToolCapability,
 } from '@agent-harness/kernel'
-import { BoundedPromptAssembler } from './context.js'
 
 type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>
 
@@ -71,7 +67,7 @@ class AgentInbox {
 }
 
 /**
- * 只依赖 capability 接口的可重放 Agent 内核。
+ * 只依赖 Kernel capability 接口的可重放 Agent 核心循环。
  * 同一时刻至多一个活动 turn；已打开的 turn/step 在成功、失败与取消路径上恰好结算一次。
  */
 export class Agent {
@@ -109,7 +105,7 @@ export class Agent {
     this.#ids = options.ids
     this.#maxSteps = options.maxSteps
     this.#settlementSignals = options.settlementSignals
-    this.#prompts = options.prompts ?? new BoundedPromptAssembler({ maxInputBytes: Number.MAX_SAFE_INTEGER })
+    this.#prompts = options.prompts
     this.#runTimeoutMs = options.runTimeoutMs
     this.#maxModelOutputBytes = options.maxModelOutputBytes
     this.#observers = options.observers ?? []

@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  Agent,
-  BoundedPromptAssembler,
-  CurrentTimeContext,
-  EnabledSkillsContext,
-  RetrievedMemoryContext,
-} from '@agent-harness/core'
+import { Agent } from '@agent-harness/core'
+import { BoundedPromptAssembler, CurrentTimeContext } from '@agent-harness/context-runtime'
+import { RetrievedMemoryContext } from '@agent-harness/memory-context'
 import {
   brandId,
   AgentIdCollisionError,
@@ -21,6 +17,7 @@ import {
 } from '@agent-harness/kernel'
 import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle'
 import { InMemorySessionLog } from '@agent-harness/session-memory'
+import { EnabledSkillsContext } from '@agent-harness/skill-context'
 import {
   ScriptedModelProvider,
   ScriptedToolCapability,
@@ -43,6 +40,10 @@ function user(content = 'hello'): UserMessage {
 
 function eventTypes(events: readonly EventEnvelope[]): string[] {
   return events.map(envelope => envelope.event.type)
+}
+
+function defaultPrompts(): BoundedPromptAssembler {
+  return new BoundedPromptAssembler({ maxInputBytes: Number.MAX_SAFE_INTEGER })
 }
 
 function readEvents(session: SessionLog): Promise<readonly EventEnvelope[]> {
@@ -288,6 +289,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 2,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await agent.run(user('执行'), {
@@ -352,6 +354,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 3,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
     const execution = {
       id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -379,6 +382,7 @@ describe('Agent', () => {
       maxSteps: 4,
       maxModelOutputBytes: 1,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await expect(agent.run(user())).rejects.toThrow('模型输出超过 maxModelOutputBytes')
@@ -399,6 +403,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     const response = await agent.run(user())
@@ -441,6 +446,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     const response = await agent.run(user('double it'))
@@ -496,6 +502,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await expect(agent.run(user())).resolves.toMatchObject({
@@ -518,6 +525,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
     await agent.run(user('first'))
 
@@ -557,6 +565,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
     await agent.run({
       id: brandId<'MessageId'>('first-user') as MessageId,
@@ -599,6 +608,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await expect(agent.run(user())).rejects.toThrow('provider disconnected')
@@ -641,6 +651,7 @@ describe('Agent', () => {
       ids,
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await expect(agent.run(user())).rejects.toThrow('prepare failed')
@@ -686,6 +697,7 @@ describe('Agent', () => {
       ids,
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
     const controller = new AbortController()
 
@@ -742,6 +754,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
     const controller = new AbortController()
 
@@ -796,6 +809,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals,
+      prompts: defaultPrompts(),
     })
     const controller = new AbortController()
 
@@ -849,6 +863,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals,
+      prompts: defaultPrompts(),
     })
     const controller = new AbortController()
 
@@ -894,6 +909,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 1,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await expect(agent.run(user())).rejects.toThrow('agent exceeded maxSteps (1)')
@@ -932,6 +948,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
       observers: [
         {
           onStream() {
@@ -980,6 +997,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
       observers: [{ onExecution: event => observed.push(event) }],
     })
 
@@ -1044,6 +1062,7 @@ describe('Agent', () => {
         ids: new SequentialAgentIds(),
         maxSteps: 4,
         settlementSignals: new TestSettlementSignals(),
+        prompts: defaultPrompts(),
         observers: [{ onExecution: event => observed.push(event) }],
       })
       await agent.run(user())
@@ -1094,6 +1113,7 @@ describe('Agent', () => {
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
     })
 
     await expect(agent.run(user())).rejects.toThrow('inputTokens 必须是单调不减')

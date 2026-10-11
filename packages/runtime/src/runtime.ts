@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import {
-  Agent,
-  BoundedPromptAssembler,
-} from '@agent-harness/core'
+import { Agent } from '@agent-harness/core'
+import { BoundedPromptAssembler } from '@agent-harness/context-runtime'
 import {
   brandId,
   type AttemptId,
