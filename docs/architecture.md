@@ -40,7 +40,8 @@ packages/
     skill-filesystem/          受限文件系统 Skill catalog
     skill-tool/                Skill 正文加载工具 adapter
   runtime/                     显式组合根
-  hosts/cli/                   进程入口
+  hosts/cli/                   命令行进程入口
+  hosts/web/                   本地 Web UI 与 SSE 进程入口
   test-support/                确定性 fake 与集成测试
 ```
 
@@ -120,6 +121,8 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 `platform/platform-http` 为单实例 Host 实现 Gateway、Memory 与 Permit 的 HTTPS Platform HTTP 命令协议。它向模型调用发送 NDJSON 流命令，向长期记忆检索、显式记忆写入、文档状态查询、文档删除与工具许可发送 JSON 命令；文档导入使用有界二进制 body 和 Base64URL 编码的结构化 metadata header。所有命令使用幂等键、响应大小限制、严格 Content-Type/UTF-8/JSON 校验与取消传播保护网络边界；任何未完整读取的响应 body 都会取消。Platform 服务端必须把计费、审计和可靠 outbox 作为命令处理事务的一部分；记忆写入在 PG 事务中提交权威记录与向量索引 outbox，Qdrant consumer 再按权威 ID 幂等写入整条陈述向量。文档上传先进入隔离 OSS 对象，PG 事务记录权威元数据与索引 outbox，未引用的临时对象由 Platform 清扫；文档删除在 PG 写入墓碑和清理 outbox，立即停止新检索，再异步清理 Qdrant 与 OSS；文档状态查询只读取 PG 权威状态。Harness observer 只用于观测和对账。CLI 可以独立配置 Platform 模型和 Platform Memory；它不创建工具许可策略，因为本地 CLI 没有 Platform 冻结的执行身份。
 
 `hosts/cli` 是单进程 JSON 配置入口。它接受绝对 `--config` 路径及 `run`、`resume`、`chat`、`--session`、可选 `--message` 参数，显式组合 JSONL repository、OpenAI-compatible provider、可选 `run_shell` 工具和 Runtime。独立的 `import` 命令读取受限普通文件并调用 Platform 文档导入；`document-status` 查询一个文档的权威状态；`document-delete` 提交删除命令；这些命令都不创建 Runtime、模型、MCP 或 Skills。`runTimeoutMs`、`maxModelOutputBytes` 和 `maxInputBytes` 分别限制一个 turn 的协作式执行期限、模型输出与输入上下文；超时按取消路径结算。所有 provider 与工具都必须响应传入的 `AbortSignal`；不受进程隔离的任意第三方实现无法获得硬超时保证。shell 默认不注册，显式启用时只继承最小环境，并在 Unix 中终止整个进程组；它仍仅适合本地实验 Host，不以沙箱为安全边界。
+
+`hosts/web` 是仅绑定 `127.0.0.1` 的本地浏览器入口。它读取受限的 OpenAI-compatible JSON 配置，并且只从 Host 环境变量取得 API key；浏览器从不接触密钥。每个浏览器 session 在 Host 中持有独占 Runtime handle 和 JSONL writer；`POST /sessions/:id/messages` 接纳 FIFO 输入，`POST /sessions/:id/cancel` 取消活动 turn，`POST /sessions/:id/close` 释放会话，`GET /sessions/:id/events` 以 SSE 推送模型流、持久会话事件和最终结果。最后一个 SSE 订阅断开后，Host 按配置的空闲超时回收 session，防止浏览器刷新或异常退出后资源累积；关闭中的 session 拒绝新的 SSE 订阅。首版不注册本机 shell、MCP、Skills 或 Platform Memory，避免把工作目录、子进程权限和审批协议隐式暴露给浏览器；这些能力必须在后续决策中以显式 UI 和 Host 配置接入。
 
 每个 Agent 拥有统一 ID reservation，分别覆盖 turn、step、attempt、message 和 tool call 命名空间。框架生成 ID、调用方提供的 user message ID 和模型提供的 tool call ID 都必须在对应持久事件写入前保留；与历史或当前 Agent 已接纳值冲突时立即失败。直接构造 Agent 从空 reservation 开始，也执行同一规则。
 

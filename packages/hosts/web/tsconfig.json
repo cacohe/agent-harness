@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../context/context-runtime" },
+    { "path": "../../kernel" },
+    { "path": "../../llm/openai-compatible" },
+    { "path": "../../runtime" },
+    { "path": "../../session/session-jsonl" },
+    { "path": "../../tools/tool-runtime" }
+  ]
+}

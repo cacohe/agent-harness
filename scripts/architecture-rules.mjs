@@ -45,6 +45,10 @@ export function verifyArchitecture(manifests, sources = []) {
       'platform/platform-http', 'runtime', 'session/session-jsonl', 'skills/skill-context',
       'skills/skill-filesystem', 'skills/skill-tool', 'tools/mcp',
     ])],
+    ['hosts/web', new Set([
+      'kernel', 'context/context-runtime', 'tools/tool-runtime', 'llm/openai-compatible',
+      'runtime', 'session/session-jsonl',
+    ])],
   ])
   for (const path of adapters) allowedByOwner.set(path, new Set(['kernel']))
 

@@ -11,6 +11,9 @@
       "path": "packages/hosts/cli"
     },
     {
+      "path": "packages/hosts/web"
+    },
+    {
       "path": "packages/kernel"
     },
     {
