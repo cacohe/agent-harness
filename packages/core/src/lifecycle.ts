@@ -32,6 +32,14 @@ export interface Step {
   attempt?: Attempt;
 }
 
+/** 跟踪一个已领取输入的 turn，供核心循环与终态结算共享。 */
+export interface ActiveTurn {
+  readonly turnId: TurnId;
+  started: boolean;
+  ended: boolean;
+  activeStep?: Step;
+}
+
 /** 创建一次 step。 */
 export function createStep(stepId: StepId): Step {
   return { stepId, started: false, ended: false };
@@ -41,16 +49,14 @@ export function createStep(stepId: StepId): Step {
 export function buildTerminalEvents(options: {
   readonly error: unknown;
   readonly outcome: RuntimeFailureOutcome;
-  readonly turnId: TurnId;
-  readonly turnStarted: boolean;
-  readonly turnEnded: boolean;
-  readonly step: Step | undefined;
+  readonly turn: ActiveTurn;
 }): SessionEvent[] {
   const events: SessionEvent[] = [];
-  const { error, outcome, turnId, step } = options;
+  const { error, outcome, turn } = options;
+  const { turnId, activeStep } = turn;
 
-  if (step?.started === true && !step.ended) {
-    const attempt = step.attempt;
+  if (activeStep?.started === true && !activeStep.ended) {
+    const attempt = activeStep.attempt;
     if (attempt !== undefined) {
       const settlement =
         attempt.settlement ?? buildUnsuccessfulAttemptSettlement(attempt, outcome, error);
@@ -58,7 +64,7 @@ export function buildTerminalEvents(options: {
         events.push({
           type: 'assistant.settled',
           turnId,
-          stepId: step.stepId,
+          stepId: activeStep.stepId,
           settlement,
         });
       }
@@ -68,7 +74,7 @@ export function buildTerminalEvents(options: {
           events.push({
             type: 'tool.completed',
             turnId,
-            stepId: step.stepId,
+            stepId: activeStep.stepId,
             result:
               attempt.toolResults.get(call.id) ?? buildUnexecutedToolResult(call, outcome, error),
           });
@@ -78,12 +84,12 @@ export function buildTerminalEvents(options: {
     events.push({
       type: 'step.ended',
       turnId,
-      stepId: step.stepId,
+      stepId: activeStep.stepId,
       outcome,
     });
   }
 
-  if (options.turnStarted && !options.turnEnded) {
+  if (turn.started && !turn.ended) {
     events.push({
       type: 'turn.ended',
       turnId,
