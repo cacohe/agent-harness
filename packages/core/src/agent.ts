@@ -39,23 +39,48 @@ import {
   type StepLifecycle,
 } from './lifecycle.js'
 
-/** 保持尚未纳入 turn 的用户输入，并确保每条输入至多领取一次。 */
+/** 尚未开始的 turn；每个调用者只会收到自己消息对应的结果。 */
+interface QueuedRun {
+  readonly message: UserMessage
+  readonly options: AbortSignal | AgentRunOptions
+  readonly resolve: (message: AssistantMessage) => void
+  readonly reject: (error: unknown) => void
+  readonly clearAbortListener: () => void
+}
+
+/** 串行领取用户输入，保证同一会话在任意时刻只有一个 writer。 */
 class AgentInbox {
-  readonly #messages: UserMessage[] = []
+  readonly #runs: QueuedRun[] = []
 
-  /** 将用户消息加入队列。 */
-  enqueue(message: UserMessage): void {
-    this.#messages.push(message)
+  /** 加入 FIFO 队列。 */
+  enqueue(run: QueuedRun): void {
+    this.#runs.push(run)
   }
 
-  /** 从队列中领取一条用户消息。 */
-  claim(): UserMessage | undefined {
-    return this.#messages.shift()
+  /** 领取最早尚未执行的输入。 */
+  claim(): QueuedRun | undefined {
+    return this.#runs.shift()
   }
 
-  /** 队列中的用户消息数量。 */
-  get size(): number {
-    return this.#messages.length
+  /** 移除一条尚未开始的输入。 */
+  remove(run: QueuedRun): boolean {
+    const index = this.#runs.indexOf(run)
+    if (index < 0) return false
+    this.#runs.splice(index, 1)
+    return true
+  }
+
+  /** 拒绝全部尚未开始的输入。 */
+  rejectAll(error: unknown): void {
+    for (const run of this.#runs.splice(0)) {
+      run.clearAbortListener()
+      run.reject(error)
+    }
+  }
+
+  /** 是否仍有尚未开始的输入。 */
+  get hasPending(): boolean {
+    return this.#runs.length > 0
   }
 }
 
@@ -79,8 +104,7 @@ export class Agent {
   #phase: AgentPhase = { kind: 'idle' }
   #controller: AbortController | undefined
   #accepting = true
-  #idle: Promise<void> = Promise.resolve()  // 表示刚构造出来的 Agent 已经空闲
-  #resolveIdle: (() => void) | undefined
+  #draining: Promise<void> | undefined
 
   constructor(options: AgentOptions) {
     // 参数校验
@@ -121,23 +145,83 @@ export class Agent {
   stop(reason: unknown = new Error('agent stopped')): void {
     this.#accepting = false
     this.cancel(reason)
+    this.#inbox.rejectAll(new AgentClosedError('Agent 已停止接纳新的 run'))
   }
 
   /** 等待当前活动彻底离开 Agent 状态机。 */
-  whenIdle(): Promise<void> {
-    return this.#idle
+  async whenIdle(): Promise<void> {
+    for (;;) {
+      const draining = this.#draining
+      if (draining === undefined) return
+      await draining
+      if (this.#draining === undefined) return
+    }
   }
 
   /**
    * 执行一次 turn：写入用户消息，循环 step，直至无工具调用或触及步数上限。
    * 失败或取消时用独立结算信号补写尚未闭合的 turn/step 事件，再重新抛出原错误。
    */
-  async run(
+  run(
     message: UserMessage,
     options: AbortSignal | AgentRunOptions = {},
   ): Promise<AssistantMessage> {
-    if (!this.#accepting) throw new AgentClosedError('Agent 已停止接纳新的 run')
-    if (this.#phase.kind !== 'idle') throw new Error('agent is already running')
+    if (!this.#accepting) return Promise.reject(new AgentClosedError('Agent 已停止接纳新的 run'))
+
+    return new Promise<AssistantMessage>((resolve, reject) => {
+      const externalSignal = isAbortSignal(options)
+        ? options
+        : options.signal ?? new AbortController().signal
+      let queued: QueuedRun
+      const onAbort = (): void => {
+        if (!this.#inbox.remove(queued)) return
+        queued.clearAbortListener()
+        reject(externalSignal.reason)
+      }
+      queued = {
+        message,
+        options,
+        resolve,
+        reject,
+        clearAbortListener: () => externalSignal.removeEventListener('abort', onAbort),
+      }
+      if (externalSignal.aborted) {
+        reject(externalSignal.reason)
+        return
+      }
+      externalSignal.addEventListener('abort', onAbort, { once: true })
+      this.#inbox.enqueue(queued)
+      this.#startDraining()
+    })
+  }
+
+  /** 启动且仅启动一个 drain；每个排队输入的失败不会阻断后续输入。 */
+  #startDraining(): void {
+    if (this.#draining !== undefined) return
+    this.#draining = this.#drainInbox().finally(() => {
+      this.#draining = undefined
+      if (this.#inbox.hasPending) this.#startDraining()
+    })
+  }
+
+  async #drainInbox(): Promise<void> {
+    for (;;) {
+      const queued = this.#inbox.claim()
+      if (queued === undefined) return
+      queued.clearAbortListener()
+      try {
+        queued.resolve(await this.#runTurn(queued.message, queued.options))
+      } catch (error) {
+        queued.reject(error)
+      }
+    }
+  }
+
+  /** 执行已从 inbox 领取的一条输入。 */
+  async #runTurn(
+    message: UserMessage,
+    options: AbortSignal | AgentRunOptions,
+  ): Promise<AssistantMessage> {
 
     const externalSignal = isAbortSignal(options)
       ? options
@@ -146,14 +230,6 @@ export class Agent {
       isAbortSignal(options) ? undefined : options.execution,
     )
     const turnId = this.#reservations.turn(this.#ids.turn())
-    this.#idle = new Promise<void>(resolve => {
-      this.#resolveIdle = resolve
-    })
-
-    this.#inbox.enqueue(message)
-    const admitted = this.#inbox.claim()
-    if (admitted === undefined) throw new Error('agent inbox unexpectedly empty')
-
     const controller = new AbortController()
     this.#controller = controller
     const timeoutSignal = this.#runTimeoutMs === undefined ? undefined : AbortSignal.timeout(this.#runTimeoutMs)
@@ -170,8 +246,8 @@ export class Agent {
         ...(execution === undefined ? {} : { execution }),
       }], signal)
       turnStarted = true
-      this.#reservations.message(admitted.id)
-      await this.#append([{ type: 'user.message', message: admitted }], signal)
+      this.#reservations.message(message.id)
+      await this.#append([{ type: 'user.message', message }], signal)
 
       for (let stepNumber = 1; stepNumber <= this.#maxSteps; stepNumber += 1) {
         throwIfAborted(signal)
@@ -219,8 +295,6 @@ export class Agent {
     } finally {
       this.#controller = undefined
       this.#phase = { kind: 'idle' }
-      this.#resolveIdle?.()
-      this.#resolveIdle = undefined
     }
   }
 

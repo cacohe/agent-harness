@@ -67,7 +67,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
                                       step/end -> turn/end
 ```
 
-每个 Agent 同时只有一个活动。取消使用 `AbortSignal`。每个已打开的 turn 和 step 恰好结算一次。模型可见事实持久化失败后，执行必须在下一次模型请求前停止。
+每个 Agent 同时只有一个活动 turn，但可以接纳多个用户输入。Core 以 FIFO inbox 串行领取输入；每个 `run` 调用只收到其自身 turn 的结果或错误。`stop` 停止接纳新输入、取消活动 turn，并拒绝尚未开始的输入。取消使用 `AbortSignal`。每个已打开的 turn 和 step 恰好结算一次。模型可见事实持久化失败后，执行必须在下一次模型请求前停止。
 
 ## 会话日志
 

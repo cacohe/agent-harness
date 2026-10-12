@@ -4,6 +4,7 @@ import { BoundedPromptAssembler, CurrentTimeContext } from '@agent-harness/conte
 import { RetrievedMemoryContext } from '@agent-harness/memory-context'
 import {
   brandId,
+  AgentClosedError,
   AgentIdCollisionError,
   SettlementPersistenceError,
   type AgentExecutionEvent,
@@ -60,6 +61,172 @@ function expectClosed(events: readonly EventEnvelope[]): void {
 }
 
 describe('Agent', () => {
+  it('将运行期间接纳的输入按 FIFO 顺序逐个执行', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    let startFirst!: () => void
+    let releaseFirst!: () => void
+    const firstStarted = new Promise<void>(resolve => { startFirst = resolve })
+    const firstRelease = new Promise<void>(resolve => { releaseFirst = resolve })
+    const model = new ScriptedModelProvider([
+      {
+        events: [{ type: 'text.delta', text: 'first reply' }],
+        prepare: async () => {
+          startFirst()
+          await firstRelease
+        },
+      },
+      { events: [{ type: 'text.delta', text: 'second reply' }] },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    })
+    const first = agent.run(user('first'))
+    await firstStarted
+    const second = agent.run({
+      id: brandId<'MessageId'>('user-2') as MessageId,
+      role: 'user',
+      content: 'second',
+    })
+
+    releaseFirst()
+
+    await expect(first).resolves.toMatchObject({ content: 'first reply' })
+    await expect(second).resolves.toMatchObject({ content: 'second reply' })
+    await agent.whenIdle()
+    expect((await readEvents(session))
+      .filter(envelope => envelope.event.type === 'user.message')
+      .map(envelope => (envelope.event as { readonly message: UserMessage }).message.content))
+      .toEqual(['first', 'second'])
+    expect(model.requests).toHaveLength(2)
+  })
+
+  it('停止时拒绝尚未开始的排队输入', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    let startFirst!: () => void
+    const firstStarted = new Promise<void>(resolve => { startFirst = resolve })
+    const model = new ScriptedModelProvider([{
+      events: [],
+      prepare: async signal => {
+        startFirst()
+        await new Promise<never>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      },
+    }])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    })
+    const first = agent.run(user('first'))
+    await firstStarted
+    const second = agent.run({
+      id: brandId<'MessageId'>('user-2') as MessageId,
+      role: 'user',
+      content: 'second',
+    })
+
+    const rejectedSecond = expect(second).rejects.toBeInstanceOf(AgentClosedError)
+    agent.stop(new Error('停止 Agent'))
+
+    await expect(first).rejects.toThrow('停止 Agent')
+    await rejectedSecond
+    await agent.whenIdle()
+    expect((await readEvents(session)).filter(envelope => envelope.event.type === 'user.message'))
+      .toHaveLength(1)
+  })
+
+  it('取消排队输入时不创建 turn，且不阻断后续输入', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    let startFirst!: () => void
+    let releaseFirst!: () => void
+    const firstStarted = new Promise<void>(resolve => { startFirst = resolve })
+    const firstRelease = new Promise<void>(resolve => { releaseFirst = resolve })
+    const model = new ScriptedModelProvider([
+      {
+        events: [{ type: 'text.delta', text: 'first reply' }],
+        prepare: async () => {
+          startFirst()
+          await firstRelease
+        },
+      },
+      { events: [{ type: 'text.delta', text: 'third reply' }] },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    })
+    const first = agent.run(user('first'))
+    await firstStarted
+    const cancelled = new AbortController()
+    const second = agent.run({
+      id: brandId<'MessageId'>('user-2') as MessageId,
+      role: 'user',
+      content: 'second',
+    }, cancelled.signal)
+    const third = agent.run({
+      id: brandId<'MessageId'>('user-3') as MessageId,
+      role: 'user',
+      content: 'third',
+    })
+
+    const rejectedSecond = expect(second).rejects.toThrow('取消排队输入')
+    cancelled.abort(new Error('取消排队输入'))
+    releaseFirst()
+
+    await expect(first).resolves.toMatchObject({ content: 'first reply' })
+    await rejectedSecond
+    await expect(third).resolves.toMatchObject({ content: 'third reply' })
+    expect((await readEvents(session))
+      .filter(envelope => envelope.event.type === 'user.message')
+      .map(envelope => (envelope.event as { readonly message: UserMessage }).message.content))
+      .toEqual(['first', 'third'])
+  })
+
+  it('whenIdle 等待在前一输入完成时刚加入的下一条输入', async () => {
+    const session = new InMemorySessionLog(sessionId)
+    const model = new ScriptedModelProvider([
+      { events: [{ type: 'text.delta', text: 'first reply' }] },
+      { events: [{ type: 'text.delta', text: 'second reply' }] },
+    ])
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    })
+    const first = agent.run(user('first'))
+    const second = first.then(() => agent.run({
+      id: brandId<'MessageId'>('user-2') as MessageId,
+      role: 'user',
+      content: 'second',
+    }))
+    const idle = agent.whenIdle()
+
+    await idle
+
+    await expect(second).resolves.toMatchObject({ content: 'second reply' })
+    expect(model.requests).toHaveLength(2)
+  })
+
   it('检索长期记忆并作为受限 system context 加入请求', async () => {
     const session = new InMemorySessionLog(sessionId)
     const model = new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }])
