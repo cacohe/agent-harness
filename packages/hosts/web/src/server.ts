@@ -1,21 +1,32 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { WebSessionController } from './session-registry.js';
+import { SessionNotFoundError } from '@agent-harness/kernel';
+import { type WebSessionController, WebSessionNotFoundError } from './session-registry.js';
 import { uiScript } from './ui/client.js';
+import { uiFavicon } from './ui/favicon.js';
 import { uiHtml } from './ui/index-html.js';
 import { uiCss } from './ui/styles.js';
+import { WorkspaceError } from './workspace.js';
+import { pickWorkspaceDirectory } from './workspace-picker.js';
 
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const sessionIdPattern = /^[A-Za-z0-9_-]{1,128}$/;
 
+export interface LocalWebServerOptions {
+  readonly pickWorkspace?: () => Promise<string | undefined>;
+}
+
 /** 仅绑定 loopback 的本地 Web Host。 */
 export class LocalWebServer {
   readonly #sessions: WebSessionController;
+  readonly #pickWorkspace: () => Promise<string | undefined>;
   readonly #server: Server;
   #closing = false;
+  #browsing = false;
   #closePromise: Promise<void> | undefined;
 
-  constructor(sessions: WebSessionController) {
+  constructor(sessions: WebSessionController, options: LocalWebServerOptions = {}) {
     this.#sessions = sessions;
+    this.#pickWorkspace = options.pickWorkspace ?? pickWorkspaceDirectory;
     this.#server = createServer((request, response) => {
       void this.#route(request, response).catch((error) => {
         if (!response.headersSent) sendText(response, status(error), diagnostic(error));
@@ -55,16 +66,35 @@ export class LocalWebServer {
 
   async #route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (this.#closing) return sendText(response, 503, 'Web Host 正在关闭');
+    assertLocalRequest(request);
     const method = request.method ?? 'GET';
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     if (method === 'GET' && url.pathname === '/')
       return sendAsset(response, 'text/html; charset=utf-8', uiHtml);
+    if (method === 'GET' && (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico'))
+      return sendAsset(response, 'image/svg+xml; charset=utf-8', uiFavicon);
     if (method === 'GET' && url.pathname === '/assets/app.css')
       return sendAsset(response, 'text/css; charset=utf-8', uiCss);
     if (method === 'GET' && url.pathname === '/assets/app.js')
       return sendAsset(response, 'text/javascript; charset=utf-8', uiScript);
+    if (method === 'POST' && url.pathname === '/workspace/browse') {
+      if (this.#browsing) return sendJson(response, 409, { cancelled: true, busy: true });
+      this.#browsing = true;
+      try {
+        const workspace = await this.#pickWorkspace();
+        if (workspace === undefined) return sendJson(response, 409, { cancelled: true });
+        return sendJson(response, 200, { workspace });
+      } finally {
+        this.#browsing = false;
+      }
+    }
+    if (method === 'POST' && url.pathname === '/sessions') {
+      const workspace = await readWorkspace(request);
+      const created = await this.#sessions.createSession(workspace);
+      return sendJson(response, 201, created);
+    }
 
-    const match = /^\/sessions\/([A-Za-z0-9_-]{1,128})\/(events|messages|cancel|close)$/.exec(
+    const match = /^\/sessions\/([A-Za-z0-9_-]{1,128})\/(events|messages|cancel|close|open)$/.exec(
       url.pathname,
     );
     if (match === null) return sendText(response, 404, '未找到路径');
@@ -74,9 +104,13 @@ export class LocalWebServer {
       return sendText(response, 400, '无效会话 ID');
     }
     if (method === 'GET' && operation === 'events') {
-      const unsubscribe = this.#sessions.subscribe(sessionId, response);
+      const unsubscribe = await this.#sessions.subscribe(sessionId, response);
       request.once('close', unsubscribe);
       return;
+    }
+    if (method === 'POST' && operation === 'open') {
+      const opened = await this.#sessions.openSession(sessionId);
+      return sendJson(response, 200, opened);
     }
     if (method === 'POST' && operation === 'messages') {
       const content = await readMessage(request);
@@ -95,7 +129,38 @@ export class LocalWebServer {
   }
 }
 
+function assertLocalRequest(request: IncomingMessage): void {
+  const port = request.socket.localPort;
+  if (port === undefined) throw new HttpError(400, '请求缺少本地端口');
+  const authority = port === 80 ? '127.0.0.1' : `127.0.0.1:${port}`;
+  if (request.headers.host !== authority) throw new HttpError(403, '拒绝非本机来源');
+  const origin = request.headers.origin;
+  if (origin !== undefined && origin !== `http://${authority}`) {
+    throw new HttpError(403, '拒绝跨来源请求');
+  }
+}
+
 async function readMessage(request: IncomingMessage): Promise<string> {
+  const record = await readJsonObject(request);
+  if (Object.keys(record).length !== 1 || typeof record.content !== 'string') {
+    throw new HttpError(400, '消息只能包含字符串 content');
+  }
+  const content = record.content.trim();
+  if (content.length === 0) throw new HttpError(400, '消息不能为空');
+  return content;
+}
+
+async function readWorkspace(request: IncomingMessage): Promise<string> {
+  const record = await readJsonObject(request);
+  if (Object.keys(record).length !== 1 || typeof record.workspace !== 'string') {
+    throw new HttpError(400, '创建会话只能包含字符串 workspace');
+  }
+  const workspace = record.workspace.trim();
+  if (workspace.length === 0) throw new HttpError(400, '工作目录不能为空');
+  return workspace;
+}
+
+async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
   if (request.headers['content-type'] !== 'application/json')
     throw new HttpError(415, 'Content-Type 必须是 application/json');
   const chunks: Buffer[] = [];
@@ -112,15 +177,10 @@ async function readMessage(request: IncomingMessage): Promise<string> {
   } catch {
     throw new HttpError(400, '消息必须是有效 JSON');
   }
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    throw new HttpError(400, '消息必须是对象');
-  const record = value as Record<string, unknown>;
-  if (Object.keys(record).length !== 1 || typeof record.content !== 'string') {
-    throw new HttpError(400, '消息只能包含字符串 content');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpError(400, '请求体必须是对象');
   }
-  const content = record.content.trim();
-  if (content.length === 0) throw new HttpError(400, '消息不能为空');
-  return content;
+  return value as Record<string, unknown>;
 }
 
 class HttpError extends Error {
@@ -132,7 +192,11 @@ class HttpError extends Error {
 }
 
 function status(error: unknown): number {
-  return error instanceof HttpError ? error.status : 500;
+  if (error instanceof HttpError) return error.status;
+  if (error instanceof WebSessionNotFoundError) return 404;
+  if (error instanceof SessionNotFoundError) return 404;
+  if (error instanceof WorkspaceError) return 400;
+  return 500;
 }
 
 function diagnostic(error: unknown): string {

@@ -3,26 +3,42 @@ import type { ServerResponse } from 'node:http';
 import {
   type AgentObserver,
   brandId,
+  type EventEnvelope,
   type MessageId,
   SessionAlreadyExistsError,
   type SessionId,
 } from '@agent-harness/kernel';
 import type { AgentRuntime, AgentRuntimeHandle } from '@agent-harness/runtime';
 import { SessionEventStream } from './events.js';
+import { projectChatTranscript } from './transcript.js';
+import { resolveWorkspaceDirectory } from './workspace.js';
 
 interface ManagedSession {
+  readonly workspace: string;
   readonly runtime: AgentRuntime;
   readonly handle: AgentRuntimeHandle;
   readonly events: SessionEventStream;
 }
 
 export interface SessionRuntimeFactory {
-  create(observer: AgentObserver): AgentRuntime;
+  create(observer: AgentObserver, workspace: string): AgentRuntime;
+}
+
+/** 会话尚未选择工作目录或尚未创建。 */
+export class WebSessionNotFoundError extends Error {
+  override readonly name = 'WebSessionNotFoundError';
+}
+
+export interface OpenedWebSession {
+  readonly sessionId: string;
+  readonly workspace: string;
 }
 
 /** HTTP 路由所需的最小会话控制能力。 */
 export interface WebSessionController {
-  subscribe(sessionId: string, response: ServerResponse): () => void;
+  createSession(workspace: string): Promise<OpenedWebSession>;
+  openSession(sessionId: string): Promise<OpenedWebSession>;
+  subscribe(sessionId: string, response: ServerResponse): Promise<() => void>;
   submit(sessionId: string, content: string): Promise<void>;
   cancel(sessionId: string): Promise<void>;
   closeSession(sessionId: string): Promise<void>;
@@ -34,6 +50,9 @@ export class SessionRegistry implements WebSessionController {
   readonly #factory: SessionRuntimeFactory;
   readonly #idleTimeoutMs: number;
   readonly #onIdleCloseError: (error: unknown) => void;
+  readonly #readEvents: SessionRegistryOptions['readEvents'];
+  readonly #createWorkspace: SessionRegistryOptions['createWorkspace'];
+  readonly #readWorkspace: SessionRegistryOptions['readWorkspace'];
   readonly #sessions = new Map<string, ManagedSession>();
   readonly #opening = new Map<string, Promise<ManagedSession>>();
   readonly #closingSessions = new Map<string, Promise<void>>();
@@ -46,12 +65,49 @@ export class SessionRegistry implements WebSessionController {
     this.#factory = factory;
     this.#idleTimeoutMs = options.idleTimeoutMs;
     this.#onIdleCloseError = options.onIdleCloseError;
+    this.#readEvents = options.readEvents;
+    this.#createWorkspace = options.createWorkspace;
+    this.#readWorkspace = options.readWorkspace;
   }
 
-  subscribe(sessionId: string, response: ServerResponse): () => void {
+  async createSession(workspacePath: string): Promise<OpenedWebSession> {
+    if (this.#closing) throw new Error('Web Host 正在关闭，不能创建会话');
+    const workspace = await resolveWorkspaceDirectory(workspacePath);
+    const sessionId = randomUUID();
+    const session = await this.#get(sessionId, workspace, 'create');
+    try {
+      await this.#createWorkspace(sessionId, session.workspace);
+    } catch (error) {
+      await this.closeSession(sessionId).catch(() => undefined);
+      throw error;
+    }
+    return { sessionId, workspace: session.workspace };
+  }
+
+  async openSession(sessionId: string): Promise<OpenedWebSession> {
+    if (this.#closing) throw new Error('Web Host 正在关闭，不能恢复会话');
+    const workspacePath = await this.#readWorkspace(sessionId);
+    if (workspacePath === undefined) {
+      throw new WebSessionNotFoundError('会话没有已授权的工作目录');
+    }
+    const workspace = await resolveWorkspaceDirectory(workspacePath);
+    const session = await this.#get(sessionId, workspace, 'resume');
+    return { sessionId, workspace: session.workspace };
+  }
+
+  async subscribe(sessionId: string, response: ServerResponse): Promise<() => void> {
     if (this.#closing || this.#closingSessions.has(sessionId)) {
       response.writeHead(409, { 'content-type': 'text/plain; charset=utf-8' });
       response.end('会话正在关闭');
+      return () => undefined;
+    }
+    if (
+      !this.#sessions.has(sessionId) &&
+      !this.#opening.has(sessionId) &&
+      !this.#streams.has(sessionId)
+    ) {
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.end('会话不存在，请先选择工作目录');
       return () => undefined;
     }
     let events = this.#streams.get(sessionId);
@@ -60,7 +116,19 @@ export class SessionRegistry implements WebSessionController {
       this.#streams.set(sessionId, events);
     }
     this.#cancelIdleClose(sessionId);
-    const unsubscribe = events.subscribe(response);
+    let unsubscribe: () => void;
+    try {
+      unsubscribe = await events.subscribe(response, async () => {
+        const envelopes = await this.#readEvents(sessionId, new AbortController().signal);
+        return {
+          value: { messages: projectChatTranscript(envelopes) },
+          sequence: envelopes.at(-1)?.sequence ?? 0,
+        };
+      });
+    } catch (error) {
+      if (events.subscriberCount === 0) this.#scheduleIdleClose(sessionId);
+      throw error;
+    }
     return () => {
       unsubscribe();
       if (events.subscriberCount === 0) {
@@ -74,7 +142,7 @@ export class SessionRegistry implements WebSessionController {
   }
 
   async submit(sessionId: string, content: string): Promise<void> {
-    const session = await this.#get(sessionId);
+    const session = await this.#get(sessionId, undefined, 'resume');
     void session.handle.agent
       .run({
         id: brandId<'MessageId'>(randomUUID()) as MessageId,
@@ -88,7 +156,7 @@ export class SessionRegistry implements WebSessionController {
   }
 
   async cancel(sessionId: string): Promise<void> {
-    const session = await this.#get(sessionId);
+    const session = await this.#get(sessionId, undefined, 'resume');
     session.handle.agent.cancel(new DOMException('用户取消当前执行', 'AbortError'));
   }
 
@@ -134,19 +202,24 @@ export class SessionRegistry implements WebSessionController {
     if (errors.length > 1) throw new AggregateError(errors, '关闭 Web 会话失败');
   }
 
-  async #get(sessionId: string): Promise<ManagedSession> {
+  async #get(
+    sessionId: string,
+    workspace: string | undefined,
+    mode: 'create' | 'resume',
+  ): Promise<ManagedSession> {
     if (this.#closing) throw new Error('Web Host 正在关闭，不能接纳新消息');
     const closing = this.#closingSessions.get(sessionId);
     if (closing !== undefined) {
       await closing;
-      return this.#get(sessionId);
+      return this.#get(sessionId, workspace, mode);
     }
     this.#cancelIdleClose(sessionId);
     const opened = this.#sessions.get(sessionId);
     if (opened !== undefined) return opened;
     const opening = this.#opening.get(sessionId);
     if (opening !== undefined) return opening;
-    const created = this.#open(sessionId);
+    if (workspace === undefined) throw new WebSessionNotFoundError('会话不存在，请先选择工作目录');
+    const created = this.#open(sessionId, workspace, mode);
     this.#opening.set(sessionId, created);
     try {
       const session = await created;
@@ -162,24 +235,48 @@ export class SessionRegistry implements WebSessionController {
     }
   }
 
-  async #open(rawSessionId: string): Promise<ManagedSession> {
+  async #open(
+    rawSessionId: string,
+    workspace: string,
+    mode: 'create' | 'resume',
+  ): Promise<ManagedSession> {
     const sessionId = brandId<'SessionId'>(rawSessionId) as SessionId;
     const events = this.#events(rawSessionId);
-    const runtime = this.#factory.create({
-      onStream: (event) => events.publish('stream', event),
-      onExecution: (event) => events.publish('session', event),
-    });
+    const runtime = this.#factory.create(
+      {
+        onStream: (event) => events.publish('stream', event),
+        onExecution: (event) =>
+          events.publish(
+            'session',
+            event,
+            event.type === 'session.event' ? event.envelope.sequence : undefined,
+          ),
+      },
+      workspace,
+    );
     const signal = new AbortController().signal;
     try {
-      const handle = await runtime.create(sessionId, { signal });
-      return { runtime, handle, events };
+      const handle =
+        mode === 'create'
+          ? await this.#createOrResume(runtime, sessionId, signal)
+          : await runtime.resume(sessionId, { signal });
+      return { workspace, runtime, handle, events };
     } catch (error) {
-      if (!(error instanceof SessionAlreadyExistsError)) {
-        await runtime.close().catch(() => undefined);
-        throw error;
-      }
-      const handle = await runtime.resume(sessionId, { signal });
-      return { runtime, handle, events };
+      await runtime.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async #createOrResume(
+    runtime: AgentRuntime,
+    sessionId: SessionId,
+    signal: AbortSignal,
+  ): Promise<AgentRuntimeHandle> {
+    try {
+      return await runtime.create(sessionId, { signal });
+    } catch (error) {
+      if (!(error instanceof SessionAlreadyExistsError)) throw error;
+      return await runtime.resume(sessionId, { signal });
     }
   }
 
@@ -230,6 +327,12 @@ export class SessionRegistry implements WebSessionController {
 export interface SessionRegistryOptions {
   readonly idleTimeoutMs: number;
   readonly onIdleCloseError: (error: unknown) => void;
+  readonly readEvents: (
+    sessionId: string,
+    signal: AbortSignal,
+  ) => Promise<readonly EventEnvelope[]>;
+  readonly createWorkspace: (sessionId: string, workspace: string) => Promise<void>;
+  readonly readWorkspace: (sessionId: string) => Promise<string | undefined>;
 }
 
 function message(error: unknown): string {

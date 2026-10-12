@@ -104,7 +104,7 @@ export class Agent {
   #phase: AgentPhase = { kind: 'idle' };
   #controller: AbortController | undefined;
   #accepting = true;
-  #draining: Promise<void> | undefined;
+  #draining: Promise<void> | undefined; // 正在 draining 的 promise，用于保证只有一个 drain 在执行
 
   constructor(options: AgentOptions) {
     // 参数校验
@@ -250,6 +250,7 @@ export class Agent {
     let activeStep: StepLifecycle | undefined;
 
     try {
+      // 提交 turn 开始事件
       await this.#append(
         [
           {
@@ -261,22 +262,31 @@ export class Agent {
         signal,
       );
       turnStarted = true;
+
+      // 提交用户消息事件
       this.#reservations.message(message.id);
       await this.#append([{ type: 'user.message', message }], signal);
 
+      // 循环执行 step，直至无工具调用或触及步数上限
       for (let stepNumber = 1; stepNumber <= this.#maxSteps; stepNumber += 1) {
         throwIfAborted(signal);
+
+        // 创建 step 生命周期
         const stepId = this.#reservations.step(this.#ids.step());
         activeStep = createStepLifecycle(stepId);
         this.#phase = { kind: 'running', turnId, stepId };
+
+        // 执行一步 step，获取返回的 assistant 消息
         const messageFromStep = await this.#runStep(turnId, activeStep, signal, execution);
 
+        // 如果 step 没有工具调用，则提交 turn 结束事件
         if (messageFromStep.toolCalls.length === 0) {
           await this.#append([{ type: 'turn.ended', turnId, outcome: 'completed' }], signal);
           turnEnded = true;
           return messageFromStep;
         }
 
+        // 如果 step 数量达到上限，则抛出错误
         if (stepNumber === this.#maxSteps) {
           throw new Error(`agent exceeded maxSteps (${this.#maxSteps})`);
         }
@@ -284,6 +294,7 @@ export class Agent {
 
       throw new Error('agent loop ended without a final assistant message');
     } catch (error) {
+      // 构建 terminal settlement 事件
       const outcome = signal.aborted || isAbortError(error) ? 'cancelled' : 'failed';
       const terminalEvents = buildTerminalEvents({
         error,
@@ -294,6 +305,7 @@ export class Agent {
         step: activeStep,
       });
 
+      // 如果 terminal settlement 事件不为空，则提交结算事件
       if (terminalEvents.length > 0) {
         try {
           const settlementSignal = this.#settlementSignals.create();
@@ -319,15 +331,19 @@ export class Agent {
     signal: AbortSignal,
     execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
+    // 提交 step 开始事件
     const stepId = lifecycle.stepId;
     await this.#append([{ type: 'step.started', turnId, stepId }], signal);
     lifecycle.started = true;
     throwIfAborted(signal);
 
+    // 组装请求
     const request = await waitForSignal(
       this.#prompts.assemble(await this.#session.read({ signal }), this.#tools.list(), signal),
       signal,
     );
+
+    // 准备模型
     const prepared = await this.#model.prepare(signal);
     throwIfAborted(signal);
     const attempt: AttemptLifecycle = {
@@ -344,21 +360,27 @@ export class Agent {
     let outputTokens = 0;
     let usageSequence = 0;
 
+    // 循环获取模型流式生成时的中间输出
     for await (const event of prepared.stream(request, signal)) {
       throwIfAborted(signal);
       this.#notifyStream(event);
       switch (event.type) {
+        // 文本增量
         case 'text.delta':
           outputBytes += utf8ByteLength(event.text);
           this.#assertOutputBudget(outputBytes);
           attempt.partialText += event.text;
           break;
+
+        // 工具调用
         case 'tool.call':
           outputBytes += utf8ByteLength(JSON.stringify(event.call));
           this.#assertOutputBudget(outputBytes);
           this.#reservations.toolCall(event.call.id);
           attempt.observedToolCalls.push(event.call);
           break;
+
+        // 使用量
         case 'usage':
           assertCumulativeUsage(event.inputTokens, event.outputTokens, inputTokens, outputTokens);
           usageSequence += 1;
@@ -381,17 +403,22 @@ export class Agent {
     }
     throwIfAborted(signal);
 
+    // 构建 assistant 消息
     const assistantMessage: AssistantMessage = {
       id: this.#reservations.message(this.#ids.message()),
       role: 'assistant',
       content: attempt.partialText,
       toolCalls: attempt.observedToolCalls,
     };
+
+    // 构建结算结果
     attempt.settlement = {
       status: 'completed',
       attemptId: attempt.attemptId,
       message: assistantMessage,
     };
+
+    // 提交结算事件
     await this.#append(
       [
         {
@@ -405,16 +432,19 @@ export class Agent {
     );
     attempt.settlementPersisted = true;
 
+    // 执行工具调用
     for (const call of attempt.observedToolCalls) {
       const result = await executeWithContext(this.#tools, call, {
         signal,
         ...(execution === undefined ? {} : { execution }),
       });
       attempt.toolResults.set(call.id, result);
+      // 提交工具调用完成事件
       await this.#append([{ type: 'tool.completed', turnId, stepId, result }], signal);
       attempt.persistedToolResults.add(call.id);
     }
 
+    // 提交 step 结束事件
     await this.#append([{ type: 'step.ended', turnId, stepId, outcome: 'completed' }], signal);
     lifecycle.ended = true;
     return assistantMessage;
