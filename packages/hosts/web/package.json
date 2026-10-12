@@ -1,0 +1,20 @@
+{
+  "name": "@agent-harness/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-harness-web": "./lib/index.js"
+  },
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "dependencies": {
+    "@agent-harness/context-runtime": "workspace:*",
+    "@agent-harness/kernel": "workspace:*",
+    "@agent-harness/openai-compatible": "workspace:*",
+    "@agent-harness/runtime": "workspace:*",
+    "@agent-harness/session-jsonl": "workspace:*",
+    "@agent-harness/tool-runtime": "workspace:*"
+  }
+}

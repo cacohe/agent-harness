@@ -38,7 +38,7 @@ input → turn/start → step/start → model stream → assistant settlement
                                        step/end → turn/end
 ```
 
-- 每个 Agent 同时只有一个活动；取消使用 `AbortSignal`
+- 每个 Agent 同时只有一个活动 turn；后续输入由 FIFO inbox 排队，取消使用 `AbortSignal`
 - 已打开的 turn/step 在成功、失败与取消路径上恰好结算一次
 - 流式 chunk 是临时通知；持久化的是完整 assistant settlement
 
@@ -77,6 +77,7 @@ packages/
   runtime/                显式组合与 handle 生命周期
   hosts/
     cli/                  单进程 JSON 配置 CLI
+    web/                  本地浏览器 UI 与 SSE Host
   test-support/           确定性 fake 与集成测试
 scripts/                  架构 / 文档 gate
 .agents/skills/           可复用仓库工作流
@@ -102,6 +103,7 @@ pnpm run build
 | `pnpm run typecheck` | TypeScript 工程引用检查                    |
 | `pnpm run test`      | Vitest                               |
 | `pnpm run check`     | 架构 gate + 文档 gate + typecheck + test |
+| `pnpm web -- --config /绝对/config.json` | 启动仅本机可访问的 Web UI |
 
 
 ## 本地启动 Agent
@@ -186,6 +188,19 @@ pnpm agent document-status --document document-id
 # document-delete：提交受 Platform 授权与保留策略约束的文档删除
 pnpm agent document-delete --document document-id
 ```
+
+### 本地 Web UI
+
+Web Host 是只绑定 `127.0.0.1` 的浏览器聊天界面。它不将 API key 发送给浏览器，首版也不启用 shell、MCP 或文件工具。
+
+```bash
+cp examples/web/.env.example examples/web/.env
+# 编辑 examples/web/.env，填入 DEEPSEEK_API_KEY
+pnpm run build
+pnpm web
+```
+
+启动后访问终端打印的本地地址（默认 `http://127.0.0.1:3080`）。`pnpm web -- --port 3090` 可改用其他 loopback 端口。首次启动会生成被 gitignore 的 `examples/web/config.json` 与 JSONL 会话目录。
 
 `chat` 模式下在 stderr 提示后循环读取输入；输入 `/exit` 或 `/quit` 结束。可通过 `shell.enabled: true` 显式注册本机 `run_shell` 工具。
 

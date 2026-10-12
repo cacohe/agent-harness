@@ -81,6 +81,27 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
 
+  packages/hosts/web:
+    dependencies:
+      '@agent-harness/context-runtime':
+        specifier: workspace:*
+        version: link:../../context/context-runtime
+      '@agent-harness/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+      '@agent-harness/openai-compatible':
+        specifier: workspace:*
+        version: link:../../llm/openai-compatible
+      '@agent-harness/runtime':
+        specifier: workspace:*
+        version: link:../../runtime
+      '@agent-harness/session-jsonl':
+        specifier: workspace:*
+        version: link:../../session/session-jsonl
+      '@agent-harness/tool-runtime':
+        specifier: workspace:*
+        version: link:../../tools/tool-runtime
+
   packages/kernel: {}
 
   packages/llm/gateway:
