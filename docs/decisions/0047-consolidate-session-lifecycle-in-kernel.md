@@ -6,7 +6,7 @@
 
 ## 决策
 
-将 `analyzeSessionLifecycle` 迁入 `kernel/src/session/lifecycle.ts`，并从 Kernel 根入口导出。`SessionLifecycleRepairPlan`、生命周期错误和事件契约继续位于 `session.ts`。
+将 `analyzeSessionLifecycle` 迁入 `kernel/src/session/lifecycle.ts`，并从 Kernel 根入口导出。`SessionLifecycleRepairPlan`、生命周期错误和事件契约位于 `kernel/src/session/protocol.ts`。
 
 `runtime` 仍拥有恢复时读取历史、调用分析并原子追加修复的编排；Kernel 分析函数不执行 I/O。删除已无职责的 `@agent-harness/session-lifecycle` package。
 

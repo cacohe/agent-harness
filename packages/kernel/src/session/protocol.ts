@@ -7,8 +7,8 @@ import type {
   SessionId,
   StepId,
   TurnId,
-} from './facts.js';
-import type { ToolCallId } from './tools/protocol.js';
+} from '../facts.js';
+import type { ToolCallId } from '../tools/protocol.js';
 
 /** 提供不可变的会话事件快照。 */
 export interface SessionReader {

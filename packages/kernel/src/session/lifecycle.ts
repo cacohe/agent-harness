@@ -14,7 +14,7 @@ import {
   SessionLifecycleCorruptionError,
   type SessionLifecycleIdNamespaces,
   type SessionLifecycleRepairPlan,
-} from '../session.js';
+} from './protocol.js';
 import type { ToolCallId } from '../tools/protocol.js';
 
 /**
