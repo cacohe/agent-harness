@@ -107,7 +107,7 @@ Append、read 与 flush 等待 writer 队列时响应各自的取消信号。已
 
 在 Windows 上，目录 fd 的 `fsync` 常返回 `EPERM`。JSONL adapter 忽略目录同步上的该错误，但会话文件的 `fdatasync` 仍必须成功；因此文件内容耐久屏障保留，目录项元数据在部分 Windows 环境可能延迟落盘。会话创建在 `rename` 发布 staging 目录前会关闭其中已打开的文件句柄，并在发布后重新打开正式路径；Windows 不允许对仍含打开句柄的目录执行 `rename`。
 
-`session/session-lifecycle` 使用纯生命周期分析验证恢复历史。分析要求 turn 与 step 正确嵌套，事件标识符与当前生命周期一致，assistant settlement 和 tool result 合法关联，已经闭合的生命周期不再追加所属事件。只有成功完成且产生工具调用的 step 才能继续下一 step；工具结果必须严格构成 assistant tool call 顺序的连续前缀。结构矛盾直接拒绝恢复。日志尾部的活动 step 会为该前缀之后的缺失结果补写 `unknown`，再以 `interrupted` 闭合 step 和 turn；活动 turn 只补写 `turn.ended: interrupted`。这些修复使用读取时的末尾 sequence，在暴露 Agent 前作为一个原子 batch 提交。`unknown` 表示工具可能已经执行且外部副作用无法确认，并会进入后续模型消息投影。分析同时返回历史已使用的 turn、step、attempt、message 和 tool call ID 不可变快照。
+`kernel/session` 使用纯生命周期分析验证恢复历史。分析要求 turn 与 step 正确嵌套，事件标识符与当前生命周期一致，assistant settlement 和 tool result 合法关联，已经闭合的生命周期不再追加所属事件。只有成功完成且产生工具调用的 step 才能继续下一 step；工具结果必须严格构成 assistant tool call 顺序的连续前缀。结构矛盾直接拒绝恢复。日志尾部的活动 step 会为该前缀之后的缺失结果补写 `unknown`，再以 `interrupted` 闭合 step 和 turn；活动 turn 只补写 `turn.ended: interrupted`。这些修复使用读取时的末尾 sequence，在暴露 Agent 前作为一个原子 batch 提交。`unknown` 表示工具可能已经执行且外部副作用无法确认，并会进入后续模型消息投影。分析同时返回历史已使用的 turn、step、attempt、message 和 tool call ID 不可变快照。
 
 `runtime` 是显式组合根，接收 repository、model、tools、运行限制、observer 和可选标识符 factory。`create` 创建新 writer；`resume` 取得 writer、读取并校验历史、原子修复后才构造 Agent。生产标识符使用随机 UUID，测试可以替换 factory。Runtime 把历史 ID 快照传入 Agent，不复制实时 reservation。Runtime 不包含 registry、服务定位器或动态插件装载。
 

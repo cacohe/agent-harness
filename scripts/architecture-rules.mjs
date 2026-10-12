@@ -15,7 +15,6 @@ export function verifyArchitecture(manifests, sources = []) {
     'core',
     'context/context-runtime',
     'memory/memory-context',
-    'session/session-lifecycle',
     'session/session-memory',
     'skills/skill-context',
   ]);
@@ -36,13 +35,12 @@ export function verifyArchitecture(manifests, sources = []) {
     ['core', new Set(['kernel'])],
     ['context/context-runtime', new Set(['kernel'])],
     ['memory/memory-context', new Set(['kernel'])],
-    ['session/session-lifecycle', new Set(['kernel'])],
     ['session/session-memory', new Set(['kernel'])],
     ['skills/skill-context', new Set(['kernel'])],
     ['tools/local', new Set(['kernel'])],
     [
       'runtime',
-      new Set(['kernel', 'core', 'context/context-runtime', 'session/session-lifecycle']),
+      new Set(['kernel', 'core', 'context/context-runtime']),
     ],
     ['test-support', new Set(['kernel', 'core', 'session/session-memory'])],
     [

@@ -203,10 +203,6 @@ describe('架构依赖规则', () => {
         manifest('context-runtime', { '@agent-harness/kernel': 'workspace:*' }),
       ],
       [
-        'session/session-lifecycle',
-        manifest('session-lifecycle', { '@agent-harness/kernel': 'workspace:*' }),
-      ],
-      [
         'session/session-memory',
         manifest('session-memory', { '@agent-harness/kernel': 'workspace:*' }),
       ],
@@ -216,7 +212,6 @@ describe('架构依赖规则', () => {
           '@agent-harness/kernel': 'workspace:*',
           '@agent-harness/core': 'workspace:*',
           '@agent-harness/context-runtime': 'workspace:*',
-          '@agent-harness/session-lifecycle': 'workspace:*',
         }),
       ],
     ]);

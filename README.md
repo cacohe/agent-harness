@@ -19,7 +19,7 @@ hosts → runtime → core → kernel
 |------|----------|------|
 | Kernel | `packages/kernel` | Agent 概念、状态、接口、事件与错误 |
 | Core | `packages/core` | Agent 核心循环状态机 |
-| Capability 实现 | `context/context-runtime`、`memory/memory-context`、`session/session-memory`、`session/session-lifecycle`、`skills/skill-context`、`tools/tool-runtime` | 上下文、会话与工具的协议无关实现 |
+| Capability 实现 | `context/context-runtime`、`memory/memory-context`、`session/session-memory`、`skills/skill-context` | 上下文与会话的协议无关实现 |
 | Adapter | `llm/openai-compatible`、`llm/gateway`、`platform/platform-http`、`session/session-jsonl`、`tools/mcp`、`tools/platform-policy` | 外部系统实现 |
 | 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
 | 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
@@ -62,13 +62,11 @@ packages/
   platform/
     platform-http/        Platform Gateway 与 Permit HTTP adapter
   tools/
-    tool-runtime/         工具注册、组合与治理实现
     mcp/                  MCP 工具 adapter
     platform-policy/      Platform 一次性工具许可 adapter
     sandbox-docker/       Docker OCI Sandbox dispatcher
   session/
     session-memory/       内存会话实现
-    session-lifecycle/    会话恢复分析实现
     session-jsonl/        JSONL 会话存储 adapter
   skills/
     skill-context/        已启用 Skill 摘要上下文贡献器
@@ -242,9 +240,9 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 | -------------- | ---------------------------------------------------------- |
 | 领域事件 / 消息形状    | `packages/kernel`，并更新投影与恢复逻辑 |
 | Prompt / 上下文实现  | 接口在 `packages/kernel`，默认组装与投影放 `packages/context/context-runtime`，能力贡献器放对应能力域 |
-| 会话读写 / 恢复分析    | 接口在 `packages/kernel`，内存实现放 `session-memory`，恢复分析放 `session-lifecycle`，持久化实现放 `session-jsonl` |
+| 会话读写 / 恢复分析    | 接口、生命周期校验与恢复修复在 `packages/kernel`，内存实现放 `session-memory`，持久化实现放 `session-jsonl` |
 | 模型协议           | 接口在 `packages/kernel`；实现在 `packages/llm/*` |
-| 工具             | 接口在 `packages/kernel`，`ToolRegistry` 在 `packages/tools/tool-runtime`；在 host/runtime 组合时注入 |
+| 工具             | 协议与通用运行时在 `packages/kernel/src/tools`；在 host/runtime 组合时注入 |
 | 工具治理         | 可选 `ToolExecutionPolicy` 在工具副作用前判定许可；每个 turn 可带冻结执行审计快照 |
 | Agent 循环 / 结算  | `packages/core` |
 | 组合与 resume     | `packages/runtime` |
