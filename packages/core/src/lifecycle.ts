@@ -14,7 +14,7 @@ import {
 type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>;
 
 /** 跟踪单次模型 attempt 的流式累积、结算与工具结果，供失败路径补写事件。 */
-export interface AttemptLifecycle {
+export interface Attempt {
   readonly attemptId: AttemptId;
   partialText: string; // 模型生成时的中间输出
   readonly observedToolCalls: ToolCall[]; // 模型生成时观察到的工具调用
@@ -25,15 +25,15 @@ export interface AttemptLifecycle {
 }
 
 /** 跟踪 step 是否已开始/结束，以及其中的 attempt，供 terminal settlement 使用。 */
-export interface StepLifecycle {
+export interface Step {
   readonly stepId: StepId;
   started: boolean;
   ended: boolean;
-  attempt?: AttemptLifecycle;
+  attempt?: Attempt;
 }
 
-/** 创建 step 生命周期。 */
-export function createStepLifecycle(stepId: StepId): StepLifecycle {
+/** 创建一次 step。 */
+export function createStep(stepId: StepId): Step {
   return { stepId, started: false, ended: false };
 }
 
@@ -44,7 +44,7 @@ export function buildTerminalEvents(options: {
   readonly turnId: TurnId;
   readonly turnStarted: boolean;
   readonly turnEnded: boolean;
-  readonly step: StepLifecycle | undefined;
+  readonly step: Step | undefined;
 }): SessionEvent[] {
   const events: SessionEvent[] = [];
   const { error, outcome, turnId, step } = options;
@@ -96,7 +96,7 @@ export function buildTerminalEvents(options: {
 
 /** 根据失败或取消结果构建未成功 attempt 的结算。 */
 function buildUnsuccessfulAttemptSettlement(
-  attempt: AttemptLifecycle,
+  attempt: Attempt,
   outcome: RuntimeFailureOutcome,
   error: unknown,
 ): AssistantSettlement {

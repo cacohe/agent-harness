@@ -32,12 +32,7 @@ import {
   utf8ByteLength,
   waitForSignal,
 } from './execution-support.js';
-import {
-  type AttemptLifecycle,
-  buildTerminalEvents,
-  createStepLifecycle,
-  type StepLifecycle,
-} from './lifecycle.js';
+import { type Attempt, buildTerminalEvents, createStep, type Step } from './lifecycle.js';
 
 /** 尚未开始的 turn；每个调用者只会收到自己消息对应的结果。 */
 interface QueuedRun {
@@ -247,7 +242,7 @@ export class Agent {
     this.#phase = { kind: 'running', turnId };
     let turnStarted = false;
     let turnEnded = false;
-    let activeStep: StepLifecycle | undefined;
+    let activeStep: Step | undefined;
 
     try {
       // 提交 turn 开始事件
@@ -273,7 +268,7 @@ export class Agent {
 
         // 创建 step 生命周期
         const stepId = this.#reservations.step(this.#ids.step());
-        activeStep = createStepLifecycle(stepId);
+        activeStep = createStep(stepId);
         this.#phase = { kind: 'running', turnId, stepId };
 
         // 执行一步 step，获取返回的 assistant 消息
@@ -327,14 +322,14 @@ export class Agent {
    */
   async #runStep(
     turnId: TurnId,
-    lifecycle: StepLifecycle,
+    step: Step,
     signal: AbortSignal,
     execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
     // 提交 step 开始事件
-    const stepId = lifecycle.stepId;
+    const stepId = step.stepId;
     await this.#append([{ type: 'step.started', turnId, stepId }], signal);
-    lifecycle.started = true;
+    step.started = true;
     throwIfAborted(signal);
 
     // 组装请求
@@ -346,7 +341,7 @@ export class Agent {
     // 准备模型
     const prepared = await this.#model.prepare(signal);
     throwIfAborted(signal);
-    const attempt: AttemptLifecycle = {
+    const attempt: Attempt = {
       attemptId: this.#reservations.attempt(this.#ids.attempt()),
       partialText: '',
       observedToolCalls: [],
@@ -354,7 +349,7 @@ export class Agent {
       toolResults: new Map(),
       persistedToolResults: new Set(),
     };
-    lifecycle.attempt = attempt;
+    step.attempt = attempt;
     let outputBytes = 0;
     let inputTokens = 0;
     let outputTokens = 0;
@@ -446,7 +441,7 @@ export class Agent {
 
     // 提交 step 结束事件
     await this.#append([{ type: 'step.ended', turnId, stepId, outcome: 'completed' }], signal);
-    lifecycle.ended = true;
+    step.ended = true;
     return assistantMessage;
   }
 
