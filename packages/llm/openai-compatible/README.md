@@ -1,7 +1,13 @@
-# OpenAI Compatible Model Adapter
+# @agent-harness/openai-compatible
 
-该 package 以 Node.js 原生 `fetch` 调用 OpenAI-compatible 的 `/v1/chat/completions` SSE 接口，并实现 `@agent-harness/kernel` 的 `ModelProvider`。
+## 职责
 
-构造函数需要显式传入 provider 标识、绝对 API 根路径（例如 `https://api.example.com/v1`）、API key 与模型名。它会在根路径后追加 `chat/completions`；不要传入完整 endpoint。它不读取环境变量，也不实现重试、超时、回退或供应商选择。
+以 Node.js 原生 `fetch` 实现 OpenAI-compatible Chat Completions HTTP/SSE 到 `ModelProvider` 的转换。
 
-仅支持 Chat Completions 流式协议。OpenAI Responses、Anthropic Messages 和 Gemini 协议需要各自独立的 adapter。
+## 使用
+
+使用 `OpenAiCompatibleModelProvider` 并显式传入提供方 ID、绝对 API 根路径、API 密钥与模型名；根路径后会追加 `chat/completions`。
+
+## 限制
+
+只支持 Chat Completions 流式协议；不读取环境变量，不实现重试、超时、回退或供应商选择。Responses、Anthropic 和 Gemini 应使用各自适配器。
