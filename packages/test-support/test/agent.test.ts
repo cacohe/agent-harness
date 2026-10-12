@@ -2,6 +2,7 @@ import { BoundedPromptAssembler, CurrentTimeContext } from '@agent-harness/conte
 import { Agent } from '@agent-harness/core';
 import {
   AgentClosedError,
+  analyzeSessionLifecycle,
   type AgentExecutionEvent,
   AgentIdCollisionError,
   brandId,
@@ -16,7 +17,6 @@ import {
   type UserMessage,
 } from '@agent-harness/kernel';
 import { RetrievedMemoryContext } from '@agent-harness/memory-context';
-import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle';
 import { InMemorySessionLog } from '@agent-harness/session-memory';
 import { EnabledSkillsContext } from '@agent-harness/skill-context';
 import {

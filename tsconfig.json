@@ -38,9 +38,6 @@
       "path": "packages/session/session-jsonl"
     },
     {
-      "path": "packages/session/session-lifecycle"
-    },
-    {
       "path": "packages/session/session-memory"
     },
     {

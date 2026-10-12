@@ -9,8 +9,7 @@
   "dependencies": {
     "@agent-harness/context-runtime": "workspace:*",
     "@agent-harness/core": "workspace:*",
-    "@agent-harness/kernel": "workspace:*",
-    "@agent-harness/session-lifecycle": "workspace:*"
+    "@agent-harness/kernel": "workspace:*"
   },
   "devDependencies": {
     "@agent-harness/session-jsonl": "workspace:*",

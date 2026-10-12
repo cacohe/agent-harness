@@ -148,9 +148,6 @@ importers:
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-harness/session-lifecycle':
-        specifier: workspace:*
-        version: link:../session/session-lifecycle
     devDependencies:
       '@agent-harness/session-jsonl':
         specifier: workspace:*
@@ -163,12 +160,6 @@ importers:
         version: link:../test-support
 
   packages/session/session-jsonl:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/session/session-lifecycle:
     dependencies:
       '@agent-harness/kernel':
         specifier: workspace:*
@@ -216,9 +207,6 @@ importers:
       '@agent-harness/memory-context':
         specifier: workspace:*
         version: link:../memory/memory-context
-      '@agent-harness/session-lifecycle':
-        specifier: workspace:*
-        version: link:../session/session-lifecycle
       '@agent-harness/skill-context':
         specifier: workspace:*
         version: link:../skills/skill-context

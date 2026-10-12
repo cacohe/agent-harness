@@ -10,7 +10,7 @@
 
 `ToolResult` 增加 `unknown` 状态，并携带明确原因，表示恢复过程无法判断工具是否执行及其外部副作用。`StepOutcome` 与 `TurnOutcome` 增加 `interrupted`，专门表示进程中断留下的生命周期，不与调用方取消混用。模型消息投影保留 `unknown` 工具结果，使下一次模型请求能够基于不确定事实继续。
 
-`session` package 提供纯生命周期分析。分析完整事件信封序列，严格检查 turn 与 step 嵌套、标识符对应、assistant settlement 与 tool result 关联、每个 tool call 至多一个 result，以及闭合生命周期不能继续接收所属事件。结构非法时抛出 `SessionLifecycleCorruptionError`，不猜测修复。只有日志尾部的活动 turn 或 step 可以恢复：已完成 assistant message 中缺失的工具结果按原 tool call 顺序补为 `unknown`，随后追加 `step.ended: interrupted` 与 `turn.ended: interrupted`。全部修复事件使用读取时的末尾 sequence 作为 `expectedSequence`，在一个原子 batch 中提交。
+`kernel/session` 提供纯生命周期分析。分析完整事件信封序列，严格检查 turn 与 step 嵌套、标识符对应、assistant settlement 与 tool result 关联、每个 tool call 至多一个 result，以及闭合生命周期不能继续接收所属事件。结构非法时抛出 `SessionLifecycleCorruptionError`，不猜测修复。只有日志尾部的活动 turn 或 step 可以恢复：已完成 assistant message 中缺失的工具结果按原 tool call 顺序补为 `unknown`，随后追加 `step.ended: interrupted` 与 `turn.ended: interrupted`。全部修复事件使用读取时的末尾 sequence 作为 `expectedSequence`，在一个原子 batch 中提交。
 
 `runtime` package 是组合根，显式接收 `SessionRepository`、`ModelProvider`、`ToolCapability`、步数上限、结算期限、可选 observer 与标识符 factory。`create` 和 `resume` 只有在 writer 建立、历史校验和必要修复全部成功后才返回 handle。建立失败时使用独立有界信号关闭 writer；主错误与清理错误同时发生时使用 `AggregateError` 保留两者。
 

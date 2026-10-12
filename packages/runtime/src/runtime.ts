@@ -4,6 +4,7 @@ import { Agent } from '@agent-harness/core';
 import {
   type AgentIdGenerator,
   type AgentObserver,
+  analyzeSessionLifecycle,
   type AttemptId,
   brandId,
   type MessageId,
@@ -20,7 +21,6 @@ import {
   type ToolExecutionPolicy,
   type TurnId,
 } from '@agent-harness/kernel';
-import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle';
 import { flushAndClose, waitFor } from './lifecycle.js';
 
 const neverAbortedSignal = new AbortController().signal;

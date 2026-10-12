@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   AgentClosedError,
+  analyzeSessionLifecycle,
   AgentIdCollisionError,
   type AgentIdGenerator,
   type AttemptId,
@@ -25,7 +26,6 @@ import {
 } from '@agent-harness/kernel';
 import { AgentRuntime, RuntimeClosedError } from '@agent-harness/runtime';
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
-import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle';
 import { InMemorySessionLog } from '@agent-harness/session-memory';
 import { ScriptedModelProvider, SequentialAgentIds } from '@agent-harness/test-support';
 import { afterEach, describe, expect, it } from 'vitest';

@@ -33,7 +33,6 @@ packages/
     platform-http/             Platform Gateway 与 Permit HTTP adapter
   session/
     session-memory/            内存会话实现
-    session-lifecycle/         会话恢复分析实现
     session-jsonl/             JSONL 会话 adapter
   skills/
     skill-context/             已启用 Skill 摘要上下文贡献器
@@ -96,7 +95,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。`AgentObserver.onExecution` 在每批会话事件成功追加后逐条通知 `session.event`，因此 Platform 可以以 session sequence 重建审计状态；模型 capability 的 usage 是同一 attempt 内单调不减的累计 token，Agent 将其转换为带 session、turn、step、attempt 与单调 `usageSequence` 的 `model.usage` token 增量通知，供 Platform 去重后累加。observer 投递不具备可靠性保证，需要可靠投递的 Platform adapter 必须自行持久化 outbox 并以 sequence 去重。
 
-Agent 概念、工具契约与纯内存工具运行时位于 `kernel`；Agent 循环只位于 `core`。`context/context-runtime` 实现 prompt 组装和模型消息投影，`session/session-memory` 实现进程内事件日志，`session/session-lifecycle` 实现恢复分析。真实模型、工具 adapter 与本地工具集成由各能力域的 `llm/`、`session/`、`tools/` 提供，动态插件系统仍不属于当前范围。
+Agent 概念、工具契约与纯内存工具运行时，以及会话生命周期分析与恢复修复位于 `kernel`；Agent 循环只位于 `core`。`context/context-runtime` 实现 prompt 组装和模型消息投影，`session/session-memory` 实现进程内事件日志。真实模型、工具 adapter 与本地工具集成由各能力域的 `llm/`、`session/`、`tools/` 提供，动态插件系统仍不属于当前范围。
 
 `kernel` 拥有 reader、writer、repository 与 writer lease capability。`session/session-jsonl` 是独立 adapter，只依赖 `kernel`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
 

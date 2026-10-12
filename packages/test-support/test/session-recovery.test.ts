@@ -1,6 +1,7 @@
 import { deriveModelMessages } from '@agent-harness/context-runtime';
 import {
   type AttemptId,
+  analyzeSessionLifecycle,
   brandId,
   type EventEnvelope,
   type MessageId,
@@ -11,7 +12,6 @@ import {
   type ToolCallId,
   type TurnId,
 } from '@agent-harness/kernel';
-import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle';
 import { describe, expect, it } from 'vitest';
 
 const sessionId = brandId<'SessionId'>('recovery-session') as SessionId;

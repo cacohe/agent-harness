@@ -15,9 +15,6 @@
     },
     {
       "path": "../kernel"
-    },
-    {
-      "path": "../session/session-lifecycle"
     }
   ]
 }
