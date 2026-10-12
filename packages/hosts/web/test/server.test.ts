@@ -44,7 +44,10 @@ describe('LocalWebServer', () => {
     try {
       const page = await fetch(address)
       expect(page.status).toBe(200)
-      expect(await page.text()).toContain('Agent Harness')
+      const markup = await page.text()
+      expect(markup).toContain('Agent Harness')
+      expect(markup).toContain('开始一段本地对话')
+      expect(markup).toContain('仅本机运行')
 
       const sent = await fetch(new URL('/sessions/session-1/messages', address), {
         method: 'POST',
