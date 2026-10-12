@@ -45,7 +45,10 @@ describe('createSkillLoaderTool', () => {
     ]);
     const signal = new AbortController().signal;
     await expect(
-      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x', extra: true } }, { signal }),
+      tools.execute(
+        { id: callId, name: 'load_skill', input: { id: 'x', extra: true } },
+        { signal },
+      ),
     ).resolves.toMatchObject({ status: 'failure', error: { name: 'TypeError' } });
     expect(reads).toBe(0);
     await expect(
@@ -87,7 +90,10 @@ describe('createSkillLoaderTool', () => {
       }),
     ]);
     await expect(
-      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x' } }, { signal: controller.signal }),
+      tools.execute(
+        { id: callId, name: 'load_skill', input: { id: 'x' } },
+        { signal: controller.signal },
+      ),
     ).resolves.toEqual({ status: 'cancelled', callId, reason: 'stop' });
     expect(observedSignal).toBe(controller.signal);
   });

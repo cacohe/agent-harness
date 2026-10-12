@@ -53,9 +53,9 @@ describe('McpToolAdapter', () => {
   it('未启动时拒绝公开和执行工具', async () => {
     const tools = new McpToolAdapter(client());
     expect(() => tools.list()).toThrow(McpToolsNotStartedError);
-    await expect(tools.execute(call('lookup'), { signal: new AbortController().signal })).rejects.toThrow(
-      McpToolsNotStartedError,
-    );
+    await expect(
+      tools.execute(call('lookup'), { signal: new AbortController().signal }),
+    ).rejects.toThrow(McpToolsNotStartedError);
   });
 
   it('预先取消的 start 不开始远程发现', async () => {

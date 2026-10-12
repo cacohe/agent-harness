@@ -563,12 +563,12 @@ describe('ToolRegistry', () => {
       },
     );
 
-    await expect(tools.execute(call('write'), { signal: new AbortController().signal })).resolves.toMatchObject(
-      {
-        status: 'failure',
-        error: { name: 'ToolAuthorizationError' },
-      },
-    );
+    await expect(
+      tools.execute(call('write'), { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({
+      status: 'failure',
+      error: { name: 'ToolAuthorizationError' },
+    });
     expect(dispatched).toBe(false);
   });
 

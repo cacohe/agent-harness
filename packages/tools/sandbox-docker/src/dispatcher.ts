@@ -1,7 +1,12 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
-import type { ExecutionMetadata, SandboxDispatcher, SandboxTask, ToolExecutionContext } from '@agent-harness/kernel';
+import type {
+  ExecutionMetadata,
+  SandboxDispatcher,
+  SandboxTask,
+  ToolExecutionContext,
+} from '@agent-harness/kernel';
 import { assertJsonValue, type JsonValue } from '@agent-harness/kernel';
 
 export interface DockerSandboxOptions {

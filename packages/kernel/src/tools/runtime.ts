@@ -1,5 +1,5 @@
-import { assertJsonValue, isAbortError, serializeError } from '../facts.js';
 import type { ExecutionMetadata, JsonValue } from '../facts.js';
+import { assertJsonValue, isAbortError, serializeError } from '../facts.js';
 import type {
   ModelToolDefinition,
   SandboxDispatcher,
@@ -38,7 +38,8 @@ export class ToolRegistry implements ToolCapability {
       assertJsonValue(output);
       return { status: 'success', callId: call.id, output };
     } catch (error) {
-      if (signal.aborted || isAbortError(error)) return cancelledResult(call, signal.reason ?? error);
+      if (signal.aborted || isAbortError(error))
+        return cancelledResult(call, signal.reason ?? error);
       return { status: 'failure', callId: call.id, error: serializeError(error) };
     }
   }
@@ -170,7 +171,8 @@ export class CompositeToolCapability implements ToolCapability {
   }
 
   execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    if (context.signal.aborted) return Promise.resolve(cancelledResult(call, context.signal.reason));
+    if (context.signal.aborted)
+      return Promise.resolve(cancelledResult(call, context.signal.reason));
     const capability = this.#routes.get(call.name);
     if (capability === undefined) return Promise.resolve(unknownToolResult(call));
     return capability.execute(call, context);
@@ -182,7 +184,8 @@ function indexToolDefinitions<T extends ToolSpecification>(
 ): ReadonlyMap<string, T> {
   const entries = new Map<string, T>();
   for (const definition of definitions) {
-    if (entries.has(definition.name)) throw new Error(`duplicate tool registration: ${definition.name}`);
+    if (entries.has(definition.name))
+      throw new Error(`duplicate tool registration: ${definition.name}`);
     entries.set(definition.name, definition);
   }
   return entries;

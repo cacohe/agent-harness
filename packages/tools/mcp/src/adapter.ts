@@ -1,6 +1,10 @@
 /** 将 MCP client 映射为 Agent 的工具 capability。 */
 
-import type { ModelToolDefinition, ToolCapability, ToolExecutionContext } from '@agent-harness/kernel';
+import type {
+  ModelToolDefinition,
+  ToolCapability,
+  ToolExecutionContext,
+} from '@agent-harness/kernel';
 import {
   assertJsonValue,
   isAbortError,
