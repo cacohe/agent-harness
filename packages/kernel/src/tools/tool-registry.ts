@@ -24,11 +24,7 @@ export class ToolRegistry implements ToolCapability {
     return toModelToolDefinitions(this.#definitions);
   }
 
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult> {
-    return this.executeWithContext(call, { signal });
-  }
-
-  async executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+  async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     const { signal } = context;
     if (signal.aborted) return cancelledResult(call, signal.reason);
     const definition = this.#definitions.get(call.name);

@@ -579,12 +579,7 @@ describe('Agent', () => {
     const session = new InMemorySessionLog(sessionId);
     const tools = {
       list: () => [{ name: 'write', description: '写入', inputSchema: { type: 'object' } }],
-      execute: async () => ({
-        status: 'failure',
-        callId: 'call-1',
-        error: { name: 'Error', message: '不应调用' },
-      }),
-      executeWithContext: async (
+      execute: async (
         _call: unknown,
         context: { readonly execution?: { readonly subject: string } },
       ) => {

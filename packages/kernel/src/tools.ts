@@ -7,12 +7,16 @@ export interface ToolExecutionContext {
   readonly execution?: ExecutionMetadata;
 }
 
-/** 工具定义 —— 工具的定义。 */
-export interface ToolDefinition {
+/** 工具规格 —— 模型可见描述与 Host 侧输入规范化。 */
+export interface ToolSpecification {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Readonly<Record<string, unknown>>;
   parseInput(input: JsonValue): JsonValue;
+}
+
+/** 本地工具定义 —— 在工具规格上附加进程内执行函数。 */
+export interface ToolDefinition extends ToolSpecification {
   execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>;
 }
 
@@ -21,17 +25,9 @@ export interface ToolCatalog {
   list(): readonly ModelToolDefinition[];
 }
 
-/** 工具执行器 —— 执行一个工具调用。 */
-export interface ToolExecutor {
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult>;
-}
-
 /** 工具能力 —— 工具的执行能力和目录。 */
-export interface ToolCapability extends ToolCatalog, ToolExecutor {}
-
-/** 执行上下文 aware 工具能力 —— 执行一个工具调用，并提供执行上下文。 */
-export interface ExecutionAwareToolCapability extends ToolCapability {
-  executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>;
+export interface ToolCapability extends ToolCatalog {
+  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>;
 }
 
 /** 工具授权决策 —— 工具授权决策。 */
@@ -62,7 +58,10 @@ export interface SandboxResourceLimits {
 
 /** 沙盒调度器 —— 调度一个沙盒任务。 */
 export interface SandboxDispatcher {
-  dispatch(task: SandboxTask, context: ToolExecutionContext): Promise<JsonValue>;
+  dispatch(
+    task: SandboxTask,
+    context: ToolExecutionContext & { readonly execution: ExecutionMetadata },
+  ): Promise<JsonValue>;
 }
 
 /** 沙盒工具注册选项 —— 沙盒工具注册选项。 */

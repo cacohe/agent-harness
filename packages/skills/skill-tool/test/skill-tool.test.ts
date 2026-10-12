@@ -19,7 +19,7 @@ describe('createSkillLoaderTool', () => {
     await expect(
       tools.execute(
         { id: callId, name: 'load_skill', input: { id: 'review' } },
-        new AbortController().signal,
+        { signal: new AbortController().signal },
       ),
     ).resolves.toEqual({
       status: 'success',
@@ -45,11 +45,11 @@ describe('createSkillLoaderTool', () => {
     ]);
     const signal = new AbortController().signal;
     await expect(
-      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x', extra: true } }, signal),
+      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x', extra: true } }, { signal }),
     ).resolves.toMatchObject({ status: 'failure', error: { name: 'TypeError' } });
     expect(reads).toBe(0);
     await expect(
-      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x' } }, signal),
+      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x' } }, { signal }),
     ).resolves.toMatchObject({ status: 'failure', error: { name: 'RangeError' } });
   });
 
@@ -67,7 +67,7 @@ describe('createSkillLoaderTool', () => {
     await expect(
       tools.execute(
         { id: callId, name: 'load_skill', input: { id: 'hidden' } },
-        new AbortController().signal,
+        { signal: new AbortController().signal },
       ),
     ).resolves.toMatchObject({ status: 'failure', error: { name: 'SkillNotEnabledError' } });
     expect(reads).toBe(0);
@@ -87,7 +87,7 @@ describe('createSkillLoaderTool', () => {
       }),
     ]);
     await expect(
-      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x' } }, controller.signal),
+      tools.execute({ id: callId, name: 'load_skill', input: { id: 'x' } }, { signal: controller.signal }),
     ).resolves.toEqual({ status: 'cancelled', callId, reason: 'stop' });
     expect(observedSignal).toBe(controller.signal);
   });

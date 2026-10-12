@@ -1,6 +1,6 @@
 /** 将 MCP client 映射为 Agent 的工具 capability。 */
 
-import type { ModelToolDefinition, ToolCapability } from '@agent-harness/kernel';
+import type { ModelToolDefinition, ToolCapability, ToolExecutionContext } from '@agent-harness/kernel';
 import {
   assertJsonValue,
   isAbortError,
@@ -76,7 +76,8 @@ export class McpToolAdapter implements ToolCapability {
     }));
   }
 
-  async execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult> {
+  async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    const { signal } = context;
     if (signal.aborted) return cancelled(call, signal.reason);
     const tool = this.#readyTools().get(call.name);
     if (tool === undefined) return unknownTool(call);

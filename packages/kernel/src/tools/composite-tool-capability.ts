@@ -1,6 +1,5 @@
 import {
   assertJsonValue,
-  type ExecutionAwareToolCapability,
   type JsonValue,
   type ModelToolDefinition,
   type ToolCall,
@@ -9,7 +8,6 @@ import {
   type ToolResult,
 } from '@agent-harness/kernel';
 import { freezeJson } from './json-snapshot.js';
-import { executeWithContext } from './tool-execution.js';
 import { cancelledResult, unknownToolResult } from './tool-results.js';
 
 /** 工具来源在组合时暴露了重复名称。 */
@@ -22,7 +20,7 @@ export class DuplicateToolNameError extends Error {
 }
 
 /** 将多个已就绪的工具来源合并为单一目录，并按工具名路由执行。 */
-export class CompositeToolCapability implements ExecutionAwareToolCapability {
+export class CompositeToolCapability implements ToolCapability {
   readonly #definitions: readonly ModelToolDefinition[];
   readonly #routes: ReadonlyMap<string, ToolCapability>;
 
@@ -53,15 +51,11 @@ export class CompositeToolCapability implements ExecutionAwareToolCapability {
     return this.#definitions;
   }
 
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult> {
-    return this.executeWithContext(call, { signal });
-  }
-
-  executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     if (context.signal.aborted)
       return Promise.resolve(cancelledResult(call, context.signal.reason));
     const capability = this.#routes.get(call.name);
     if (capability === undefined) return Promise.resolve(unknownToolResult(call));
-    return executeWithContext(capability, call, context);
+    return capability.execute(call, context);
   }
 }

@@ -10,7 +10,6 @@ import {
   type AssistantMessage,
   assertNever,
   type ExecutionMetadata,
-  executeWithContext,
   isAbortError,
   type ModelProvider,
   type ModelStreamEvent,
@@ -437,7 +436,7 @@ export class Agent {
 
     // 执行工具调用
     for (const call of attempt.observedToolCalls) {
-      const result = await executeWithContext(this.#tools, call, {
+      const result = await this.#tools.execute(call, {
         signal,
         ...(execution === undefined ? {} : { execution }),
       });

@@ -228,7 +228,7 @@ describe('createMemoryWriterTool', () => {
           name: 'remember_memory',
           input: { statement: '用户喜欢简洁回答' },
         },
-        new AbortController().signal,
+        { signal: new AbortController().signal },
       ),
     ).resolves.toEqual({
       status: 'success',
@@ -258,7 +258,7 @@ describe('createMemoryWriterTool', () => {
       { statement: 'x'.repeat(4_097) },
     ]) {
       await expect(
-        tools.execute({ id: callId, name: 'remember_memory', input }, signal),
+        tools.execute({ id: callId, name: 'remember_memory', input }, { signal }),
       ).resolves.toMatchObject({ status: 'failure' });
     }
     expect(writes).toBe(0);
@@ -282,7 +282,7 @@ describe('createMemoryWriterTool', () => {
           name: 'remember_memory',
           input: { statement: '偏好' },
         },
-        new AbortController().signal,
+        { signal: new AbortController().signal },
       ),
     ).resolves.toMatchObject({
       status: 'failure',
@@ -312,7 +312,7 @@ describe('createMemoryWriterTool', () => {
           name: 'remember_memory',
           input: { statement: '偏好' },
         },
-        controller.signal,
+        { signal: controller.signal },
       ),
     ).resolves.toEqual({ status: 'cancelled', callId, reason: '停止写入' });
     expect(observedSignal).toBe(controller.signal);

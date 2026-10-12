@@ -1,7 +1,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
-import type { SandboxDispatcher, SandboxTask, ToolExecutionContext } from '@agent-harness/kernel';
+import type { ExecutionMetadata, SandboxDispatcher, SandboxTask, ToolExecutionContext } from '@agent-harness/kernel';
 import { assertJsonValue, type JsonValue } from '@agent-harness/kernel';
 
 export interface DockerSandboxOptions {
@@ -39,7 +39,10 @@ export class DockerSandboxDispatcher implements SandboxDispatcher {
     }
     this.#options = { ...options, dockerPath: options.dockerPath ?? 'docker' };
   }
-  async dispatch(task: SandboxTask, context: ToolExecutionContext): Promise<JsonValue> {
+  async dispatch(
+    task: SandboxTask,
+    context: ToolExecutionContext & { readonly execution: ExecutionMetadata },
+  ): Promise<JsonValue> {
     context.signal.throwIfAborted();
     const timeoutMs = task.limits?.timeoutMs ?? 30_000;
     const maxOutputBytes = task.limits?.maxOutputBytes ?? 65_536;

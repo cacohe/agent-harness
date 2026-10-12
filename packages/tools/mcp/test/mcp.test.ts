@@ -42,7 +42,7 @@ describe('McpToolAdapter', () => {
         inputSchema: { type: 'object' },
       },
     ]);
-    await expect(tools.execute(call('lookup', { q: 'agent' }), signal)).resolves.toEqual({
+    await expect(tools.execute(call('lookup', { q: 'agent' }), { signal })).resolves.toEqual({
       status: 'success',
       callId: 'call-1',
       output: { result: true },
@@ -53,7 +53,7 @@ describe('McpToolAdapter', () => {
   it('未启动时拒绝公开和执行工具', async () => {
     const tools = new McpToolAdapter(client());
     expect(() => tools.list()).toThrow(McpToolsNotStartedError);
-    await expect(tools.execute(call('lookup'), new AbortController().signal)).rejects.toThrow(
+    await expect(tools.execute(call('lookup'), { signal: new AbortController().signal })).rejects.toThrow(
       McpToolsNotStartedError,
     );
   });
@@ -116,7 +116,7 @@ describe('McpToolAdapter', () => {
     );
     await tools.start(controller.signal);
 
-    await expect(tools.execute(call('lookup'), controller.signal)).resolves.toEqual({
+    await expect(tools.execute(call('lookup'), { signal: controller.signal })).resolves.toEqual({
       status: 'cancelled',
       callId: 'call-1',
       reason: '停止',

@@ -1,6 +1,5 @@
 import {
   assertJsonValue,
-  type ExecutionAwareToolCapability,
   type ExecutionMetadata,
   isAbortError,
   type ModelToolDefinition,
@@ -9,7 +8,8 @@ import {
   type SandboxToolRegistryOptions,
   serializeError,
   type ToolCall,
-  type ToolDefinition,
+  type ToolCapability,
+  type ToolSpecification,
   type ToolExecutionContext,
   type ToolResult,
 } from '@agent-harness/kernel';
@@ -18,14 +18,14 @@ import { indexToolDefinitions, toModelToolDefinitions } from './tool-definitions
 import { authorizationFailure, cancelledResult, unknownToolResult } from './tool-results.js';
 
 /** 将已定义工具的执行委派给 Sandbox，并在 Host 侧先校验模型输入。 */
-export class SandboxToolRegistry implements ExecutionAwareToolCapability {
-  readonly #definitions: ReadonlyMap<string, ToolDefinition>;
+export class SandboxToolRegistry implements ToolCapability {
+  readonly #definitions: ReadonlyMap<string, ToolSpecification>;
   readonly #dispatcher: SandboxDispatcher;
   readonly #workspace: string | undefined;
   readonly #limits: SandboxResourceLimits | undefined;
 
   constructor(
-    definitions: readonly ToolDefinition[],
+    definitions: readonly ToolSpecification[],
     dispatcher: SandboxDispatcher,
     options: SandboxToolRegistryOptions = {},
   ) {
@@ -41,13 +41,9 @@ export class SandboxToolRegistry implements ExecutionAwareToolCapability {
     return toModelToolDefinitions(this.#definitions);
   }
 
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult> {
-    return this.executeWithContext(call, { signal });
-  }
-
-  async executeWithContext(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+  async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     if (context.signal.aborted) return cancelledResult(call, context.signal.reason);
-    if (context.execution === undefined) return authorizationFailure(call, '缺少冻结执行上下文');
+    if (!hasExecution(context)) return authorizationFailure(call, '缺少冻结执行上下文');
     const definition = this.#definitions.get(call.name);
     if (definition === undefined) return unknownToolResult(call);
     try {
@@ -58,12 +54,7 @@ export class SandboxToolRegistry implements ExecutionAwareToolCapability {
         ...(this.#workspace === undefined ? {} : { workspace: this.#workspace }),
         ...(this.#limits === undefined ? {} : { limits: this.#limits }),
       });
-      const output = await this.#dispatcher.dispatch(
-        task,
-        context as ToolExecutionContext & {
-          readonly execution: ExecutionMetadata;
-        },
-      );
+      const output = await this.#dispatcher.dispatch(task, context);
       if (context.signal.aborted) return cancelledResult(call, context.signal.reason);
       assertJsonValue(output);
       return { status: 'success', callId: call.id, output };
@@ -74,6 +65,12 @@ export class SandboxToolRegistry implements ExecutionAwareToolCapability {
       return { status: 'failure', callId: call.id, error: serializeError(error) };
     }
   }
+}
+
+function hasExecution(
+  context: ToolExecutionContext,
+): context is ToolExecutionContext & { readonly execution: ExecutionMetadata } {
+  return context.execution !== undefined;
 }
 
 function normalizeSandboxOptions(options: SandboxToolRegistryOptions): {

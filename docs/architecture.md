@@ -86,7 +86,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 `kernel` 定义并实现纯内存、协议无关的工具运行时：`ToolRegistry`、`CompositeToolCapability`、`PolicyControlledTools` 与 `SandboxToolRegistry`。组合时取得各来源目录快照、拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
 
-`SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个 `ToolDefinition.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号。`run_shell` 不是 Sandbox，不可替代此接口。
+`SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个不要求本地执行函数的 `ToolSpecification.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号，并接收已冻结的执行身份。`run_shell` 不是 Sandbox，不可替代此接口。
 
 `tools/sandbox-docker` 是单实例 Docker OCI dispatcher。它将任务交给明确实现 stdin/stdout JSON worker 协议的镜像；默认禁网、只读根文件系统、非 root、无 capabilities、禁止提权，并限制 CPU、内存、PID、期限与输出。它不挂载宿主工作区、Docker socket 或密钥；镜像供应链与 Docker daemon 的安全配置属于 Host 运维边界。
 

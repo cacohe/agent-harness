@@ -2,7 +2,6 @@ import { brandId, type ExecutionId, type ToolCallId } from '@agent-harness/kerne
 import { describe, expect, it } from 'vitest';
 import {
   CompositeToolCapability,
-  type ExecutionAwareToolCapability,
   PolicyControlledTools,
   SandboxToolRegistry,
   ToolRegistry,
@@ -62,7 +61,7 @@ describe('ToolRegistry', () => {
     ]);
 
     await expect(
-      registry.execute(call('lookup', { q: 1 }), new AbortController().signal),
+      registry.execute(call('lookup', { q: 1 }), { signal: new AbortController().signal }),
     ).resolves.toEqual({
       status: 'success',
       callId: 'call-1',
@@ -84,11 +83,11 @@ describe('ToolRegistry', () => {
     ]);
     const signal = new AbortController().signal;
 
-    await expect(registry.execute(call('missing'), signal)).resolves.toMatchObject({
+    await expect(registry.execute(call('missing'), { signal })).resolves.toMatchObject({
       status: 'failure',
       error: { name: 'UnknownToolError' },
     });
-    await expect(registry.execute(call('lookup'), signal)).resolves.toEqual({
+    await expect(registry.execute(call('lookup'), { signal })).resolves.toEqual({
       status: 'failure',
       callId: 'call-1',
       error: { name: 'Error', message: 'boom' },
@@ -113,7 +112,7 @@ describe('ToolRegistry', () => {
     ]);
 
     await expect(
-      registry.execute(call('lookup'), new AbortController().signal),
+      registry.execute(call('lookup'), { signal: new AbortController().signal }),
     ).resolves.toMatchObject({
       status: 'failure',
       error: { name: 'TypeError', message: 'q 必须是字符串' },
@@ -133,7 +132,7 @@ describe('ToolRegistry', () => {
     ]);
 
     await expect(
-      registry.execute(call('lookup'), new AbortController().signal),
+      registry.execute(call('lookup'), { signal: new AbortController().signal }),
     ).resolves.toMatchObject({
       status: 'failure',
       error: { name: 'TypeError' },
@@ -155,7 +154,7 @@ describe('ToolRegistry', () => {
       },
     ]);
 
-    await expect(registry.execute(call('lookup'), controller.signal)).resolves.toEqual({
+    await expect(registry.execute(call('lookup'), { signal: controller.signal })).resolves.toEqual({
       status: 'cancelled',
       callId: 'call-1',
       reason: 'stop',
@@ -163,7 +162,7 @@ describe('ToolRegistry', () => {
 
     const preAborted = new AbortController();
     preAborted.abort(new Error('already'));
-    await expect(registry.execute(call('lookup'), preAborted.signal)).resolves.toEqual({
+    await expect(registry.execute(call('lookup'), { signal: preAborted.signal })).resolves.toEqual({
       status: 'cancelled',
       callId: 'call-1',
       reason: 'already',
@@ -191,7 +190,7 @@ describe('ToolRegistry', () => {
     );
 
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -230,7 +229,7 @@ describe('ToolRegistry', () => {
     );
 
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -276,7 +275,7 @@ describe('ToolRegistry', () => {
       authorizationVersion: 'v1',
     };
     const mutableCall = call('write', input);
-    const running = tools.executeWithContext(mutableCall, {
+    const running = tools.execute(mutableCall, {
       signal: new AbortController().signal,
       execution,
     });
@@ -318,7 +317,7 @@ describe('ToolRegistry', () => {
         },
       });
       const mutableCall = call('write');
-      const running = tools.executeWithContext(mutableCall, {
+      const running = tools.execute(mutableCall, {
         signal: controller.signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -359,7 +358,7 @@ describe('ToolRegistry', () => {
       },
     );
 
-    const result = await tools.executeWithContext(call('inspect', input), {
+    const result = await tools.execute(call('inspect', input), {
       signal: new AbortController().signal,
       execution: {
         id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -398,7 +397,7 @@ describe('ToolRegistry', () => {
     );
 
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -415,6 +414,7 @@ describe('ToolRegistry', () => {
 
   it('Sandbox 在派发前校验输入，并传递任务边界', async () => {
     const tasks: unknown[] = [];
+    const executions: unknown[] = [];
     const tools = new SandboxToolRegistry(
       [
         {
@@ -427,12 +427,12 @@ describe('ToolRegistry', () => {
             }
             return { normalized: true };
           },
-          execute: async () => ({ local: true }),
         },
       ],
       {
-        dispatch: async (task) => {
+        dispatch: async (task, context) => {
           tasks.push(task);
+          executions.push(context.execution);
           return { sandboxed: true };
         },
       },
@@ -443,7 +443,7 @@ describe('ToolRegistry', () => {
     );
 
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -463,6 +463,9 @@ describe('ToolRegistry', () => {
         limits: { timeoutMs: 1_000, maxOutputBytes: 4_096 },
       },
     ]);
+    expect(executions).toEqual([
+      { id: 'execution-1', subject: 'user-1', authorizationVersion: 'v1' },
+    ]);
   });
 
   it('Sandbox 输入校验失败时不派发任务', async () => {
@@ -476,7 +479,6 @@ describe('ToolRegistry', () => {
           parseInput: () => {
             throw new TypeError('无效输入');
           },
-          execute: async () => ({ local: true }),
         },
       ],
       {
@@ -488,7 +490,7 @@ describe('ToolRegistry', () => {
     );
 
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -528,7 +530,6 @@ describe('ToolRegistry', () => {
           description: '写入',
           inputSchema: { type: 'object' },
           parseInput: (input) => input,
-          execute: async () => ({ ok: true }),
         },
       ],
       { dispatch: async () => ({ ok: true }) },
@@ -552,7 +553,6 @@ describe('ToolRegistry', () => {
           description: '写入',
           inputSchema: { type: 'object' },
           parseInput: (input) => input,
-          execute: async () => ({ ok: true }),
         },
       ],
       {
@@ -563,7 +563,7 @@ describe('ToolRegistry', () => {
       },
     );
 
-    await expect(tools.execute(call('write'), new AbortController().signal)).resolves.toMatchObject(
+    await expect(tools.execute(call('write'), { signal: new AbortController().signal })).resolves.toMatchObject(
       {
         status: 'failure',
         error: { name: 'ToolAuthorizationError' },
@@ -582,7 +582,6 @@ describe('ToolRegistry', () => {
           description: '写入',
           inputSchema: { type: 'object' },
           parseInput: (input) => input,
-          execute: async () => ({ ok: true }),
         },
       ],
       {
@@ -595,7 +594,7 @@ describe('ToolRegistry', () => {
     );
     limits.timeoutMs = 0;
 
-    await tools.executeWithContext(call('write'), {
+    await tools.execute(call('write'), {
       signal: new AbortController().signal,
       execution: {
         id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -625,7 +624,6 @@ describe('ToolRegistry', () => {
           description: '写入',
           inputSchema: { type: 'object' },
           parseInput: () => (() => undefined) as never,
-          execute: async () => ({ ok: true }),
         },
       ],
       {
@@ -637,7 +635,7 @@ describe('ToolRegistry', () => {
     );
 
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -666,7 +664,7 @@ describe('CompositeToolCapability', () => {
     const tools = new CompositeToolCapability([registry('local'), registry('remote')]);
     expect(tools.list().map((tool) => tool.name)).toEqual(['local', 'remote']);
     await expect(
-      tools.execute(call('remote', { q: 'x' }), new AbortController().signal),
+      tools.execute(call('remote', { q: 'x' }), { signal: new AbortController().signal }),
     ).resolves.toMatchObject({
       status: 'success',
       output: { source: 'remote', input: { q: 'x' } },
@@ -697,23 +695,18 @@ describe('CompositeToolCapability', () => {
     ]);
   });
 
-  it('把冻结执行上下文传给支持它的来源', async () => {
+  it('把执行上下文传给来源', async () => {
     let subject: string | undefined;
-    const aware: ExecutionAwareToolCapability = {
+    const aware = {
       list: () => [{ name: 'write', description: 'write', inputSchema: { type: 'object' } }],
-      execute: async (toolCall) => ({
-        status: 'failure',
-        callId: toolCall.id,
-        error: { name: 'Unexpected', message: '未传上下文' },
-      }),
-      async executeWithContext(toolCall, context) {
+      async execute(toolCall, context) {
         subject = context.execution?.subject;
         return { status: 'success', callId: toolCall.id, output: { ok: true } };
       },
     };
     const tools = new CompositeToolCapability([aware]);
     await expect(
-      tools.executeWithContext(call('write'), {
+      tools.execute(call('write'), {
         signal: new AbortController().signal,
         execution: {
           id: brandId<'ExecutionId'>('execution-composite') as ExecutionId,
@@ -728,14 +721,14 @@ describe('CompositeToolCapability', () => {
   it('对未知工具和已取消调用返回稳定结果', async () => {
     const tools = new CompositeToolCapability([]);
     await expect(
-      tools.execute(call('missing'), new AbortController().signal),
+      tools.execute(call('missing'), { signal: new AbortController().signal }),
     ).resolves.toMatchObject({
       status: 'failure',
       error: { name: 'UnknownToolError' },
     });
     const controller = new AbortController();
     controller.abort(new Error('stop'));
-    await expect(tools.execute(call('missing'), controller.signal)).resolves.toEqual({
+    await expect(tools.execute(call('missing'), { signal: controller.signal })).resolves.toEqual({
       status: 'cancelled',
       callId: 'call-1',
       reason: 'stop',

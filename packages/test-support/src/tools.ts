@@ -21,8 +21,8 @@ export class ScriptedToolCapability implements ToolCapability {
     return this.#definitions;
   }
 
-  execute(call: ToolCall, signal: AbortSignal): Promise<ToolResult> {
-    return this.#execute(call, signal);
+  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    return this.#execute(call, context);
   }
 }
 
