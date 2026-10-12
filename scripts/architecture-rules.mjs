@@ -1,5 +1,5 @@
-import { posix as path } from 'node:path'
-import ts from 'typescript'
+import { posix as path } from 'node:path';
+import ts from 'typescript';
 
 /** 校验 workspace package 的向内依赖方向和生产源码导入，并返回全部诊断。 */
 export function verifyArchitecture(manifests, sources = []) {
@@ -9,7 +9,7 @@ export function verifyArchitecture(manifests, sources = []) {
     'src/execution-support.ts',
     'src/index.ts',
     'src/lifecycle.ts',
-  ])
+  ]);
   const protocolNeutralOwners = new Set([
     'kernel',
     'core',
@@ -19,12 +19,19 @@ export function verifyArchitecture(manifests, sources = []) {
     'session/session-memory',
     'skills/skill-context',
     'tools/tool-runtime',
-  ])
+  ]);
   const adapters = [
-    'llm/gateway', 'llm/openai-compatible', 'memory/memory-gateway',
-    'platform/platform-http', 'session/session-jsonl', 'skills/skill-filesystem',
-    'skills/skill-tool', 'tools/mcp', 'tools/platform-policy', 'tools/sandbox-docker',
-  ]
+    'llm/gateway',
+    'llm/openai-compatible',
+    'memory/memory-gateway',
+    'platform/platform-http',
+    'session/session-jsonl',
+    'skills/skill-filesystem',
+    'skills/skill-tool',
+    'tools/mcp',
+    'tools/platform-policy',
+    'tools/sandbox-docker',
+  ];
   const allowedByOwner = new Map([
     ['kernel', new Set()],
     ['core', new Set(['kernel'])],
@@ -34,175 +41,203 @@ export function verifyArchitecture(manifests, sources = []) {
     ['session/session-memory', new Set(['kernel'])],
     ['skills/skill-context', new Set(['kernel'])],
     ['tools/tool-runtime', new Set(['kernel'])],
-    ['runtime', new Set([
-      'kernel', 'core', 'context/context-runtime', 'session/session-lifecycle',
-      'tools/tool-runtime',
-    ])],
+    [
+      'runtime',
+      new Set([
+        'kernel',
+        'core',
+        'context/context-runtime',
+        'session/session-lifecycle',
+        'tools/tool-runtime',
+      ]),
+    ],
     ['test-support', new Set(['kernel', 'core', 'session/session-memory', 'tools/tool-runtime'])],
-    ['hosts/cli', new Set([
-      'kernel', 'core', 'context/context-runtime', 'tools/tool-runtime', 'llm/gateway',
-      'llm/openai-compatible', 'memory/memory-context', 'memory/memory-gateway',
-      'platform/platform-http', 'runtime', 'session/session-jsonl', 'skills/skill-context',
-      'skills/skill-filesystem', 'skills/skill-tool', 'tools/mcp',
-    ])],
-    ['hosts/web', new Set([
-      'kernel', 'context/context-runtime', 'tools/tool-runtime', 'llm/openai-compatible',
-      'runtime', 'session/session-jsonl',
-    ])],
-  ])
-  for (const path of adapters) allowedByOwner.set(path, new Set(['kernel']))
+    [
+      'hosts/cli',
+      new Set([
+        'kernel',
+        'core',
+        'context/context-runtime',
+        'tools/tool-runtime',
+        'llm/gateway',
+        'llm/openai-compatible',
+        'memory/memory-context',
+        'memory/memory-gateway',
+        'platform/platform-http',
+        'runtime',
+        'session/session-jsonl',
+        'skills/skill-context',
+        'skills/skill-filesystem',
+        'skills/skill-tool',
+        'tools/mcp',
+      ]),
+    ],
+    [
+      'hosts/web',
+      new Set([
+        'kernel',
+        'context/context-runtime',
+        'tools/tool-runtime',
+        'llm/openai-compatible',
+        'runtime',
+        'session/session-jsonl',
+      ]),
+    ],
+  ]);
+  for (const path of adapters) allowedByOwner.set(path, new Set(['kernel']));
 
-  const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]))
-  const failures = []
+  const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]));
+  const failures = [];
   for (const [owner, manifest] of manifests) {
-    if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`)
-    const leaf = owner.split('/').at(-1)
+    if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`);
+    const leaf = owner.split('/').at(-1);
     if (manifest.name !== `@agent-harness/${leaf}`) {
-      failures.push(`${owner}: package name must be @agent-harness/${leaf}`)
+      failures.push(`${owner}: package name must be @agent-harness/${leaf}`);
     }
-    const allowed = allowedByOwner.get(owner)
-    if (allowed === undefined) failures.push(`${owner}: package path is not classified`)
+    const allowed = allowedByOwner.get(owner);
+    if (allowed === undefined) failures.push(`${owner}: package path is not classified`);
     const dependencies = {
       ...manifest.dependencies,
       ...manifest.optionalDependencies,
       ...manifest.peerDependencies,
-    }
+    };
     for (const dependency of Object.keys(dependencies)) {
       if (!dependency.startsWith('@agent-harness/')) {
         if (protocolNeutralOwners.has(owner)) {
-          failures.push(`${owner}: protocol-neutral package cannot depend on ${dependency}`)
+          failures.push(`${owner}: protocol-neutral package cannot depend on ${dependency}`);
         }
-        continue
+        continue;
       }
-      const dependencyPath = packageByName.get(dependency)
+      const dependencyPath = packageByName.get(dependency);
       if (dependencyPath === undefined) {
-        failures.push(`${owner}: unknown workspace dependency ${dependency}`)
+        failures.push(`${owner}: unknown workspace dependency ${dependency}`);
       } else if (allowed !== undefined && !allowed.has(dependencyPath)) {
-        failures.push(`${owner}: forbidden workspace dependency on ${dependencyPath}`)
+        failures.push(`${owner}: forbidden workspace dependency on ${dependencyPath}`);
       }
     }
   }
   for (const [owner, file, source] of sources) {
-    const allowed = allowedByOwner.get(owner)
+    const allowed = allowedByOwner.get(owner);
     if (owner === 'core') {
       if (!coreSourceFiles.has(file)) {
-        failures.push(`core/${file}: source file is outside the Agent loop allowlist`)
+        failures.push(`core/${file}: source file is outside the Agent loop allowlist`);
       }
       if (!coreSourceFiles.has(file) || file === 'src/agent.ts' || file === 'src/index.ts') {
         for (const exportedName of exportedNames(source)) {
           if (exportedName !== 'Agent') {
-            failures.push(`core/${file}: core can only export Agent, found ${exportedName}`)
+            failures.push(`core/${file}: core can only export Agent, found ${exportedName}`);
           }
         }
       }
     }
     for (const specifier of importedSpecifiers(source)) {
       if (specifier.startsWith('.')) {
-        const resolved = path.normalize(path.join(path.dirname(file), specifier))
+        const resolved = path.normalize(path.join(path.dirname(file), specifier));
         if (resolved === '..' || resolved.startsWith('../')) {
-          failures.push(`${owner}/${file}: relative import escapes package boundary: ${specifier}`)
+          failures.push(`${owner}/${file}: relative import escapes package boundary: ${specifier}`);
         }
-        continue
+        continue;
       }
       if (specifier.startsWith('@agent-harness/')) {
-        const dependencyPath = packageByName.get(specifier)
+        const dependencyPath = packageByName.get(specifier);
         if (dependencyPath === undefined) {
-          failures.push(`${owner}/${file}: unknown workspace import ${specifier}`)
+          failures.push(`${owner}/${file}: unknown workspace import ${specifier}`);
         } else if (allowed !== undefined && !allowed.has(dependencyPath)) {
-          failures.push(`${owner}/${file}: forbidden workspace import ${dependencyPath}`)
+          failures.push(`${owner}/${file}: forbidden workspace import ${dependencyPath}`);
         }
-        continue
+        continue;
       }
       if (protocolNeutralOwners.has(owner)) {
-        failures.push(`${owner}/${file}: protocol-neutral source cannot import ${specifier}`)
+        failures.push(`${owner}/${file}: protocol-neutral source cannot import ${specifier}`);
       }
     }
   }
-  return failures
+  return failures;
 }
 
 function exportedNames(source) {
-  const names = []
+  const names = [];
   const sourceFile = ts.createSourceFile(
     'source.ts',
     source,
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TS,
-  )
+  );
   for (const statement of sourceFile.statements) {
     if (ts.isExportAssignment(statement)) {
-      names.push('default')
-      continue
+      names.push('default');
+      continue;
     }
     if (ts.isExportDeclaration(statement)) {
       if (statement.exportClause === undefined) {
-        names.push('*')
+        names.push('*');
       } else if (ts.isNamedExports(statement.exportClause)) {
-        names.push(...statement.exportClause.elements.map(element => element.name.text))
+        names.push(...statement.exportClause.elements.map((element) => element.name.text));
       } else {
-        names.push('default')
+        names.push('default');
       }
-      continue
+      continue;
     }
-    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined
-    if (modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) !== true) continue
-    if (modifiers.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
-      names.push('default')
-      continue
+    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined;
+    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) !== true)
+      continue;
+    if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
+      names.push('default');
+      continue;
     }
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
-        collectBindingNames(declaration.name, names)
+        collectBindingNames(declaration.name, names);
       }
-      continue
+      continue;
     }
     if ('name' in statement && statement.name !== undefined && ts.isIdentifier(statement.name)) {
-      names.push(statement.name.text)
+      names.push(statement.name.text);
     }
   }
-  return names
+  return names;
 }
 
 function collectBindingNames(binding, names) {
   if (ts.isIdentifier(binding)) {
-    names.push(binding.text)
-    return
+    names.push(binding.text);
+    return;
   }
   for (const element of binding.elements) {
-    if (!ts.isOmittedExpression(element)) collectBindingNames(element.name, names)
+    if (!ts.isOmittedExpression(element)) collectBindingNames(element.name, names);
   }
 }
 
 function importedSpecifiers(source) {
-  const specifiers = []
+  const specifiers = [];
   const sourceFile = ts.createSourceFile(
     'source.ts',
     source,
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TS,
-  )
-  visit(sourceFile)
-  return specifiers
+  );
+  visit(sourceFile);
+  return specifiers;
 
   function visit(node) {
     if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
-      && node.moduleSpecifier !== undefined
-      && ts.isStringLiteralLike(node.moduleSpecifier)
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteralLike(node.moduleSpecifier)
     ) {
-      specifiers.push(node.moduleSpecifier.text)
+      specifiers.push(node.moduleSpecifier.text);
     } else if (
-      ts.isCallExpression(node)
-      && node.expression.kind === ts.SyntaxKind.ImportKeyword
-      && node.arguments.length === 1
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1
     ) {
-      const argument = node.arguments[0]
+      const argument = node.arguments[0];
       if (argument !== undefined && ts.isStringLiteralLike(argument)) {
-        specifiers.push(argument.text)
+        specifiers.push(argument.text);
       }
     }
-    ts.forEachChild(node, visit)
+    ts.forEachChild(node, visit);
   }
 }

@@ -1,14 +1,14 @@
-import { brandId, type MessageId, type ToolCallId } from '@agent-harness/kernel'
-import type { ModelRequest, ModelStreamEvent } from '@agent-harness/kernel'
-import { describe, expect, it } from 'vitest'
+import type { ModelRequest, ModelStreamEvent } from '@agent-harness/kernel';
+import { brandId, type MessageId, type ToolCallId } from '@agent-harness/kernel';
+import { describe, expect, it } from 'vitest';
 import {
   OpenAiCompatibleConfigurationError,
   OpenAiCompatibleHttpError,
   OpenAiCompatibleModelProvider,
   OpenAiCompatibleProtocolError,
-} from '../src/index.ts'
+} from '../src/index.ts';
 
-const encoder = new TextEncoder()
+const encoder = new TextEncoder();
 
 function request(): ModelRequest {
   return {
@@ -18,11 +18,13 @@ function request(): ModelRequest {
         id: brandId<'MessageId'>('assistant-1') as MessageId,
         role: 'assistant',
         content: '',
-        toolCalls: [{
-          id: brandId<'ToolCallId'>('previous-call') as ToolCallId,
-          name: 'lookup',
-          input: { z: 1, a: ['value'] },
-        }],
+        toolCalls: [
+          {
+            id: brandId<'ToolCallId'>('previous-call') as ToolCallId,
+            name: 'lookup',
+            input: { z: 1, a: ['value'] },
+          },
+        ],
       },
       {
         role: 'tool',
@@ -35,18 +37,21 @@ function request(): ModelRequest {
       },
     ],
     tools: [{ name: 'lookup', description: '查询', inputSchema: { type: 'object' } }],
-  }
+  };
 }
 
 function response(parts: readonly (string | Uint8Array)[], status = 200): Response {
-  let position = 0
-  return new Response(new ReadableStream<Uint8Array>({
-    pull(controller) {
-      const part = parts[position++]
-      if (part === undefined) controller.close()
-      else controller.enqueue(typeof part === 'string' ? encoder.encode(part) : part)
-    },
-  }), { status, statusText: status === 200 ? 'OK' : 'Bad Gateway' })
+  let position = 0;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const part = parts[position++];
+        if (part === undefined) controller.close();
+        else controller.enqueue(typeof part === 'string' ? encoder.encode(part) : part);
+      },
+    }),
+    { status, statusText: status === 200 ? 'OK' : 'Bad Gateway' },
+  );
 }
 
 function provider(fetchImplementation: typeof fetch): OpenAiCompatibleModelProvider {
@@ -57,56 +62,73 @@ function provider(fetchImplementation: typeof fetch): OpenAiCompatibleModelProvi
     model: 'deepseek-chat',
     headers: { 'X-Tenant': 'lab' },
     fetch: fetchImplementation,
-  })
+  });
 }
 
 async function events(
   model: OpenAiCompatibleModelProvider,
   signal = new AbortController().signal,
 ): Promise<ModelStreamEvent[]> {
-  const call = await model.prepare(signal)
-  return Array.fromAsync(call.stream(request(), signal))
+  const call = await model.prepare(signal);
+  return Array.fromAsync(call.stream(request(), signal));
 }
 
 describe('OpenAiCompatibleModelProvider', () => {
   it('拒绝无界或无效的 SSE 缓冲配置', () => {
-    expect(() => new OpenAiCompatibleModelProvider({
-      id: 'deepseek', baseUrl: 'https://example.test/v1', apiKey: 'secret', model: 'deepseek', maxSseBufferBytes: 0,
-    })).toThrow(OpenAiCompatibleConfigurationError)
-  })
+    expect(
+      () =>
+        new OpenAiCompatibleModelProvider({
+          id: 'deepseek',
+          baseUrl: 'https://example.test/v1',
+          apiKey: 'secret',
+          model: 'deepseek',
+          maxSseBufferBytes: 0,
+        }),
+    ).toThrow(OpenAiCompatibleConfigurationError);
+  });
 
   it('拒绝超过 SSE 缓冲上限的未完成行', async () => {
     const model = new OpenAiCompatibleModelProvider({
-      id: 'deepseek', baseUrl: 'https://example.test/v1', apiKey: 'secret', model: 'deepseek', maxSseBufferBytes: 8,
+      id: 'deepseek',
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'secret',
+      model: 'deepseek',
+      maxSseBufferBytes: 8,
       fetch: async () => response(['data: 123456789']),
-    })
-    await expect(events(model)).rejects.toThrow('SSE 行超过 maxSseBufferBytes')
-  })
+    });
+    await expect(events(model)).rejects.toThrow('SSE 行超过 maxSseBufferBytes');
+  });
 
   it('限制跨多个 SSE 事件累积的响应字节', async () => {
     const model = new OpenAiCompatibleModelProvider({
-      id: 'deepseek', baseUrl: 'https://example.test/v1', apiKey: 'secret', model: 'deepseek',
-      maxSseBufferBytes: 1024, maxResponseBytes: 30,
+      id: 'deepseek',
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'secret',
+      model: 'deepseek',
+      maxSseBufferBytes: 1024,
+      maxResponseBytes: 30,
       fetch: async () => response(['data: {"choices":[]}\n\n', 'data: {"choices":[]}\n\n']),
-    })
-    await expect(events(model)).rejects.toThrow('SSE 响应超过 maxResponseBytes')
-  })
+    });
+    await expect(events(model)).rejects.toThrow('SSE 响应超过 maxResponseBytes');
+  });
 
   it('映射请求、固定鉴权头和稳定工具 JSON', async () => {
-    let captured: { readonly input: string | URL, readonly init: RequestInit | undefined } | undefined
+    let captured:
+      | { readonly input: string | URL; readonly init: RequestInit | undefined }
+      | undefined;
     const model = provider(async (input, init) => {
-      captured = { input, init }
-      return response(['data: [DONE]\n\n'])
-    })
+      captured = { input, init };
+      return response(['data: [DONE]\n\n']);
+    });
 
-    await expect(events(model)).resolves.toEqual([])
-    expect(captured?.input.toString()).toBe('https://example.test/v1/chat/completions')
+    await expect(events(model)).resolves.toEqual([]);
+    expect(captured?.input.toString()).toBe('https://example.test/v1/chat/completions');
     expect(captured?.init?.headers).toEqual({
       'X-Tenant': 'lab',
       Accept: 'text/event-stream',
       Authorization: 'Bearer secret',
       'Content-Type': 'application/json',
-    })
+    });
     expect(JSON.parse(captured?.init?.body as string)).toMatchObject({
       model: 'deepseek-chat',
       stream: true,
@@ -116,31 +138,39 @@ describe('OpenAiCompatibleModelProvider', () => {
           role: 'assistant',
           tool_calls: [{ function: { arguments: '{"a":["value"],"z":1}' } }],
         },
-        { role: 'tool', content: '{"callId":"previous-call","output":{"a":"ok","z":1},"status":"success"}' },
-      ],
-      tools: [{ type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }],
-    })
-  })
-
-  it('省略空 tools 与空 tool_calls，避免供应商 HTTP 400', async () => {
-    let body: Record<string, unknown> | undefined
-    const model = provider(async (_input, init) => {
-      body = JSON.parse(init?.body as string) as Record<string, unknown>
-      return response(['data: [DONE]\n\n'])
-    })
-    const call = await model.prepare(new AbortController().signal)
-    await Array.fromAsync(call.stream({
-      messages: [
-        { id: brandId<'MessageId'>('u') as MessageId, role: 'user', content: 'hi' },
         {
-          id: brandId<'MessageId'>('a') as MessageId,
-          role: 'assistant',
-          content: 'hello',
-          toolCalls: [],
+          role: 'tool',
+          content: '{"callId":"previous-call","output":{"a":"ok","z":1},"status":"success"}',
         },
       ],
-      tools: [],
-    }, new AbortController().signal))
+      tools: [{ type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }],
+    });
+  });
+
+  it('省略空 tools 与空 tool_calls，避免供应商 HTTP 400', async () => {
+    let body: Record<string, unknown> | undefined;
+    const model = provider(async (_input, init) => {
+      body = JSON.parse(init?.body as string) as Record<string, unknown>;
+      return response(['data: [DONE]\n\n']);
+    });
+    const call = await model.prepare(new AbortController().signal);
+    await Array.fromAsync(
+      call.stream(
+        {
+          messages: [
+            { id: brandId<'MessageId'>('u') as MessageId, role: 'user', content: 'hi' },
+            {
+              id: brandId<'MessageId'>('a') as MessageId,
+              role: 'assistant',
+              content: 'hello',
+              toolCalls: [],
+            },
+          ],
+          tools: [],
+        },
+        new AbortController().signal,
+      ),
+    );
     expect(body).toEqual({
       model: 'deepseek-chat',
       stream: true,
@@ -148,19 +178,21 @@ describe('OpenAiCompatibleModelProvider', () => {
         { role: 'user', content: 'hi' },
         { role: 'assistant', content: 'hello' },
       ],
-    })
-    expect(body).not.toHaveProperty('tools')
-    expect((body?.messages as unknown[])[1]).not.toHaveProperty('tool_calls')
-  })
+    });
+    expect(body).not.toHaveProperty('tools');
+    expect((body as { messages: unknown[] }).messages[1]).not.toHaveProperty('tool_calls');
+  });
 
   it('增量解析文本、usage、跨字节 SSE 与分段 tool arguments', async () => {
-    const model = provider(async () => response([
-      'data: {"choices":[{"index":0,"delta":{"content":"你"}}]}\n\n',
-      'data: {"choices":[{"index":0,"delta":{"content":"好","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}\n\n',
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"x\\"}"}}]}}]}\n\n',
-      'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":5}}\n\n',
-      'data: [DONE]\n\n',
-    ]))
+    const model = provider(async () =>
+      response([
+        'data: {"choices":[{"index":0,"delta":{"content":"你"}}]}\n\n',
+        'data: {"choices":[{"index":0,"delta":{"content":"好","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"lookup","arguments":"{\\"q\\":"}}]}}]}\n\n',
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"x\\"}"}}]}}]}\n\n',
+        'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":5}}\n\n',
+        'data: [DONE]\n\n',
+      ]),
+    );
 
     await expect(events(model)).resolves.toEqual([
       { type: 'text.delta', text: '你' },
@@ -170,151 +202,222 @@ describe('OpenAiCompatibleModelProvider', () => {
         type: 'tool.call',
         call: { id: 'call-1', name: 'lookup', input: { q: 'x' } },
       },
-    ])
-  })
+    ]);
+  });
 
   it('在 UTF-8 多字节字符中间分片时保持文本', async () => {
-    const payload = encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"你"}}]}\n\ndata: [DONE]\n\n')
-    const characterStart = payload.findIndex((byte, index) =>
-      byte === 0xe4 && payload[index + 1] === 0xbd && payload[index + 2] === 0xa0,
-    )
-    const model = provider(async () => response([
-      payload.slice(0, characterStart + 1),
-      payload.slice(characterStart + 1),
-    ]))
+    const payload = encoder.encode(
+      'data: {"choices":[{"index":0,"delta":{"content":"你"}}]}\n\ndata: [DONE]\n\n',
+    );
+    const characterStart = payload.findIndex(
+      (byte, index) => byte === 0xe4 && payload[index + 1] === 0xbd && payload[index + 2] === 0xa0,
+    );
+    const model = provider(async () =>
+      response([payload.slice(0, characterStart + 1), payload.slice(characterStart + 1)]),
+    );
 
-    await expect(events(model)).resolves.toEqual([{ type: 'text.delta', text: '你' }])
-  })
+    await expect(events(model)).resolves.toEqual([{ type: 'text.delta', text: '你' }]);
+  });
 
   it('按 SSE 的 CRLF 和多行 data 规则组装 JSON', async () => {
-    const model = provider(async () => response([
-      'data: {"choices":[]\r\n',
-      'data: }\r\n\r\n',
-      'data: [DONE]\r\n\r\n',
-    ]))
+    const model = provider(async () =>
+      response(['data: {"choices":[]\r\n', 'data: }\r\n\r\n', 'data: [DONE]\r\n\r\n']),
+    );
 
-    await expect(events(model)).resolves.toEqual([])
-  })
+    await expect(events(model)).resolves.toEqual([]);
+  });
 
   it('按 tool call index 而非收到顺序发布多个调用', async () => {
-    const model = provider(async () => response([
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"second","function":{"name":"two","arguments":"{}"}},{"index":0,"id":"first","function":{"name":"one","arguments":"[]"}}]}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]))
+    const model = provider(async () =>
+      response([
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"second","function":{"name":"two","arguments":"{}"}},{"index":0,"id":"first","function":{"name":"one","arguments":"[]"}}]}}]}\n\n',
+        'data: [DONE]\n\n',
+      ]),
+    );
 
     await expect(events(model)).resolves.toEqual([
       { type: 'tool.call', call: { id: 'first', name: 'one', input: [] } },
       { type: 'tool.call', call: { id: 'second', name: 'two', input: {} } },
-    ])
-  })
+    ]);
+  });
 
   it.each([
     ['非成功 HTTP', async () => response([], 502), OpenAiCompatibleHttpError],
     ['畸形 data JSON', async () => response(['data: {bad}\n\n']), OpenAiCompatibleProtocolError],
-    ['缺少 DONE', async () => response(['data: {"choices":[]}\n\n']), OpenAiCompatibleProtocolError],
-    ['递减的累计 usage', async () => response([
-      'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":5}}\n\n',
-      'data: {"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":5}}\n\n',
-      'data: [DONE]\n\n',
-    ]), OpenAiCompatibleProtocolError],
-    ['无效 tool arguments', async () => response([
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call","function":{"name":"bad","arguments":"{"}}]}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]), OpenAiCompatibleProtocolError],
-    ['冲突 tool id', async () => response([
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"one","function":{"name":"x","arguments":"{}"}}]}}]}\n\n',
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"two"}]}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]), OpenAiCompatibleProtocolError],
-    ['间断 tool index', async () => response([
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call","function":{"name":"bad","arguments":"{}"}}]}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]), OpenAiCompatibleProtocolError],
-    ['跨 index 重复 tool id', async () => response([
-      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"same","function":{"name":"one","arguments":"{}"}},{"index":1,"id":"same","function":{"name":"two","arguments":"{}"}}]}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]), OpenAiCompatibleProtocolError],
-    ['DONE 后额外 data', async () => response([
-      'data: [DONE]\n\n',
-      'data: {"choices":[]}\n\n',
-    ]), OpenAiCompatibleProtocolError],
-    ['无效 UTF-8', async () => response([
-      encoder.encode('data: '),
-      new Uint8Array([0xff, 0x0a, 0x0a]),
-    ]), OpenAiCompatibleProtocolError],
+    [
+      '缺少 DONE',
+      async () => response(['data: {"choices":[]}\n\n']),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      '递减的累计 usage',
+      async () =>
+        response([
+          'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":5}}\n\n',
+          'data: {"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":5}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      '无效 tool arguments',
+      async () =>
+        response([
+          'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call","function":{"name":"bad","arguments":"{"}}]}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      '冲突 tool id',
+      async () =>
+        response([
+          'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"one","function":{"name":"x","arguments":"{}"}}]}}]}\n\n',
+          'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"two"}]}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      '间断 tool index',
+      async () =>
+        response([
+          'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call","function":{"name":"bad","arguments":"{}"}}]}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      '跨 index 重复 tool id',
+      async () =>
+        response([
+          'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"same","function":{"name":"one","arguments":"{}"}},{"index":1,"id":"same","function":{"name":"two","arguments":"{}"}}]}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      'DONE 后额外 data',
+      async () => response(['data: [DONE]\n\n', 'data: {"choices":[]}\n\n']),
+      OpenAiCompatibleProtocolError,
+    ],
+    [
+      '无效 UTF-8',
+      async () => response([encoder.encode('data: '), new Uint8Array([0xff, 0x0a, 0x0a])]),
+      OpenAiCompatibleProtocolError,
+    ],
   ])('拒绝%s', async (_name, makeResponse, error) => {
-    const model = provider(makeResponse)
-    await expect(events(model)).rejects.toBeInstanceOf(error)
-  })
+    const model = provider(makeResponse);
+    await expect(events(model)).rejects.toBeInstanceOf(error);
+  });
 
   it('拒绝同一 chunk 的多个 choice，且不发布其中的工具调用', async () => {
-    const model = provider(async () => response([
-      'data: {"choices":[{"index":0,"delta":{"content":"text"}},{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call","function":{"name":"unsafe","arguments":"{}"}}]}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]))
-    const prepared = await model.prepare(new AbortController().signal)
-    const observed: ModelStreamEvent[] = []
-    await expect((async () => {
-      for await (const event of prepared.stream(request(), new AbortController().signal)) {
-        observed.push(event)
-      }
-    })()).rejects.toBeInstanceOf(OpenAiCompatibleProtocolError)
-    expect(observed).toEqual([])
-  })
+    const model = provider(async () =>
+      response([
+        'data: {"choices":[{"index":0,"delta":{"content":"text"}},{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call","function":{"name":"unsafe","arguments":"{}"}}]}}]}\n\n',
+        'data: [DONE]\n\n',
+      ]),
+    );
+    const prepared = await model.prepare(new AbortController().signal);
+    const observed: ModelStreamEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of prepared.stream(request(), new AbortController().signal)) {
+          observed.push(event);
+        }
+      })(),
+    ).rejects.toBeInstanceOf(OpenAiCompatibleProtocolError);
+    expect(observed).toEqual([]);
+  });
 
   it('拒绝成功响应缺少 body', async () => {
-    const model = provider(async () => new Response(null, { status: 204 }))
-    await expect(events(model)).rejects.toBeInstanceOf(OpenAiCompatibleProtocolError)
-  })
+    const model = provider(async () => new Response(null, { status: 204 }));
+    await expect(events(model)).rejects.toBeInstanceOf(OpenAiCompatibleProtocolError);
+  });
 
   it('prepare 和 stream 保留取消语义', async () => {
-    const controller = new AbortController()
-    controller.abort(new DOMException('停止', 'AbortError'))
+    const controller = new AbortController();
+    controller.abort(new DOMException('停止', 'AbortError'));
     const fetchImplementation = async (): Promise<Response> => {
-      throw new Error('不应发起请求')
-    }
-    const model = provider(fetchImplementation)
-    await expect(model.prepare(controller.signal)).rejects.toThrow('停止')
-    const prepared = await model.prepare(new AbortController().signal)
-    await expect(Array.fromAsync(prepared.stream(request(), controller.signal))).rejects.toThrow('停止')
-  })
+      throw new Error('不应发起请求');
+    };
+    const model = provider(fetchImplementation);
+    await expect(model.prepare(controller.signal)).rejects.toThrow('停止');
+    const prepared = await model.prepare(new AbortController().signal);
+    await expect(Array.fromAsync(prepared.stream(request(), controller.signal))).rejects.toThrow(
+      '停止',
+    );
+  });
 
   it('在等待 reader 时取消 stream 并取消底层 body', async () => {
-    let cancelled = false
-    const model = provider(async () => new Response(new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"first"}}]}\n\n'))
-      },
-      pull() {
-        return new Promise<void>(() => undefined)
-      },
-      cancel() {
-        cancelled = true
-      },
-    })))
-    const controller = new AbortController()
-    const prepared = await model.prepare(controller.signal)
-    const iterator = prepared.stream(request(), controller.signal)[Symbol.asyncIterator]()
-    await expect(iterator.next()).resolves.toMatchObject({ value: { type: 'text.delta', text: 'first' } })
-    const pending = iterator.next()
-    controller.abort(new DOMException('停止读取', 'AbortError'))
-    await expect(pending).rejects.toThrow('停止读取')
-    expect(cancelled).toBe(true)
-  })
+    let cancelled = false;
+    const model = provider(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"first"}}]}\n\n'),
+              );
+            },
+            pull() {
+              return new Promise<void>(() => undefined);
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+    );
+    const controller = new AbortController();
+    const prepared = await model.prepare(controller.signal);
+    const iterator = prepared.stream(request(), controller.signal)[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { type: 'text.delta', text: 'first' },
+    });
+    const pending = iterator.next();
+    controller.abort(new DOMException('停止读取', 'AbortError'));
+    await expect(pending).rejects.toThrow('停止读取');
+    expect(cancelled).toBe(true);
+  });
 
   it('配置拒绝相对 URL、空值和受保护请求头覆盖', () => {
-    expect(() => new OpenAiCompatibleModelProvider({
-      id: '', baseUrl: '/v1', apiKey: '', model: '',
-    })).toThrow(OpenAiCompatibleConfigurationError)
-    expect(() => new OpenAiCompatibleModelProvider({
-      id: 'x', baseUrl: 'https://example.test/v1', apiKey: 'key', model: 'm',
-      headers: { Authorization: 'other' },
-    })).toThrow(OpenAiCompatibleConfigurationError)
-    expect(() => new OpenAiCompatibleModelProvider({
-      id: 'x', baseUrl: 'https://example.test/v1?query=1', apiKey: 'key', model: 'm',
-    })).toThrow(OpenAiCompatibleConfigurationError)
-    expect(() => new OpenAiCompatibleModelProvider({
-      id: 'x', baseUrl: 'https://example.test/v1/chat/completions', apiKey: 'key', model: 'm',
-    })).toThrow(OpenAiCompatibleConfigurationError)
-  })
-})
+    expect(
+      () =>
+        new OpenAiCompatibleModelProvider({
+          id: '',
+          baseUrl: '/v1',
+          apiKey: '',
+          model: '',
+        }),
+    ).toThrow(OpenAiCompatibleConfigurationError);
+    expect(
+      () =>
+        new OpenAiCompatibleModelProvider({
+          id: 'x',
+          baseUrl: 'https://example.test/v1',
+          apiKey: 'key',
+          model: 'm',
+          headers: { Authorization: 'other' },
+        }),
+    ).toThrow(OpenAiCompatibleConfigurationError);
+    expect(
+      () =>
+        new OpenAiCompatibleModelProvider({
+          id: 'x',
+          baseUrl: 'https://example.test/v1?query=1',
+          apiKey: 'key',
+          model: 'm',
+        }),
+    ).toThrow(OpenAiCompatibleConfigurationError);
+    expect(
+      () =>
+        new OpenAiCompatibleModelProvider({
+          id: 'x',
+          baseUrl: 'https://example.test/v1/chat/completions',
+          apiKey: 'key',
+          model: 'm',
+        }),
+    ).toThrow(OpenAiCompatibleConfigurationError);
+  });
+});

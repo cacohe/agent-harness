@@ -37,4 +37,4 @@ export const uiHtml = `<!doctype html>
     </div>
     <script type="module" src="/assets/app.js"></script>
   </body>
-</html>`
+</html>`;

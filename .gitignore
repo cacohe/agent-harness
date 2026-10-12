@@ -7,3 +7,5 @@ coverage/
 **/.env
 examples/cli/config.json
 examples/cli/data/
+examples/web/config.json
+examples/web/data/

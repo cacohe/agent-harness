@@ -1,4 +1,4 @@
 export {
   FilesystemSkillCatalog,
   FilesystemSkillError,
-} from './catalog.js'
+} from './catalog.js';

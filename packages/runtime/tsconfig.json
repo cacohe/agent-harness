@@ -3,13 +3,9 @@
   "compilerOptions": {
     "outDir": "lib",
     "rootDir": "src",
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
-  "include": [
-    "src/**/*.ts"
-  ],
+  "include": ["src/**/*.ts"],
   "references": [
     {
       "path": "../context/context-runtime"

@@ -1,9 +1,9 @@
 export {
   PlatformHttpClient,
+  type PlatformHttpClientOptions,
   PlatformHttpConfigurationError,
   PlatformHttpError,
-  PlatformHttpProtocolError,
-  type PlatformHttpClientOptions,
   type PlatformHttpPermitRequest,
+  PlatformHttpProtocolError,
   type PlatformRequestIdGenerator,
-} from './client.js'
+} from './client.js';

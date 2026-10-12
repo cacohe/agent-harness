@@ -23,4 +23,4 @@ input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey
 cancel.addEventListener('click',()=>fetch('/sessions/'+encodeURIComponent(sessionId)+'/cancel',{method:'POST'}));
 window.addEventListener('pagehide',()=>{source?.close();if(sessionId)void fetch('/sessions/'+encodeURIComponent(sessionId)+'/close',{method:'POST',keepalive:true}).catch(()=>undefined);});
 document.querySelector('#new-chat').addEventListener('click',newSession);
-newSession();`
+newSession();`;

@@ -1,8 +1,8 @@
 export {
-  PlatformPermitPolicy,
-  PlatformPermitProtocolError,
   type PlatformPermitClient,
   type PlatformPermitClock,
+  PlatformPermitPolicy,
   type PlatformPermitPolicyOptions,
+  PlatformPermitProtocolError,
   type PlatformPermitRequest,
-} from './policy.js'
+} from './policy.js';

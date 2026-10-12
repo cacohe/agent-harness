@@ -3,16 +3,12 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "lib",
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
   "references": [
     {
       "path": "../../kernel"
     }
   ],
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }

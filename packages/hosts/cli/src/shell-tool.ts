@@ -1,52 +1,52 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { isAbsolute } from 'node:path'
-import type { JsonValue, ToolDefinition } from '@agent-harness/kernel'
+import { type ChildProcess, spawn } from 'node:child_process';
+import { isAbsolute } from 'node:path';
+import type { JsonValue, ToolDefinition } from '@agent-harness/kernel';
 
 /** kill 后等待 close 的宽限；超时则强制结束等待。 */
-const DEFAULT_KILL_GRACE_MS = 1000
+const DEFAULT_KILL_GRACE_MS = 1000;
 
 /** 可注入的子进程启动函数，便于测试。 */
 export type ShellSpawn = (
   file: string,
   args: readonly string[],
   options: {
-    readonly cwd: string
-    readonly env: NodeJS.ProcessEnv
-    readonly windowsHide: boolean
-    readonly detached: boolean
+    readonly cwd: string;
+    readonly env: NodeJS.ProcessEnv;
+    readonly windowsHide: boolean;
+    readonly detached: boolean;
   },
-) => ChildProcess
+) => ChildProcess;
 
 export interface ShellToolOptions {
-  readonly cwd: string
-  readonly timeoutMs: number
-  readonly maxOutputBytes: number
-  readonly env?: NodeJS.ProcessEnv
-  readonly spawn?: ShellSpawn
-  readonly platform?: NodeJS.Platform
+  readonly cwd: string;
+  readonly timeoutMs: number;
+  readonly maxOutputBytes: number;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly spawn?: ShellSpawn;
+  readonly platform?: NodeJS.Platform;
   /** 测试或调优用：kill 后仍无 close 时强制结算的毫秒数。 */
-  readonly killGraceMs?: number
+  readonly killGraceMs?: number;
 }
 
 /** 创建在固定 cwd 下执行 shell 命令的 Host 侧工具。 */
 export function createShellTool(options: ShellToolOptions): ToolDefinition {
   if (!isAbsolute(options.cwd)) {
-    throw new TypeError('shell cwd 必须是绝对路径')
+    throw new TypeError('shell cwd 必须是绝对路径');
   }
   if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) {
-    throw new TypeError('shell timeoutMs 必须是正整数')
+    throw new TypeError('shell timeoutMs 必须是正整数');
   }
   if (!Number.isSafeInteger(options.maxOutputBytes) || options.maxOutputBytes < 1) {
-    throw new TypeError('shell maxOutputBytes 必须是正整数')
+    throw new TypeError('shell maxOutputBytes 必须是正整数');
   }
-  const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS
+  const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   if (!Number.isSafeInteger(killGraceMs) || killGraceMs < 1) {
-    throw new TypeError('shell killGraceMs 必须是正整数')
+    throw new TypeError('shell killGraceMs 必须是正整数');
   }
 
-  const spawnImpl = options.spawn ?? defaultSpawn
-  const platform = options.platform ?? process.platform
-  const env = options.env ?? safeShellEnvironment(process.env, platform)
+  const spawnImpl = options.spawn ?? defaultSpawn;
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? safeShellEnvironment(process.env, platform);
 
   return {
     name: 'run_shell',
@@ -64,11 +64,11 @@ export function createShellTool(options: ShellToolOptions): ToolDefinition {
       },
     },
     parseInput(input): JsonValue {
-      readCommand(input)
-      return input
+      readCommand(input);
+      return input;
     },
     async execute(input, context): Promise<JsonValue> {
-      const command = readCommand(input)
+      const command = readCommand(input);
       return await runShellCommand(command, {
         cwd: options.cwd,
         timeoutMs: options.timeoutMs,
@@ -78,140 +78,140 @@ export function createShellTool(options: ShellToolOptions): ToolDefinition {
         platform,
         spawn: spawnImpl,
         signal: context.signal,
-      })
+      });
     },
-  }
+  };
 }
 
 function readCommand(input: JsonValue): string {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
-    throw new TypeError('run_shell 输入必须是对象')
+    throw new TypeError('run_shell 输入必须是对象');
   }
-  const command = Reflect.get(input, 'command')
+  const command = Reflect.get(input, 'command');
   if (typeof command !== 'string' || command.trim().length === 0) {
-    throw new TypeError('run_shell.command 必须是非空字符串')
+    throw new TypeError('run_shell.command 必须是非空字符串');
   }
-  if (Reflect.ownKeys(input).some(key => key !== 'command')) {
-    throw new TypeError('run_shell 输入包含未知字段')
+  if (Reflect.ownKeys(input).some((key) => key !== 'command')) {
+    throw new TypeError('run_shell 输入包含未知字段');
   }
-  return command
+  return command;
 }
 
 async function runShellCommand(
   command: string,
   options: {
-    readonly cwd: string
-    readonly timeoutMs: number
-    readonly maxOutputBytes: number
-    readonly killGraceMs: number
-    readonly env: NodeJS.ProcessEnv
-    readonly platform: NodeJS.Platform
-    readonly spawn: ShellSpawn
-    readonly signal: AbortSignal
+    readonly cwd: string;
+    readonly timeoutMs: number;
+    readonly maxOutputBytes: number;
+    readonly killGraceMs: number;
+    readonly env: NodeJS.ProcessEnv;
+    readonly platform: NodeJS.Platform;
+    readonly spawn: ShellSpawn;
+    readonly signal: AbortSignal;
   },
 ): Promise<JsonValue> {
-  options.signal.throwIfAborted()
+  options.signal.throwIfAborted();
 
-  const { file, args } = shellInvocation(command, options.platform)
+  const { file, args } = shellInvocation(command, options.platform);
   const child = options.spawn(file, args, {
     cwd: options.cwd,
     env: options.env,
     windowsHide: true,
     detached: options.platform !== 'win32',
-  })
+  });
   if (child.stdout === null || child.stderr === null) {
-    throw new Error('run_shell 需要 stdout/stderr 管道')
+    throw new Error('run_shell 需要 stdout/stderr 管道');
   }
 
-  const stdoutChunks: Buffer[] = []
-  const stderrChunks: Buffer[] = []
-  let stdoutBytes = 0
-  let stderrBytes = 0
-  let truncated = false
-  let timedOut = false
-  let cancelled = false
-  let waitSettled = false
-  let forceTimer: ReturnType<typeof setTimeout> | undefined
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
+  let truncated = false;
+  let timedOut = false;
+  let cancelled = false;
+  let waitSettled = false;
+  let forceTimer: ReturnType<typeof setTimeout> | undefined;
 
   const collect = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
-    const chunks = stream === 'stdout' ? stdoutChunks : stderrChunks
-    let size = stream === 'stdout' ? stdoutBytes : stderrBytes
+    const chunks = stream === 'stdout' ? stdoutChunks : stderrChunks;
+    let size = stream === 'stdout' ? stdoutBytes : stderrBytes;
     if (size >= options.maxOutputBytes) {
-      truncated = true
-      return
+      truncated = true;
+      return;
     }
-    const remaining = options.maxOutputBytes - size
+    const remaining = options.maxOutputBytes - size;
     if (chunk.length > remaining) {
-      chunks.push(chunk.subarray(0, remaining))
-      size += remaining
-      truncated = true
+      chunks.push(chunk.subarray(0, remaining));
+      size += remaining;
+      truncated = true;
     } else {
-      chunks.push(chunk)
-      size += chunk.length
+      chunks.push(chunk);
+      size += chunk.length;
     }
-    if (stream === 'stdout') stdoutBytes = size
-    else stderrBytes = size
-  }
+    if (stream === 'stdout') stdoutBytes = size;
+    else stderrBytes = size;
+  };
 
   child.stdout.on('data', (chunk: Buffer | string) => {
-    collect('stdout', Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  })
+    collect('stdout', Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  });
   child.stderr.on('data', (chunk: Buffer | string) => {
-    collect('stderr', Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  })
+    collect('stderr', Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  });
 
-  let resolveWait: ((code: number | null) => void) | undefined
-  let rejectWait: ((error: unknown) => void) | undefined
+  let resolveWait: ((code: number | null) => void) | undefined;
+  let rejectWait: ((error: unknown) => void) | undefined;
 
   const settleWait = (code: number | null): void => {
-    if (waitSettled) return
-    waitSettled = true
-    if (forceTimer !== undefined) clearTimeout(forceTimer)
-    resolveWait?.(code)
-  }
+    if (waitSettled) return;
+    waitSettled = true;
+    if (forceTimer !== undefined) clearTimeout(forceTimer);
+    resolveWait?.(code);
+  };
 
   const failWait = (error: unknown): void => {
-    if (waitSettled) return
-    waitSettled = true
-    if (forceTimer !== undefined) clearTimeout(forceTimer)
-    rejectWait?.(error)
-  }
+    if (waitSettled) return;
+    waitSettled = true;
+    if (forceTimer !== undefined) clearTimeout(forceTimer);
+    rejectWait?.(error);
+  };
 
   const armForceSettle = (): void => {
-    if (forceTimer !== undefined || waitSettled) return
+    if (forceTimer !== undefined || waitSettled) return;
     forceTimer = setTimeout(() => {
-      killProcessTree(child, options.platform, 'SIGKILL')
-      destroyStream(child.stdout)
-      destroyStream(child.stderr)
-      settleWait(null)
-    }, options.killGraceMs)
-  }
+      killProcessTree(child, options.platform, 'SIGKILL');
+      destroyStream(child.stdout);
+      destroyStream(child.stderr);
+      settleWait(null);
+    }, options.killGraceMs);
+  };
 
   const killChild = (): void => {
-    if (waitSettled) return
-    killProcessTree(child, options.platform, 'SIGTERM')
-    armForceSettle()
-  }
+    if (waitSettled) return;
+    killProcessTree(child, options.platform, 'SIGTERM');
+    armForceSettle();
+  };
 
   const onAbort = (): void => {
-    cancelled = true
-    killChild()
-  }
-  options.signal.addEventListener('abort', onAbort, { once: true })
+    cancelled = true;
+    killChild();
+  };
+  options.signal.addEventListener('abort', onAbort, { once: true });
 
   const timeout = setTimeout(() => {
-    timedOut = true
-    killChild()
-  }, options.timeoutMs)
+    timedOut = true;
+    killChild();
+  }, options.timeoutMs);
 
   try {
     const exitCode = await new Promise<number | null>((resolve, reject) => {
-      resolveWait = resolve
-      rejectWait = reject
-      child.once('error', failWait)
-      child.once('close', settleWait)
-    })
-    options.signal.throwIfAborted()
+      resolveWait = resolve;
+      rejectWait = reject;
+      child.once('error', failWait);
+      child.once('close', settleWait);
+    });
+    options.signal.throwIfAborted();
     return {
       exitCode,
       stdout: Buffer.concat(stdoutChunks).toString('utf8'),
@@ -219,49 +219,49 @@ async function runShellCommand(
       truncated,
       timedOut,
       cancelled,
-    }
+    };
   } catch (error) {
     if (options.signal.aborted) {
       throw options.signal.reason instanceof Error
         ? options.signal.reason
-        : new DOMException('run_shell 已取消', 'AbortError')
+        : new DOMException('run_shell 已取消', 'AbortError');
     }
-    throw error
+    throw error;
   } finally {
-    clearTimeout(timeout)
-    if (forceTimer !== undefined) clearTimeout(forceTimer)
-    options.signal.removeEventListener('abort', onAbort)
+    clearTimeout(timeout);
+    if (forceTimer !== undefined) clearTimeout(forceTimer);
+    options.signal.removeEventListener('abort', onAbort);
   }
 }
 
 function destroyStream(stream: ChildProcess['stdout'] | ChildProcess['stderr']): void {
   if (stream !== null && typeof stream.destroy === 'function') {
-    stream.destroy()
+    stream.destroy();
   }
 }
 
 function shellInvocation(
   command: string,
   platform: NodeJS.Platform,
-): { readonly file: string, readonly args: readonly string[] } {
+): { readonly file: string; readonly args: readonly string[] } {
   if (platform === 'win32') {
-    const comspec = process.env.ComSpec
+    const comspec = process.env.ComSpec;
     return {
       file: typeof comspec === 'string' && comspec.length > 0 ? comspec : 'cmd.exe',
       args: ['/d', '/s', '/c', command],
-    }
+    };
   }
-  return { file: '/bin/sh', args: ['-c', command] }
+  return { file: '/bin/sh', args: ['-c', command] };
 }
 
 function defaultSpawn(
   file: string,
   args: readonly string[],
   options: {
-    readonly cwd: string
-    readonly env: NodeJS.ProcessEnv
-    readonly windowsHide: boolean
-    readonly detached: boolean
+    readonly cwd: string;
+    readonly env: NodeJS.ProcessEnv;
+    readonly windowsHide: boolean;
+    readonly detached: boolean;
   },
 ): ChildProcess {
   return spawn(file, [...args], {
@@ -270,18 +270,24 @@ function defaultSpawn(
     windowsHide: options.windowsHide,
     detached: options.detached,
     stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  });
 }
 
 /** 仅保留 shell 运行所需变量，避免把宿主机密钥交给模型控制的进程。 */
-function safeShellEnvironment(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): NodeJS.ProcessEnv {
-  const names = platform === 'win32'
-    ? ['ComSpec', 'SystemRoot', 'WINDIR', 'PATH', 'Path', 'PATHEXT', 'TEMP', 'TMP']
-    : ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR']
-  return Object.fromEntries(names.flatMap(name => {
-    const value = env[name]
-    return value === undefined ? [] : [[name, value]]
-  }))
+function safeShellEnvironment(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): NodeJS.ProcessEnv {
+  const names =
+    platform === 'win32'
+      ? ['ComSpec', 'SystemRoot', 'WINDIR', 'PATH', 'Path', 'PATHEXT', 'TEMP', 'TMP']
+      : ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR'];
+  return Object.fromEntries(
+    names.flatMap((name) => {
+      const value = env[name];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  );
 }
 
 /** Unix 以独立进程组启动，取消时终止整组；Windows 仍由 Job Object/沙箱承担生产隔离。 */
@@ -292,12 +298,12 @@ function killProcessTree(
 ): void {
   if (platform !== 'win32' && typeof child.pid === 'number') {
     try {
-      process.kill(-child.pid, signal)
-      return
+      process.kill(-child.pid, signal);
+      return;
     } catch {
       // 进程可能已退出，退回对子进程本身的 best-effort kill。
     }
   }
-  child.kill(signal)
-  if (platform === 'win32' && signal === 'SIGTERM') child.kill()
+  child.kill(signal);
+  if (platform === 'win32' && signal === 'SIGTERM') child.kill();
 }

@@ -3,8 +3,8 @@ export {
   OpenAiCompatibleConfigurationError,
   OpenAiCompatibleHttpError,
   OpenAiCompatibleProtocolError,
-} from './errors.js'
+} from './errors.js';
 export {
   OpenAiCompatibleModelProvider,
   type OpenAiCompatibleModelProviderOptions,
-} from './provider.js'
+} from './provider.js';

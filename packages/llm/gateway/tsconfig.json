@@ -6,9 +6,7 @@
     "outDir": "lib",
     "tsBuildInfoFile": "tsconfig.tsbuildinfo"
   },
-  "include": [
-    "src/**/*.ts"
-  ],
+  "include": ["src/**/*.ts"],
   "references": [
     {
       "path": "../../kernel"

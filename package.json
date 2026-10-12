@@ -11,13 +11,16 @@
     "agent": "node scripts/agent-cli.mjs",
     "web": "node scripts/web-cli.mjs",
     "build": "tsc -b",
-    "check": "pnpm run gate:architecture && pnpm run gate:docs && pnpm run typecheck && pnpm run test",
+    "check": "pnpm run lint && pnpm run gate:architecture && pnpm run gate:docs && pnpm run typecheck && pnpm run test",
+    "format": "biome check --write .",
     "gate:architecture": "node scripts/verify-architecture.mjs",
     "gate:docs": "node scripts/verify-docs.mjs",
+    "lint": "biome check .",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"

@@ -24,7 +24,7 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 - 在配置、存储、进程、工具 JSON 和网络协议入口校验不可信数据。
 - 避免推测性抽象；只有已经存在两个实现，或外部系统本身会变化时才增加替换接缝。
 - 仓库中的 Markdown、AGENTS、ADR、Skill、JSDoc 和代码注释统一使用中文；代码标识符、包名、协议字段和必要错误码保留英文。
-- 文件末尾恰好保留一个换行。格式、依赖方向、package 元数据、类型检查和测试必须由 `scripts/` 或 package script 中的可执行 gate 检查。
+- 文件末尾恰好保留一个换行。格式与 lint 由 `pnpm run lint`（Biome）检查；依赖方向、package 元数据、类型检查和测试必须由 `scripts/` 或 package script 中的可执行 gate 检查。
 
 ## 代码质量与 Clean Code
 

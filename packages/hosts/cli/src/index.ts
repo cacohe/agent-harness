@@ -1,14 +1,14 @@
-import { pathToFileURL } from 'node:url'
-import { runCli } from './cli.js'
+import { pathToFileURL } from 'node:url';
+import { runCli } from './cli.js';
 
 export {
-  closeCliResources,
-  runCli,
   type CliDependencies,
   type CliOutput,
   type CliSignals,
-} from './cli.js'
-export { createShellTool } from './shell-tool.js'
+  closeCliResources,
+  runCli,
+} from './cli.js';
+export { createShellTool } from './shell-tool.js';
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const code = await runCli({
@@ -17,6 +17,6 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     stdout: process.stdout,
     stderr: process.stderr,
     signals: process,
-  })
-  process.exitCode = code
+  });
+  process.exitCode = code;
 }

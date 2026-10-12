@@ -102,7 +102,9 @@ pnpm run build
 | `pnpm run build`     | 编译全部 package                         |
 | `pnpm run typecheck` | TypeScript 工程引用检查                    |
 | `pnpm run test`      | Vitest                               |
-| `pnpm run check`     | 架构 gate + 文档 gate + typecheck + test |
+| `pnpm run lint`      | Biome 格式与 lint 检查                    |
+| `pnpm run format`    | 用 Biome 写入格式与安全修复                 |
+| `pnpm run check`     | lint + 架构 gate + 文档 gate + typecheck + test |
 | `pnpm web -- --config /绝对/config.json` | 启动仅本机可访问的 Web UI |
 
 
