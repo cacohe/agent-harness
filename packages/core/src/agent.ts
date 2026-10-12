@@ -32,7 +32,13 @@ import {
   utf8ByteLength,
   waitForSignal,
 } from './execution-support.js';
-import { type Attempt, buildTerminalEvents, createStep, type Step } from './lifecycle.js';
+import {
+  type ActiveTurn,
+  type Attempt,
+  buildTerminalEvents,
+  createStep,
+  type Step,
+} from './lifecycle.js';
 
 /** 尚未开始的 turn；每个调用者只会收到自己消息对应的结果。 */
 interface QueuedRun {
@@ -229,7 +235,11 @@ export class Agent {
     const execution = freezeExecutionMetadata(
       isAbortSignal(options) ? undefined : options.execution,
     );
-    const turnId = this.#reservations.turn(this.#ids.turn());
+    const turn: ActiveTurn = {
+      turnId: this.#reservations.turn(this.#ids.turn()),
+      started: false,
+      ended: false,
+    };
     const controller = new AbortController();
     this.#controller = controller;
     const timeoutSignal =
@@ -239,10 +249,7 @@ export class Agent {
       controller.signal,
       ...(timeoutSignal === undefined ? [] : [timeoutSignal]),
     ]);
-    this.#phase = { kind: 'running', turnId };
-    let turnStarted = false;
-    let turnEnded = false;
-    let activeStep: Step | undefined;
+    this.#phase = { kind: 'running', turnId: turn.turnId };
 
     try {
       // 提交 turn 开始事件
@@ -250,13 +257,13 @@ export class Agent {
         [
           {
             type: 'turn.started',
-            turnId,
+            turnId: turn.turnId,
             ...(execution === undefined ? {} : { execution }),
           },
         ],
         signal,
       );
-      turnStarted = true;
+      turn.started = true;
 
       // 提交用户消息事件
       this.#reservations.message(message.id);
@@ -268,16 +275,20 @@ export class Agent {
 
         // 创建 step 生命周期
         const stepId = this.#reservations.step(this.#ids.step());
-        activeStep = createStep(stepId);
-        this.#phase = { kind: 'running', turnId, stepId };
+        const step = createStep(stepId);
+        turn.activeStep = step;
+        this.#phase = { kind: 'running', turnId: turn.turnId, stepId };
 
         // 执行一步 step，获取返回的 assistant 消息
-        const messageFromStep = await this.#runStep(turnId, activeStep, signal, execution);
+        const messageFromStep = await this.#runStep(turn.turnId, step, signal, execution);
 
         // 如果 step 没有工具调用，则提交 turn 结束事件
         if (messageFromStep.toolCalls.length === 0) {
-          await this.#append([{ type: 'turn.ended', turnId, outcome: 'completed' }], signal);
-          turnEnded = true;
+          await this.#append(
+            [{ type: 'turn.ended', turnId: turn.turnId, outcome: 'completed' }],
+            signal,
+          );
+          turn.ended = true;
           return messageFromStep;
         }
 
@@ -294,10 +305,7 @@ export class Agent {
       const terminalEvents = buildTerminalEvents({
         error,
         outcome,
-        turnId,
-        turnStarted,
-        turnEnded,
-        step: activeStep,
+        turn,
       });
 
       // 如果 terminal settlement 事件不为空，则提交结算事件
