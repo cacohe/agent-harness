@@ -69,6 +69,9 @@ describe('架构依赖规则', () => {
       'core/src/index.ts: core can only export Agent, found BoundedPromptAssembler',
       'core/src/agent.ts: core can only export Agent, found EnabledSkillsContext',
     ]))
+    expect(verifyArchitecture(manifests, [
+      ['core', 'src/lifecycle.ts', 'export function buildTerminalEvents() {}'],
+    ])).toEqual([])
   })
 
   it('协议无关能力实现只能依赖 kernel', () => {

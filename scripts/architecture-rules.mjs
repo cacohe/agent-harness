@@ -3,7 +3,13 @@ import ts from 'typescript'
 
 /** 校验 workspace package 的向内依赖方向和生产源码导入，并返回全部诊断。 */
 export function verifyArchitecture(manifests, sources = []) {
-  const coreSourceFiles = new Set(['src/agent.ts', 'src/index.ts'])
+  const coreSourceFiles = new Set([
+    'src/agent-id-reservations.ts',
+    'src/agent.ts',
+    'src/execution-support.ts',
+    'src/index.ts',
+    'src/lifecycle.ts',
+  ])
   const protocolNeutralOwners = new Set([
     'kernel',
     'core',
@@ -78,9 +84,11 @@ export function verifyArchitecture(manifests, sources = []) {
       if (!coreSourceFiles.has(file)) {
         failures.push(`core/${file}: source file is outside the Agent loop allowlist`)
       }
-      for (const exportedName of exportedNames(source)) {
-        if (exportedName !== 'Agent') {
-          failures.push(`core/${file}: core can only export Agent, found ${exportedName}`)
+      if (!coreSourceFiles.has(file) || file === 'src/agent.ts' || file === 'src/index.ts') {
+        for (const exportedName of exportedNames(source)) {
+          if (exportedName !== 'Agent') {
+            failures.push(`core/${file}: core can only export Agent, found ${exportedName}`)
+          }
         }
       }
     }

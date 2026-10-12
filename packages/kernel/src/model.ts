@@ -14,20 +14,15 @@ export interface ModelRequest {
 }
 
 /**
- * 模型流式通知事件。
+ * 模型流式通知事件 —— 一次模型调用的流式输出。
  * 临时数据，不写入会话日志；完整 assistant 结算由 Agent 另行持久化。
  */
 export type ModelStreamEvent =
-  | { readonly type: 'text.delta'; readonly text: string }
-  | { readonly type: 'tool.call'; readonly call: ToolCall }
-  | {
-      /** 截至当前流事件的累计 token；同一调用内必须为非负安全整数且单调不减。 */
-      readonly type: 'usage'
-      readonly inputTokens: number
-      readonly outputTokens: number
-    }
+  | { readonly type: 'text.delta'; readonly text: string }  // 文本增量
+  | { readonly type: 'tool.call'; readonly call: ToolCall }  // 工具调用
+  | { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens: number }  // 使用量
 
-/** 已准备好的模型调用，可按请求流式产出事件。 */
+/** 已准备好的模型调用 —— 可按请求流式产出事件。 */
 export interface PreparedModelCall {
   stream(
     request: ModelRequest,
@@ -36,7 +31,7 @@ export interface PreparedModelCall {
 }
 
 /**
- * 模型 provider capability。
+ * 模型 provider。
  * `prepare` 完成连接或鉴权等前置工作后返回可流式调用的句柄。
  */
 export interface ModelProvider {
