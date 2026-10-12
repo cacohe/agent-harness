@@ -12,7 +12,7 @@ import type {
 } from './facts.js';
 import type { ModelProvider, ModelStreamEvent } from './model.js';
 import type { SessionLog } from './session.js';
-import type { ToolCapability } from './tools.js';
+import type { ToolCapability } from './tools/contracts.js';
 
 /** 当前 Agent 状态。 */
 export type AgentPhase =

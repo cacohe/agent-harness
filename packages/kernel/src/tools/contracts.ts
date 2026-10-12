@@ -1,5 +1,5 @@
-import type { ExecutionMetadata, JsonValue, ToolCall, ToolResult } from './facts.js';
-import type { ModelToolDefinition } from './model.js';
+import type { ExecutionMetadata, JsonValue, ToolCall, ToolResult } from '../facts.js';
+import type { ModelToolDefinition } from '../model.js';
 
 /** 工具执行上下文 —— 工具执行所需的上下文。 */
 export interface ToolExecutionContext {

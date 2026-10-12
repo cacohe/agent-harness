@@ -12,4 +12,4 @@ export {
 export { PolicyControlledTools } from './tools/policy-controlled-tools.js';
 export { SandboxToolRegistry } from './tools/sandbox-tool-registry.js';
 export { ToolRegistry } from './tools/tool-registry.js';
-export * from './tools.js';
+export * from './tools/contracts.js';
