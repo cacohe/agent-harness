@@ -5,4 +5,4 @@
 - stdout：`run` / `resume` 只写 JSONL 事件；`chat` 正常路径不写 stdout，只在 stderr 展示「你 / 助手」对话。
 - 提示、usage 和诊断写 stderr。
 - 收到 SIGINT 或 SIGTERM 后：`chat` 优先取消当前 turn，空闲时退出循环；单轮命令取消当前操作。始终关闭 Runtime。
-- `run_shell` 等 Host 专用副作用工具留在 Host 内，不放入通用 `tools/tool-runtime`。
+- `run_shell` 等可复用副作用工具定义在 `tools/`；Host 只按配置组合，不保留工具实现。

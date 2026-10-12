@@ -18,9 +18,6 @@
     },
     {
       "path": "../session/session-lifecycle"
-    },
-    {
-      "path": "../tools/tool-runtime"
     }
   ]
 }

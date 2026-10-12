@@ -2,8 +2,8 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveInsideWorkspace, resolveWorkspaceDirectory } from '../src/workspace.ts';
-import { createWorkspaceTools } from '../src/workspace-tools.ts';
+import { resolveInsideWorkspace, resolveWorkspaceDirectory } from '../src/workspace.js';
+import { createWorkspaceTools } from '../src/workspace-tools.js';
 
 describe('workspace', () => {
   it('拒绝相对路径和目录外访问，并允许目录内读写', async () => {

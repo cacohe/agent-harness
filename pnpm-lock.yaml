@@ -47,6 +47,9 @@ importers:
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../../kernel
+      '@agent-harness/local':
+        specifier: workspace:*
+        version: link:../../tools/local
       '@agent-harness/mcp':
         specifier: workspace:*
         version: link:../../tools/mcp
@@ -77,9 +80,6 @@ importers:
       '@agent-harness/skill-tool':
         specifier: workspace:*
         version: link:../../skills/skill-tool
-      '@agent-harness/tool-runtime':
-        specifier: workspace:*
-        version: link:../../tools/tool-runtime
       '@modelcontextprotocol/client':
         specifier: ^2.3.1
         version: 2.3.1
@@ -92,6 +92,9 @@ importers:
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../../kernel
+      '@agent-harness/local':
+        specifier: workspace:*
+        version: link:../../tools/local
       '@agent-harness/openai-compatible':
         specifier: workspace:*
         version: link:../../llm/openai-compatible
@@ -101,9 +104,6 @@ importers:
       '@agent-harness/session-jsonl':
         specifier: workspace:*
         version: link:../../session/session-jsonl
-      '@agent-harness/tool-runtime':
-        specifier: workspace:*
-        version: link:../../tools/tool-runtime
 
   packages/kernel: {}
 
@@ -130,10 +130,6 @@ importers:
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../../kernel
-    devDependencies:
-      '@agent-harness/tool-runtime':
-        specifier: workspace:*
-        version: link:../../tools/tool-runtime
 
   packages/platform/platform-http:
     dependencies:
@@ -155,9 +151,6 @@ importers:
       '@agent-harness/session-lifecycle':
         specifier: workspace:*
         version: link:../session/session-lifecycle
-      '@agent-harness/tool-runtime':
-        specifier: workspace:*
-        version: link:../tools/tool-runtime
     devDependencies:
       '@agent-harness/session-jsonl':
         specifier: workspace:*
@@ -204,10 +197,6 @@ importers:
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../../kernel
-    devDependencies:
-      '@agent-harness/tool-runtime':
-        specifier: workspace:*
-        version: link:../../tools/tool-runtime
 
   packages/test-support:
     dependencies:
@@ -220,9 +209,6 @@ importers:
       '@agent-harness/session-memory':
         specifier: workspace:*
         version: link:../session/session-memory
-      '@agent-harness/tool-runtime':
-        specifier: workspace:*
-        version: link:../tools/tool-runtime
     devDependencies:
       '@agent-harness/context-runtime':
         specifier: workspace:*
@@ -236,6 +222,12 @@ importers:
       '@agent-harness/skill-context':
         specifier: workspace:*
         version: link:../skills/skill-context
+
+  packages/tools/local:
+    dependencies:
+      '@agent-harness/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
 
   packages/tools/mcp:
     dependencies:

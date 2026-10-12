@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { SessionNotFoundError } from '@agent-harness/kernel';
+import { WorkspaceError } from '@agent-harness/local';
 import { type WebSessionController, WebSessionNotFoundError } from './session-registry.js';
 import { uiScript } from './ui/client.js';
 import { uiFavicon } from './ui/favicon.js';
 import { uiHtml } from './ui/index-html.js';
 import { uiCss } from './ui/styles.js';
-import { WorkspaceError } from './workspace.js';
 import { pickWorkspaceDirectory } from './workspace-picker.js';
 
 const MAX_MESSAGE_BYTES = 64 * 1024;

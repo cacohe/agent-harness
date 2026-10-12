@@ -1,5 +1,4 @@
-import { brandId, type ToolCallId } from '@agent-harness/kernel';
-import { ToolRegistry } from '@agent-harness/tool-runtime';
+import { brandId, type ToolCallId, ToolRegistry } from '@agent-harness/kernel';
 import { describe, expect, it } from 'vitest';
 import { createSkillLoaderTool } from '../src/index.ts';
 

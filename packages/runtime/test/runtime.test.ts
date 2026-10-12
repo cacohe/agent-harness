@@ -19,6 +19,7 @@ import {
   type SessionRepository,
   type StepId,
   type ToolCallId,
+  ToolRegistry,
   type TurnId,
   type UserMessage,
 } from '@agent-harness/kernel';
@@ -27,7 +28,6 @@ import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
 import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle';
 import { InMemorySessionLog } from '@agent-harness/session-memory';
 import { ScriptedModelProvider, SequentialAgentIds } from '@agent-harness/test-support';
-import { ToolRegistry } from '@agent-harness/tool-runtime';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const temporaryDirectories: string[] = [];

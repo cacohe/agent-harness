@@ -1,5 +1,5 @@
 {
-  "name": "@agent-harness/tool-runtime",
+  "name": "@agent-harness/local",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -12,6 +12,6 @@
     { "path": "../../llm/openai-compatible" },
     { "path": "../../runtime" },
     { "path": "../../session/session-jsonl" },
-    { "path": "../../tools/tool-runtime" }
+    { "path": "../../tools/local" }
   ]
 }

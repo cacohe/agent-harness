@@ -8,8 +8,5 @@
   },
   "dependencies": {
     "@agent-harness/kernel": "workspace:*"
-  },
-  "devDependencies": {
-    "@agent-harness/tool-runtime": "workspace:*"
   }
 }

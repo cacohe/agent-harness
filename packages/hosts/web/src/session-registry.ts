@@ -8,10 +8,10 @@ import {
   SessionAlreadyExistsError,
   type SessionId,
 } from '@agent-harness/kernel';
+import { resolveWorkspaceDirectory } from '@agent-harness/local';
 import type { AgentRuntime, AgentRuntimeHandle } from '@agent-harness/runtime';
 import { SessionEventStream } from './events.js';
 import { projectChatTranscript } from './transcript.js';
-import { resolveWorkspaceDirectory } from './workspace.js';
 
 interface ManagedSession {
   readonly workspace: string;

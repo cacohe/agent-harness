@@ -13,6 +13,7 @@
     "@agent-harness/context-runtime": "workspace:*",
     "@agent-harness/core": "workspace:*",
     "@agent-harness/kernel": "workspace:*",
+    "@agent-harness/local": "workspace:*",
     "@agent-harness/gateway": "workspace:*",
     "@agent-harness/memory-gateway": "workspace:*",
     "@agent-harness/memory-context": "workspace:*",
@@ -24,7 +25,6 @@
     "@agent-harness/skill-context": "workspace:*",
     "@agent-harness/skill-filesystem": "workspace:*",
     "@agent-harness/skill-tool": "workspace:*",
-    "@agent-harness/tool-runtime": "workspace:*",
     "@modelcontextprotocol/client": "^2.3.1"
   }
 }

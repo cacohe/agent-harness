@@ -19,7 +19,7 @@ packages/
   context/
     context-runtime/           Prompt 组装、时间上下文与模型消息投影
   tools/
-    tool-runtime/              工具注册、组合与治理实现
+    local/                     可复用本地 Shell 与工作目录工具
     mcp/                       MCP 工具 adapter
     platform-policy/           Platform 一次性工具许可 adapter
     sandbox-docker/            Docker OCI Sandbox dispatcher
@@ -84,7 +84,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 `skills/skill-tool` 将 `SkillCatalog` 映射为 `load_skill` function tool。它只接受摘要中展示的 ID，传递工具调用取消信号，并限制返回正文大小。CLI 将该工具与其他来源统一组合；成功正文作为普通工具结果持久化，未调用的正文不会进入上下文。
 
-`kernel` 还定义执行治理与组合接口。`tools/tool-runtime` 的 `CompositeToolCapability` 在 Host 组合时取得各工具来源的目录快照，拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
+`kernel` 定义并实现纯内存、协议无关的工具运行时：`ToolRegistry`、`CompositeToolCapability`、`PolicyControlledTools` 与 `SandboxToolRegistry`。组合时取得各来源目录快照、拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
 
 `SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个 `ToolDefinition.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号。`run_shell` 不是 Sandbox，不可替代此接口。
 
@@ -96,7 +96,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 拦截能力有意受限。只有模型请求准备和工具执行使用 around middleware。状态、流和日志通知使用失败隔离的 observer，不能阻止生命周期继续。`AgentObserver.onExecution` 在每批会话事件成功追加后逐条通知 `session.event`，因此 Platform 可以以 session sequence 重建审计状态；模型 capability 的 usage 是同一 attempt 内单调不减的累计 token，Agent 将其转换为带 session、turn、step、attempt 与单调 `usageSequence` 的 `model.usage` token 增量通知，供 Platform 去重后累加。observer 投递不具备可靠性保证，需要可靠投递的 Platform adapter 必须自行持久化 outbox 并以 sequence 去重。
 
-Agent 概念和接口位于 `kernel`；Agent 循环只位于 `core`。`context/context-runtime` 实现 prompt 组装和模型消息投影，`session/session-memory` 实现进程内事件日志，`session/session-lifecycle` 实现恢复分析，`tools/tool-runtime` 实现工具注册、组合和执行治理。真实模型与持久化集成由 `llm/`、`session/` 下的 adapter 提供，动态插件系统仍不属于当前范围。
+Agent 概念、工具契约与纯内存工具运行时位于 `kernel`；Agent 循环只位于 `core`。`context/context-runtime` 实现 prompt 组装和模型消息投影，`session/session-memory` 实现进程内事件日志，`session/session-lifecycle` 实现恢复分析。真实模型、工具 adapter 与本地工具集成由各能力域的 `llm/`、`session/`、`tools/` 提供，动态插件系统仍不属于当前范围。
 
 `kernel` 拥有 reader、writer、repository 与 writer lease capability。`session/session-jsonl` 是独立 adapter，只依赖 `kernel`。它将 header 与原子事件 batch 分别保存为一条 JSONL 记录；完整 batch 写入并经过 durability barrier 后才对调用方可见。读取使用严格 UTF-8 解码并忽略没有换行的末尾残片，writer 获得所有权后先截断并同步该残片。完整换行的无效记录视为损坏。
 

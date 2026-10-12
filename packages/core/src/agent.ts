@@ -10,6 +10,7 @@ import {
   type AssistantMessage,
   assertNever,
   type ExecutionMetadata,
+  executeWithContext,
   isAbortError,
   type ModelProvider,
   type ModelStreamEvent,
@@ -25,7 +26,6 @@ import {
 import { AgentIdReservations } from './agent-id-reservations.js';
 import {
   assertCumulativeUsage,
-  executeWithContext,
   freezeExecutionMetadata,
   isAbortSignal,
   throwIfAborted,

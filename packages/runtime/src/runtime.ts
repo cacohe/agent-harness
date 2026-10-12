@@ -8,6 +8,7 @@ import {
   brandId,
   type MessageId,
   type ModelProvider,
+  PolicyControlledTools,
   type PromptAssembler,
   type SessionId,
   type SessionLifecycleIdNamespaces,
@@ -20,7 +21,6 @@ import {
   type TurnId,
 } from '@agent-harness/kernel';
 import { analyzeSessionLifecycle } from '@agent-harness/session-lifecycle';
-import { PolicyControlledTools } from '@agent-harness/tool-runtime';
 import { flushAndClose, waitFor } from './lifecycle.js';
 
 const neverAbortedSignal = new AbortController().signal;

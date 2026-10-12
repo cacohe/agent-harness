@@ -1,5 +1,11 @@
 import { LlmGatewayModelProvider } from '@agent-harness/gateway';
-import type { ToolDefinition } from '@agent-harness/kernel';
+import {
+  CompositeToolCapability,
+  DuplicateToolNameError,
+  type ToolDefinition,
+  ToolRegistry,
+} from '@agent-harness/kernel';
+import { createShellTool } from '@agent-harness/local';
 import { type McpClient, McpToolAdapter } from '@agent-harness/mcp';
 import {
   createMemoryWriterTool,
@@ -12,15 +18,9 @@ import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible'
 import { PlatformHttpClient } from '@agent-harness/platform-http';
 import type { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem';
 import { createSkillLoaderTool } from '@agent-harness/skill-tool';
-import {
-  CompositeToolCapability,
-  DuplicateToolNameError,
-  ToolRegistry,
-} from '@agent-harness/tool-runtime';
 import { type CliConfig, type CliModelConfig, CliUsageError } from './config.js';
 import type { CliDependencies } from './contracts.js';
 import { StdioMcpClient, type StdioMcpClientOptions } from './mcp-stdio.js';
-import { createShellTool } from './shell-tool.js';
 
 export function createMcpAdapter(
   config: CliConfig,

@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { runCli } from './cli.js';
 
+export { createShellTool } from '@agent-harness/local';
 export {
   type CliDependencies,
   type CliOutput,
@@ -8,7 +9,6 @@ export {
   closeCliResources,
   runCli,
 } from './cli.js';
-export { createShellTool } from './shell-tool.js';
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const code = await runCli({

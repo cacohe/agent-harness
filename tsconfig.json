@@ -65,7 +65,7 @@
       "path": "packages/tools/sandbox-docker"
     },
     {
-      "path": "packages/tools/tool-runtime"
+      "path": "packages/tools/local"
     }
   ]
 }

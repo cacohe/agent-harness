@@ -1,14 +1,13 @@
 import { BoundedPromptAssembler } from '@agent-harness/context-runtime';
-import { type AgentObserver, brandId, type SessionId } from '@agent-harness/kernel';
+import { type AgentObserver, brandId, type SessionId, ToolRegistry } from '@agent-harness/kernel';
+import { createWorkspaceTools } from '@agent-harness/local';
 import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible';
 import { AgentRuntime } from '@agent-harness/runtime';
 import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
-import { ToolRegistry } from '@agent-harness/tool-runtime';
 import type { WebHostConfig } from './config.js';
 import { WebUsageError } from './config.js';
 import { SessionRegistry, type SessionRuntimeFactory } from './session-registry.js';
 import { SessionWorkspaceStore } from './session-workspaces.js';
-import { createWorkspaceTools } from './workspace-tools.js';
 
 /** 在 Host 边界组合本地会话、模型和工作目录内工具。 */
 export function createSessionRegistry(

@@ -1,22 +1,4 @@
-import type {
-  AgentRunOptions,
-  ExecutionMetadata,
-  ToolCall,
-  ToolCapability,
-  ToolResult,
-} from '@agent-harness/kernel';
-
-/** 执行工具调用；支持带执行元数据的新接口，并兼容只接收取消信号的旧接口。 */
-export function executeWithContext(
-  tools: ToolCapability,
-  call: ToolCall,
-  context: { readonly signal: AbortSignal; readonly execution?: ExecutionMetadata },
-): Promise<ToolResult> {
-  if ('executeWithContext' in tools && typeof tools.executeWithContext === 'function') {
-    return tools.executeWithContext(call, context);
-  }
-  return tools.execute(call, context.signal);
-}
+import type { AgentRunOptions, ExecutionMetadata } from '@agent-harness/kernel';
 
 /** 如果信号被中止，抛出取消错误。 */
 export function throwIfAborted(signal: AbortSignal): void {

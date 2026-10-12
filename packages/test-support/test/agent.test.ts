@@ -12,6 +12,7 @@ import {
   type SessionLog,
   SettlementPersistenceError,
   type ToolCallId,
+  ToolRegistry,
   type UserMessage,
 } from '@agent-harness/kernel';
 import { RetrievedMemoryContext } from '@agent-harness/memory-context';
@@ -26,7 +27,6 @@ import {
   SequentialAgentIds,
   TestSettlementSignals,
 } from '@agent-harness/test-support';
-import { ToolRegistry } from '@agent-harness/tool-runtime';
 import { describe, expect, it } from 'vitest';
 
 const sessionId = brandId<'SessionId'>('session-1') as SessionId;

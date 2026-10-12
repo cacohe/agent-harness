@@ -18,7 +18,6 @@ export function verifyArchitecture(manifests, sources = []) {
     'session/session-lifecycle',
     'session/session-memory',
     'skills/skill-context',
-    'tools/tool-runtime',
   ]);
   const adapters = [
     'llm/gateway',
@@ -33,32 +32,26 @@ export function verifyArchitecture(manifests, sources = []) {
     'tools/sandbox-docker',
   ];
   const allowedByOwner = new Map([
-    ['kernel', new Set()],
+    ['kernel', new Set(['kernel'])],
     ['core', new Set(['kernel'])],
     ['context/context-runtime', new Set(['kernel'])],
     ['memory/memory-context', new Set(['kernel'])],
     ['session/session-lifecycle', new Set(['kernel'])],
     ['session/session-memory', new Set(['kernel'])],
     ['skills/skill-context', new Set(['kernel'])],
-    ['tools/tool-runtime', new Set(['kernel'])],
+    ['tools/local', new Set(['kernel'])],
     [
       'runtime',
-      new Set([
-        'kernel',
-        'core',
-        'context/context-runtime',
-        'session/session-lifecycle',
-        'tools/tool-runtime',
-      ]),
+      new Set(['kernel', 'core', 'context/context-runtime', 'session/session-lifecycle']),
     ],
-    ['test-support', new Set(['kernel', 'core', 'session/session-memory', 'tools/tool-runtime'])],
+    ['test-support', new Set(['kernel', 'core', 'session/session-memory'])],
     [
       'hosts/cli',
       new Set([
         'kernel',
         'core',
         'context/context-runtime',
-        'tools/tool-runtime',
+        'tools/local',
         'llm/gateway',
         'llm/openai-compatible',
         'memory/memory-context',
@@ -77,7 +70,7 @@ export function verifyArchitecture(manifests, sources = []) {
       new Set([
         'kernel',
         'context/context-runtime',
-        'tools/tool-runtime',
+        'tools/local',
         'llm/openai-compatible',
         'runtime',
         'session/session-jsonl',

@@ -113,15 +113,15 @@ describe('架构依赖规则', () => {
         }),
       ],
       [
-        'tools/tool-runtime',
-        manifest('tool-runtime', {
+        'tools/local',
+        manifest('local', {
           '@agent-harness/session-memory': 'workspace:*',
         }),
       ],
     ]);
     expect(failures).toContain('session/session-memory: forbidden workspace dependency on core');
     expect(failures).toContain(
-      'tools/tool-runtime: forbidden workspace dependency on session/session-memory',
+      'tools/local: forbidden workspace dependency on session/session-memory',
     );
   });
 
@@ -161,20 +161,16 @@ describe('架构依赖规则', () => {
     const core = manifest('core', { '@agent-harness/kernel': 'workspace:*', lodash: '^4.0.0' });
     const memory = manifest('session-memory', { '@agent-harness/kernel': 'workspace:*' });
     memory.optionalDependencies = { redis: '^5.0.0' };
-    const tools = manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' });
-    tools.peerDependencies = { zod: '^4.0.0' };
     expect(
       verifyArchitecture([
         ['kernel', manifest('kernel')],
         ['core', core],
         ['session/session-memory', memory],
-        ['tools/tool-runtime', tools],
       ]),
     ).toEqual(
       expect.arrayContaining([
         'core: protocol-neutral package cannot depend on lodash',
         'session/session-memory: protocol-neutral package cannot depend on redis',
-        'tools/tool-runtime: protocol-neutral package cannot depend on zod',
       ]),
     );
   });
@@ -214,7 +210,6 @@ describe('架构依赖规则', () => {
         'session/session-memory',
         manifest('session-memory', { '@agent-harness/kernel': 'workspace:*' }),
       ],
-      ['tools/tool-runtime', manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' })],
       [
         'runtime',
         manifest('runtime', {
@@ -222,7 +217,6 @@ describe('架构依赖规则', () => {
           '@agent-harness/core': 'workspace:*',
           '@agent-harness/context-runtime': 'workspace:*',
           '@agent-harness/session-lifecycle': 'workspace:*',
-          '@agent-harness/tool-runtime': 'workspace:*',
         }),
       ],
     ]);
@@ -263,21 +257,12 @@ describe('架构依赖规则', () => {
       verifyArchitecture(
         [
           ['kernel', manifest('kernel')],
-          [
-            'tools/tool-runtime',
-            manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' }),
-          ],
+          ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
           ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
         ],
-        [
-          [
-            'tools/mcp',
-            'src/index.ts',
-            "import { ToolRegistry } from '@agent-harness/tool-runtime'",
-          ],
-        ],
+        [['tools/mcp', 'src/index.ts', "import { Agent } from '@agent-harness/core'"]],
       ),
-    ).toContain('tools/mcp/src/index.ts: forbidden workspace import tools/tool-runtime');
+    ).toContain('tools/mcp/src/index.ts: forbidden workspace import core');
   });
 
   it('检查无插值模板形式的动态导入', () => {
@@ -285,15 +270,12 @@ describe('架构依赖规则', () => {
       verifyArchitecture(
         [
           ['kernel', manifest('kernel')],
-          [
-            'tools/tool-runtime',
-            manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' }),
-          ],
+          ['tools/local', manifest('local', { '@agent-harness/kernel': 'workspace:*' })],
           ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
         ],
-        [['tools/mcp', 'src/index.ts', 'await import(`@agent-harness/tool-runtime`)']],
+        [['tools/mcp', 'src/index.ts', 'await import(`@agent-harness/local`)']],
       ),
-    ).toContain('tools/mcp/src/index.ts: forbidden workspace import tools/tool-runtime');
+    ).toContain('tools/mcp/src/index.ts: forbidden workspace import tools/local');
   });
 
   it('忽略注释和普通字符串中的 import 文本', () => {
@@ -301,17 +283,14 @@ describe('架构依赖规则', () => {
       verifyArchitecture(
         [
           ['kernel', manifest('kernel')],
-          [
-            'tools/tool-runtime',
-            manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' }),
-          ],
+          ['tools/local', manifest('local', { '@agent-harness/kernel': 'workspace:*' })],
           ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
         ],
         [
           [
             'tools/mcp',
             'src/index.ts',
-            '// import { ToolRegistry } from "@agent-harness/tool-runtime"\nconst example = "import(\\"@agent-harness/tool-runtime\\")"',
+            '// import { ToolRegistry } from "@agent-harness/local"\nconst example = "import(\\"@agent-harness/local\\")"',
           ],
         ],
       ),
