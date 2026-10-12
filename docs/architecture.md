@@ -84,7 +84,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 `skills/skill-tool` 将 `SkillCatalog` 映射为 `load_skill` function tool。它只接受摘要中展示的 ID，传递工具调用取消信号，并限制返回正文大小。CLI 将该工具与其他来源统一组合；成功正文作为普通工具结果持久化，未调用的正文不会进入上下文。
 
-`kernel` 定义并实现纯内存、协议无关的工具运行时：`ToolRegistry`、`CompositeToolCapability`、`PolicyControlledTools` 与 `SandboxToolRegistry`。组合时取得各来源目录快照、拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
+`kernel` 定义并实现纯内存、协议无关的工具运行时：`ToolRegistry`、`CompositeToolCapability`、`PolicyControlledTools` 与 `SandboxToolRegistry`。工具领域只包含 `tools/protocol.ts`（调用、结果、事件和能力契约）与 `tools/runtime.ts`（通用运行时）；其他 Kernel 模块只引用协议，不再声明工具概念。组合时取得各来源目录快照、拒绝重复名称，并以确定性路由保留执行上下文。调用方可以为单次 `Agent.run` 提供冻结的 `ExecutionMetadata`；它作为 `turn.started` 的审计字段持久化，不参与模型消息投影。`PolicyControlledTools` 在任何工具副作用前调用 `ToolExecutionPolicy`，拒绝会成为 `ToolAuthorizationError` 工具结果并照常持久化。Platform、审批和 Sandbox 通过该策略或工具 adapter 接入；kernel 与 core 不依赖其网络协议、账户模型或 SDK。
 
 `SandboxToolRegistry` 是一类工具 adapter：它先在 Host 侧用每个不要求本地执行函数的 `ToolSpecification.parseInput` 校验模型输入，再通过 `SandboxDispatcher` 派发带有 call ID、工作目录和资源限制的任务。dispatcher 可以是单实例进程内实现或远程 Platform adapter；它必须响应取消信号，并接收已冻结的执行身份。`run_shell` 不是 Sandbox，不可替代此接口。
 

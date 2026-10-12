@@ -1,3 +1,5 @@
+import type { ToolCall, ToolCompleted, ToolMessage } from './tools/protocol.js';
+
 /** 带有编译期身份、不会与其他标识符混用的字符串。 */
 export type BrandedString<Name extends string> = string & {
   readonly __brand: Name;
@@ -9,7 +11,6 @@ export type MessageId = BrandedString<'MessageId'>;
 export type TurnId = BrandedString<'TurnId'>;
 export type StepId = BrandedString<'StepId'>;
 export type AttemptId = BrandedString<'AttemptId'>;
-export type ToolCallId = BrandedString<'ToolCallId'>;
 export type ExecutionId = BrandedString<'ExecutionId'>;
 /** 标识一次持久化原子追加，供冲突检查与审计使用。 */
 export type SessionBatchId = BrandedString<'SessionBatchId'>;
@@ -107,7 +108,7 @@ export function isAbortError(error: unknown): boolean {
 }
 
 // ------------------------------------------------------------
-// 对话消息与工具结果
+// 对话消息
 // ------------------------------------------------------------
 
 /** 用户输入消息 */
@@ -123,57 +124,12 @@ export interface SystemMessage {
   readonly content: string;
 }
 
-/** 模型请求的一次工具调用 */
-export interface ToolCall {
-  readonly id: ToolCallId;
-  readonly name: string;
-  readonly input: JsonValue;
-}
-
 /** LLM 输出消息 */
 export interface AssistantMessage {
   readonly id: MessageId;
   readonly role: 'assistant';
   readonly content: string;
   readonly toolCalls: readonly ToolCall[];
-}
-
-/** 工具执行成功 */
-export interface ToolSuccess {
-  readonly status: 'success';
-  readonly callId: ToolCallId;
-  readonly output: JsonValue;
-}
-
-/** 工具执行失败 */
-export interface ToolFailure {
-  readonly status: 'failure';
-  readonly callId: ToolCallId;
-  readonly error: SerializedError;
-}
-
-/** 工具取消执行 */
-export interface ToolCancelled {
-  readonly status: 'cancelled';
-  readonly callId: ToolCallId;
-  readonly reason: string;
-}
-
-/** 表示崩溃恢复无法确认工具是否完成及是否已经产生副作用。 */
-export interface ToolUnknown {
-  readonly status: 'unknown';
-  readonly callId: ToolCallId;
-  readonly reason: string;
-}
-
-/** 工具调用的四种终态结果。 */
-export type ToolResult = ToolSuccess | ToolFailure | ToolCancelled | ToolUnknown;
-
-/** 投影给模型的工具结果消息，对应一次已结算的工具调用。 */
-export interface ToolMessage {
-  readonly role: 'tool';
-  readonly callId: ToolCallId;
-  readonly result: ToolResult;
 }
 
 /** 投影给模型的消息序列成员 */
@@ -254,14 +210,6 @@ export interface AssistantSettled {
   readonly turnId: TurnId;
   readonly stepId: StepId;
   readonly settlement: AssistantSettlement;
-}
-
-/** 工具调用已得到终态结果。 */
-export interface ToolCompleted {
-  readonly type: 'tool.completed';
-  readonly turnId: TurnId;
-  readonly stepId: StepId;
-  readonly result: ToolResult;
 }
 
 /** step 已闭合。 */

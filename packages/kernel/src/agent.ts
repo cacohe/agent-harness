@@ -6,13 +6,12 @@ import type {
   MessageId,
   SessionId,
   StepId,
-  ToolCallId,
   TurnId,
   TurnOutcome,
 } from './facts.js';
 import type { ModelProvider, ModelStreamEvent } from './model.js';
 import type { SessionLog } from './session.js';
-import type { ToolCapability } from './tools/contracts.js';
+import type { ToolCallId, ToolCapability } from './tools/protocol.js';
 
 /** 当前 Agent 状态。 */
 export type AgentPhase =

@@ -1,11 +1,5 @@
-import type { ModelMessage, ToolCall } from './facts.js';
-
-/** 暴露给模型的工具定义 */
-export interface ModelToolDefinition {
-  readonly name: string;
-  readonly description: string;
-  readonly inputSchema: Readonly<Record<string, unknown>>;
-}
+import type { ModelMessage } from './facts.js';
+import type { ModelToolCallEvent, ModelToolDefinition } from './tools/protocol.js';
 
 /** 一次模型调用的请求 */
 export interface ModelRequest {
@@ -19,7 +13,7 @@ export interface ModelRequest {
  */
 export type ModelStreamEvent =
   | { readonly type: 'text.delta'; readonly text: string } // 文本增量
-  | { readonly type: 'tool.call'; readonly call: ToolCall } // 工具调用
+  | ModelToolCallEvent
   | { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens: number }; // 使用量
 
 /** 已准备好的模型调用 —— 可按请求流式产出事件。 */
