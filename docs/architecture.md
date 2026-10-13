@@ -35,6 +35,8 @@ packages/
 
 会话事件日志是模型可见历史、重放、恢复、审计和 UI 重建的事实源；流式 chunk 仅为临时 observer 通知。每个会话身份只有一个 writer，sequence 严格单调，事件 batch 原子追加。`kernel/session` 验证生命周期历史；发现有效尾部中断时，Runtime 在暴露 Agent 前以原子 batch 补齐未知工具结果与 interrupted 结算。结构性矛盾拒绝恢复。
 
+Host 将调用方提供的稳定 `messageId` 传给 Core；同一会话内相同 ID 与内容代表同一次提交，Host 从持久 `user.message` 事实重建其接纳或终态，拒绝相同 ID 的不同内容。这样重试不会重复执行模型或工具。
+
 ## 替换接缝与默认装配
 
 Kernel 以 context、skills、memory、模型、会话和工具等能力域定义协议。`@agent-harness/adapters/context` 提供默认 prompt 组装与模型消息投影；`adapters/session-memory` 与 `adapters/session-jsonl` 提供会话实现；其余子路径提供 OpenAI-compatible、Gateway、MCP、Platform、Skills、Memory、本地工具与 Docker sandbox adapter。

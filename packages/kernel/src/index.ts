@@ -9,6 +9,7 @@ export * from './model.js';
 export * from './serialization.js';
 export { analyzeSessionLifecycle } from './session/lifecycle.js';
 export * from './session/protocol.js';
+export * from './session/submission.js';
 export * from './skills/protocol.js';
 export * from './tools/protocol.js';
 export {

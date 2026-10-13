@@ -156,8 +156,8 @@ CLI 可以同时启用 `mcp` 与 `shell`；启动时会合并工具目录并拒�
 ```bash
 # run：创建新会话（同一 session id 只能成功一次）
 pnpm agent run --session demo-1 --message "你好，介绍一下你自己"
-# resume：打开已有会话继续对话
-pnpm agent resume --session demo-1 --message "继续上一次的话题"
+# resume：打开已有会话继续对话；重试时复用 --message-id，避免重复执行工具
+pnpm agent resume --session demo-1 --message "继续上一次的话题" --message-id retry-001
 # chat：同一进程多轮交互（会话不存在则创建，已存在则恢复）
 pnpm agent chat --session demo-1 --message "你好"
 # import：通过 Platform Memory 配置导入文件，不创建 Agent 会话
@@ -167,6 +167,8 @@ pnpm agent document-status --document document-id
 # document-delete：提交受 Platform 授权与保留策略约束的文档删除
 pnpm agent document-delete --document document-id
 ```
+
+Web Host 的 `POST /sessions/:sessionId/messages` 请求体为 `{ "content": "...", "messageId": "稳定调用方ID" }`。调用方在重试时必须复用同一个 `messageId`：相同 ID 和内容会返回既有接纳/终态，不会新建 turn；相同 ID 和不同内容返回冲突。
 
 ### 本地 Web UI
 

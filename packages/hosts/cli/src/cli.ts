@@ -5,7 +5,13 @@ import type { McpToolAdapter } from '@agent-harness/adapters/mcp';
 import { RetrievedMemoryContext } from '@agent-harness/adapters/memory-context';
 import { EnabledSkillsContext } from '@agent-harness/adapters/skill-context';
 import { FilesystemSkillCatalog } from '@agent-harness/adapters/skill-filesystem';
-import { brandId, type MessageId, type SessionId } from '@agent-harness/kernel';
+import {
+  brandId,
+  findSessionMessageSubmission,
+  type MessageId,
+  type SessionId,
+  type SessionMessageSubmission,
+} from '@agent-harness/kernel';
 import { AgentRuntime } from '@agent-harness/runtime';
 import { createStdinLines, openChatSession, runChatLoop } from './chat.js';
 import { parseArgv } from './command.js';
@@ -108,8 +114,9 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
         config.skills === undefined
           ? undefined
           : await FilesystemSkillCatalog.create(config.skills, processController.signal);
+      const sessions = createLocalSessionRepository(config.sessionRoot);
       runtime = new AgentRuntime({
-        sessions: createLocalSessionRepository(config.sessionRoot),
+        sessions,
         model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
         tools: composeTools(config, mcp, skills, memory?.writerTool),
         maxSteps: config.maxSteps,
@@ -156,15 +163,30 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
           command.mode === 'run'
             ? await runtime.create(sessionId, { signal: processController.signal })
             : await runtime.resume(sessionId, { signal: processController.signal });
-        const message = await handle.agent.run(
-          {
-            id: brandId<'MessageId'>(crypto.randomUUID()) as MessageId,
-            role: 'user',
-            content: command.message,
-          },
-          processController.signal,
-        );
-        writeJson(dependencies.stdout, { type: 'result', sessionId, message });
+        const input = {
+          id: brandId<'MessageId'>(command.messageId ?? crypto.randomUUID()) as MessageId,
+          role: 'user' as const,
+          content: command.message,
+        };
+        const reader = await sessions.open(sessionId, {
+          mode: 'read',
+          signal: processController.signal,
+        });
+        let existing: SessionMessageSubmission | undefined;
+        try {
+          existing = findSessionMessageSubmission(
+            await reader.read({ signal: processController.signal }),
+            input,
+          );
+        } finally {
+          await reader.close({ signal: processController.signal });
+        }
+        if (existing !== undefined) {
+          writeJson(dependencies.stdout, { type: 'submission', sessionId, ...existing });
+        } else {
+          const message = await handle.agent.run(input, processController.signal);
+          writeJson(dependencies.stdout, { type: 'result', sessionId, message });
+        }
       }
     }
   } catch (error) {

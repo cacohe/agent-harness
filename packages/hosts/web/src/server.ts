@@ -1,7 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { WorkspaceError } from '@agent-harness/adapters/local';
-import { SessionNotFoundError } from '@agent-harness/kernel';
+import {
+  brandId,
+  type MessageId,
+  SessionMessageConflictError,
+  SessionNotFoundError,
+} from '@agent-harness/kernel';
 import { type WebSessionController, WebSessionNotFoundError } from './session-registry.js';
+import type { SubmittedMessage } from './submission.js';
 import { uiScript } from './ui/client.js';
 import { uiFavicon } from './ui/favicon.js';
 import { uiHtml } from './ui/index-html.js';
@@ -113,9 +119,9 @@ export class LocalWebServer {
       return sendJson(response, 200, opened);
     }
     if (method === 'POST' && operation === 'messages') {
-      const content = await readMessage(request);
-      await this.#sessions.submit(sessionId, content);
-      return sendJson(response, 202, { accepted: true });
+      const message = await readMessage(request);
+      const receipt = await this.#sessions.submit(sessionId, message);
+      return sendJson(response, receipt.status === 'accepted' ? 202 : 200, receipt);
     }
     if (method === 'POST' && operation === 'cancel') {
       await this.#sessions.cancel(sessionId);
@@ -140,14 +146,21 @@ function assertLocalRequest(request: IncomingMessage): void {
   }
 }
 
-async function readMessage(request: IncomingMessage): Promise<string> {
+async function readMessage(request: IncomingMessage): Promise<SubmittedMessage> {
   const record = await readJsonObject(request);
-  if (Object.keys(record).length !== 1 || typeof record.content !== 'string') {
-    throw new HttpError(400, '消息只能包含字符串 content');
+  if (
+    Object.keys(record).length !== 2 ||
+    typeof record.content !== 'string' ||
+    typeof record.messageId !== 'string'
+  ) {
+    throw new HttpError(400, '消息只能包含字符串 content 与 messageId');
   }
   const content = record.content.trim();
   if (content.length === 0) throw new HttpError(400, '消息不能为空');
-  return content;
+  if (!sessionIdPattern.test(record.messageId)) {
+    throw new HttpError(400, 'messageId 无效');
+  }
+  return { id: brandId<'MessageId'>(record.messageId) as MessageId, content };
 }
 
 async function readWorkspace(request: IncomingMessage): Promise<string> {
@@ -194,6 +207,7 @@ class HttpError extends Error {
 function status(error: unknown): number {
   if (error instanceof HttpError) return error.status;
   if (error instanceof WebSessionNotFoundError) return 404;
+  if (error instanceof SessionMessageConflictError) return 409;
   if (error instanceof SessionNotFoundError) return 404;
   if (error instanceof WorkspaceError) return 400;
   return 500;

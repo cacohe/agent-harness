@@ -7,6 +7,7 @@ export type CliCommand =
       readonly configPath: string;
       readonly session: string;
       readonly message: string;
+      readonly messageId: string | undefined;
     }
   | {
       readonly mode: 'chat';
@@ -30,7 +31,7 @@ export function parseArgv(argv: readonly string[]): CliCommand {
     return parseDocumentCommand(mode, rest);
   }
   if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') throw usageError();
-  const values = parseOptionPairs(rest, ['--config', '--session', '--message']);
+  const values = parseOptionPairs(rest, ['--config', '--session', '--message', '--message-id']);
   const configPath = absoluteOption(values, '--config');
   const session = requiredOption(values, '--session');
   const message = values.get('--message');
@@ -43,7 +44,11 @@ export function parseArgv(argv: readonly string[]): CliCommand {
   if (message === undefined || message.length === 0) {
     throw new CliUsageError('run/resume 必须提供非空 --message');
   }
-  return { mode, configPath, session, message };
+  const messageId = values.get('--message-id');
+  if (messageId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(messageId)) {
+    throw new CliUsageError('--message-id 必须是 1 到 128 位字母、数字、下划线或连字符');
+  }
+  return { mode, configPath, session, message, messageId };
 }
 
 function parseDocumentCommand(
@@ -101,7 +106,7 @@ function requiredOption(values: ReadonlyMap<string, string>, name: string): stri
 
 function usageError(): CliUsageError {
   return new CliUsageError(
-    '用法：run|resume|chat --config 绝对路径 --session ID [--message 内容]；' +
+    '用法：run|resume|chat --config 绝对路径 --session ID [--message 内容] [--message-id 稳定ID]；' +
       '或 import --config 绝对路径 --file 绝对路径 --media-type MIME；' +
       '或 document-status|document-delete --config 绝对路径 --document ID',
   );

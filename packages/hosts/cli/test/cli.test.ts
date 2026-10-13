@@ -124,6 +124,62 @@ describe('CLI Host', () => {
     ]);
   });
 
+  it('run 接受调用方提供的稳定 message ID', async () => {
+    const sessionRoot = await root();
+    let modelCalls = 0;
+    const first = await runCli({
+      argv: [
+        'run',
+        '--config',
+        '/config.json',
+        '--session',
+        'message-id',
+        '--message',
+        'hello',
+        '--message-id',
+        'message-1',
+      ],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write() {} },
+      stderr: { write() {} },
+      signals: new Signals(),
+      readFile: async () => config(sessionRoot),
+      fetch: async () => {
+        modelCalls += 1;
+        return sse('done');
+      },
+    });
+    const output: string[] = [];
+    const retry = await runCli({
+      argv: [
+        'resume',
+        '--config',
+        '/config.json',
+        '--session',
+        'message-id',
+        '--message',
+        'hello',
+        '--message-id',
+        'message-1',
+      ],
+      env: { TEST_KEY: 'secret' },
+      stdout: { write: (value) => output.push(value) },
+      stderr: { write() {} },
+      signals: new Signals(),
+      readFile: async () => config(sessionRoot),
+      fetch: async () => {
+        modelCalls += 1;
+        return sse('unexpected');
+      },
+    });
+    expect(first).toBe(0);
+    expect(retry).toBe(0);
+    expect(modelCalls).toBe(1);
+    expect(output.map((line) => JSON.parse(line))).toEqual([
+      { type: 'submission', sessionId: 'message-id', status: 'completed' },
+    ]);
+  });
+
   it('从文件系统 Skill catalog 只注入启用摘要', async () => {
     const sessionRoot = await root();
     const skillsRoot = await root();

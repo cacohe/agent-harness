@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { SessionEventStream } from '../src/events.js';
 import { LocalWebServer } from '../src/server.js';
 import type { WebSessionController } from '../src/session-registry.js';
+import type { SubmittedMessage } from '../src/submission.js';
 
 class FakeSessions implements WebSessionController {
-  readonly submitted: Array<{ sessionId: string; content: string }> = [];
+  readonly submitted: Array<{ sessionId: string; message: SubmittedMessage }> = [];
   readonly cancelled: string[] = [];
   readonly closed: string[] = [];
   readonly created: Array<{ sessionId: string; workspace: string }> = [];
@@ -39,8 +40,9 @@ class FakeSessions implements WebSessionController {
     };
   }
 
-  async submit(sessionId: string, content: string): Promise<void> {
-    this.submitted.push({ sessionId, content });
+  async submit(sessionId: string, message: SubmittedMessage) {
+    this.submitted.push({ sessionId, message });
+    return { status: 'accepted' as const };
   }
 
   async cancel(sessionId: string): Promise<void> {
@@ -140,15 +142,18 @@ describe('LocalWebServer', () => {
       const sent = await fetch(new URL('/sessions/session-1/messages', address), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: '你好' }),
+        body: JSON.stringify({ content: '你好', messageId: 'message-1' }),
       });
       expect(sent.status).toBe(202);
-      expect(sessions.submitted).toEqual([{ sessionId: 'session-1', content: '你好' }]);
+      expect(await sent.json()).toEqual({ status: 'accepted' });
+      expect(sessions.submitted).toEqual([
+        { sessionId: 'session-1', message: { id: 'message-1', content: '你好' } },
+      ]);
 
       const malformed = await fetch(new URL('/sessions/session-1/messages', address), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: 'x', extra: true }),
+        body: JSON.stringify({ content: 'x', messageId: 'message-2', extra: true }),
       });
       expect(malformed.status).toBe(400);
 

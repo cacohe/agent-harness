@@ -5,12 +5,15 @@ import {
   type AgentObserver,
   brandId,
   type EventEnvelope,
+  findSessionMessageSubmission,
   type MessageId,
   SessionAlreadyExistsError,
   type SessionId,
+  SessionMessageConflictError,
 } from '@agent-harness/kernel';
 import type { AgentRuntime, AgentRuntimeHandle } from '@agent-harness/runtime';
 import { SessionEventStream } from './events.js';
+import type { SubmissionReceipt, SubmittedMessage } from './submission.js';
 import { projectChatTranscript } from './transcript.js';
 
 interface ManagedSession {
@@ -18,6 +21,7 @@ interface ManagedSession {
   readonly runtime: AgentRuntime;
   readonly handle: AgentRuntimeHandle;
   readonly events: SessionEventStream;
+  readonly pendingSubmissions: Map<MessageId, string>;
 }
 
 export interface SessionRuntimeFactory {
@@ -39,7 +43,7 @@ export interface WebSessionController {
   createSession(workspace: string): Promise<OpenedWebSession>;
   openSession(sessionId: string): Promise<OpenedWebSession>;
   subscribe(sessionId: string, response: ServerResponse): Promise<() => void>;
-  submit(sessionId: string, content: string): Promise<void>;
+  submit(sessionId: string, message: SubmittedMessage): Promise<SubmissionReceipt>;
   cancel(sessionId: string): Promise<void>;
   closeSession(sessionId: string): Promise<void>;
   close(): Promise<void>;
@@ -141,18 +145,30 @@ export class SessionRegistry implements WebSessionController {
     };
   }
 
-  async submit(sessionId: string, content: string): Promise<void> {
+  async submit(sessionId: string, message: SubmittedMessage): Promise<SubmissionReceipt> {
     const session = await this.#get(sessionId, undefined, 'resume');
+    const pending = this.#pendingReceipt(session, message);
+    if (pending !== undefined) return pending;
+    const persisted = findSessionMessageSubmission(
+      await this.#readEvents(sessionId, new AbortController().signal),
+      { ...message, role: 'user' },
+    );
+    if (persisted !== undefined) return persisted;
+    const pendingAfterRead = this.#pendingReceipt(session, message);
+    if (pendingAfterRead !== undefined) return pendingAfterRead;
+    session.pendingSubmissions.set(message.id, message.content);
     void session.handle.agent
       .run({
-        id: brandId<'MessageId'>(randomUUID()) as MessageId,
+        id: message.id,
         role: 'user',
-        content,
+        content: message.content,
       })
       .then(
-        (message) => session.events.publish('completed', { message }),
-        (error) => session.events.publish('failed', { message: message(error) }),
-      );
+        (assistant) => session.events.publish('completed', { message: assistant }),
+        (error) => session.events.publish('failed', { message: errorMessage(error) }),
+      )
+      .finally(() => session.pendingSubmissions.delete(message.id));
+    return { status: 'accepted' };
   }
 
   async cancel(sessionId: string): Promise<void> {
@@ -260,7 +276,7 @@ export class SessionRegistry implements WebSessionController {
         mode === 'create'
           ? await this.#createOrResume(runtime, sessionId, signal)
           : await runtime.resume(sessionId, { signal });
-      return { workspace, runtime, handle, events };
+      return { workspace, runtime, handle, events, pendingSubmissions: new Map() };
     } catch (error) {
       await runtime.close().catch(() => undefined);
       throw error;
@@ -307,6 +323,18 @@ export class SessionRegistry implements WebSessionController {
     return events;
   }
 
+  #pendingReceipt(
+    session: ManagedSession,
+    message: SubmittedMessage,
+  ): SubmissionReceipt | undefined {
+    const content = session.pendingSubmissions.get(message.id);
+    if (content === undefined) return undefined;
+    if (content !== message.content) {
+      throw new SessionMessageConflictError('messageId 已用于内容不同的消息');
+    }
+    return { status: 'accepted' };
+  }
+
   #scheduleIdleClose(sessionId: string): void {
     this.#cancelIdleClose(sessionId);
     const timer = setTimeout(() => {
@@ -335,6 +363,6 @@ export interface SessionRegistryOptions {
   readonly readWorkspace: (sessionId: string) => Promise<string | undefined>;
 }
 
-function message(error: unknown): string {
+function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
