@@ -235,12 +235,6 @@ importers:
         specifier: workspace:*
         version: link:../../kernel
 
-  packages/tools/tool-runtime:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
 packages:
 
   '@biomejs/biome@2.5.15':
