@@ -1,339 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import { verifyArchitecture } from './architecture-rules.mjs';
 
-function manifest(name, dependencies = {}) {
-  return { name: `@agent-harness/${name}`, type: 'module', dependencies };
-}
+const manifest = (path, name, dependencies = {}) => [path, { name, type: 'module', dependencies }];
+
+const workspace = [
+  manifest('kernel', '@agent-harness/kernel'),
+  manifest('core', '@agent-harness/core', { '@agent-harness/kernel': 'workspace:*' }),
+  manifest('adapters', '@agent-harness/adapters', { '@agent-harness/kernel': 'workspace:*' }),
+  manifest('runtime', '@agent-harness/runtime', {
+    '@agent-harness/kernel': 'workspace:*',
+    '@agent-harness/core': 'workspace:*',
+    '@agent-harness/adapters': 'workspace:*',
+  }),
+  manifest('test-support', '@agent-harness/test-support', {
+    '@agent-harness/kernel': 'workspace:*',
+    '@agent-harness/core': 'workspace:*',
+    '@agent-harness/adapters': 'workspace:*',
+  }),
+  manifest('hosts/cli', '@agent-harness/cli', {
+    '@agent-harness/kernel': 'workspace:*',
+    '@agent-harness/core': 'workspace:*',
+    '@agent-harness/adapters': 'workspace:*',
+    '@agent-harness/runtime': 'workspace:*',
+  }),
+  manifest('hosts/web', '@agent-harness/web', {
+    '@agent-harness/kernel': 'workspace:*',
+    '@agent-harness/adapters': 'workspace:*',
+    '@agent-harness/runtime': 'workspace:*',
+  }),
+];
 
 describe('架构依赖规则', () => {
-  it('kernel 不得依赖其他 workspace package', () => {
-    const failures = verifyArchitecture([
-      ['kernel', manifest('kernel', { '@agent-harness/core': 'workspace:*' })],
-      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-    ]);
-    expect(failures).toContain('kernel: forbidden workspace dependency on core');
+  it('接受七 package 的依赖图', () => {
+    expect(verifyArchitecture(workspace)).toEqual([]);
   });
 
-  it('core 只能依赖 kernel', () => {
-    const failures = verifyArchitecture([
-      ['kernel', manifest('kernel')],
-      ['tools/tool-runtime', manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' })],
-      ['core', manifest('core', { '@agent-harness/tool-runtime': 'workspace:*' })],
-    ]);
-    expect(failures).toContain('core: forbidden workspace dependency on tools/tool-runtime');
-  });
-
-  it('core 不得依赖 prompt、memory 或 skill 的具体实现', () => {
-    const manifests = [
-      ['kernel', manifest('kernel')],
-      [
-        'context/context-runtime',
-        manifest('context-runtime', {
-          '@agent-harness/kernel': 'workspace:*',
-        }),
-      ],
-      [
-        'memory/memory-context',
-        manifest('memory-context', {
-          '@agent-harness/kernel': 'workspace:*',
-        }),
-      ],
-      [
-        'skills/skill-context',
-        manifest('skill-context', {
-          '@agent-harness/kernel': 'workspace:*',
-        }),
-      ],
-      [
-        'core',
-        manifest('core', {
-          '@agent-harness/kernel': 'workspace:*',
-          '@agent-harness/context-runtime': 'workspace:*',
-        }),
-      ],
-    ];
-    expect(verifyArchitecture(manifests)).toContain(
-      'core: forbidden workspace dependency on context/context-runtime',
-    );
-  });
-
-  it('core 只能包含并导出 Agent 核心循环', () => {
-    const manifests = [
-      ['kernel', manifest('kernel')],
-      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-    ];
-    expect(
-      verifyArchitecture(manifests, [
-        [
-          'core',
-          'src/context.ts',
-          [
-            "import type { PromptAssembler } from '@agent-harness/kernel'",
-            'export class BoundedPromptAssembler implements PromptAssembler {}',
-          ].join('\n'),
-        ],
-      ]),
-    ).toEqual(
-      expect.arrayContaining([
-        'core/src/context.ts: source file is outside the Agent loop allowlist',
-        'core/src/context.ts: core can only export Agent, found BoundedPromptAssembler',
-      ]),
-    );
-    expect(
-      verifyArchitecture(manifests, [
-        ['core', 'src/index.ts', "export { Agent, BoundedPromptAssembler } from './agent.js'"],
-      ]),
-    ).toContain('core/src/index.ts: core can only export Agent, found BoundedPromptAssembler');
-    expect(
-      verifyArchitecture(manifests, [
-        ['core', 'src/index.ts', 'export const { BoundedPromptAssembler } = {} as never'],
-        ['core', 'src/agent.ts', 'export const [EnabledSkillsContext] = [] as never'],
-      ]),
-    ).toEqual(
-      expect.arrayContaining([
-        'core/src/index.ts: core can only export Agent, found BoundedPromptAssembler',
-        'core/src/agent.ts: core can only export Agent, found EnabledSkillsContext',
-      ]),
-    );
-    expect(
-      verifyArchitecture(manifests, [
-        ['core', 'src/cancellation.ts', 'export function throwIfAborted() {}'],
-        ['core', 'src/execution-metadata.ts', 'export function freezeExecutionMetadata() {}'],
-        ['core', 'src/lifecycle.ts', 'export function buildTerminalEvents() {}'],
-        ['core', 'src/model-usage.ts', 'export function assertCumulativeUsage() {}'],
-        ['core', 'src/inbox.ts', 'export class AgentInbox {}'],
-      ]),
-    ).toEqual([]);
-  });
-
-  it('协议无关能力实现只能依赖 kernel', () => {
-    const failures = verifyArchitecture([
-      ['kernel', manifest('kernel')],
-      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-      [
-        'session/session-memory',
-        manifest('session-memory', {
-          '@agent-harness/core': 'workspace:*',
-        }),
-      ],
-      [
-        'tools/local',
-        manifest('local', {
-          '@agent-harness/session-memory': 'workspace:*',
-        }),
-      ],
-    ]);
-    expect(failures).toContain('session/session-memory: forbidden workspace dependency on core');
-    expect(failures).toContain(
-      'tools/local: forbidden workspace dependency on session/session-memory',
-    );
-  });
-
-  it('上下文能力实现只能依赖 kernel', () => {
-    const failures = verifyArchitecture([
-      ['kernel', manifest('kernel')],
-      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-      [
-        'context/context-runtime',
-        manifest('context-runtime', {
-          '@agent-harness/core': 'workspace:*',
-        }),
-      ],
-      [
-        'memory/memory-context',
-        manifest('memory-context', {
-          '@agent-harness/context-runtime': 'workspace:*',
-        }),
-      ],
-      [
-        'skills/skill-context',
-        manifest('skill-context', {
-          '@agent-harness/memory-context': 'workspace:*',
-        }),
-      ],
-    ]);
-    expect(failures).toEqual(
-      expect.arrayContaining([
-        'context/context-runtime: forbidden workspace dependency on core',
-        'memory/memory-context: forbidden workspace dependency on context/context-runtime',
-        'skills/skill-context: forbidden workspace dependency on memory/memory-context',
-      ]),
-    );
-  });
-
-  it('协议无关 package 不得声明第三方生产依赖', () => {
-    const core = manifest('core', { '@agent-harness/kernel': 'workspace:*', lodash: '^4.0.0' });
-    const memory = manifest('session-memory', { '@agent-harness/kernel': 'workspace:*' });
-    memory.optionalDependencies = { redis: '^5.0.0' };
+  it('禁止 kernel、core 和 adapters 向外依赖', () => {
     expect(
       verifyArchitecture([
-        ['kernel', manifest('kernel')],
-        ['core', core],
-        ['session/session-memory', memory],
+        ...workspace,
+        manifest('unclassified', '@agent-harness/unclassified'),
       ]),
-    ).toEqual(
-      expect.arrayContaining([
-        'core: protocol-neutral package cannot depend on lodash',
-        'session/session-memory: protocol-neutral package cannot depend on redis',
-      ]),
-    );
-  });
-
-  it('adapter 只能依赖 kernel', () => {
+    ).toContain('unclassified: package path is not classified');
     expect(
       verifyArchitecture([
-        ['kernel', manifest('kernel')],
-        ['llm/gateway', manifest('gateway', { '@agent-harness/kernel': 'workspace:*' })],
+        manifest('kernel', '@agent-harness/kernel', { '@agent-harness/adapters': 'workspace:*' }),
+        manifest('adapters', '@agent-harness/adapters'),
       ]),
-    ).toEqual([]);
+    ).toContain('kernel: forbidden workspace dependency on adapters');
+  });
+
+  it('允许 Host 导入 adapters 子路径并拒绝 core 这样做', () => {
     expect(
-      verifyArchitecture([
-        ['kernel', manifest('kernel')],
-        [
-          'tools/tool-runtime',
-          manifest('tool-runtime', { '@agent-harness/kernel': 'workspace:*' }),
-        ],
-        ['tools/mcp', manifest('mcp', { '@agent-harness/tool-runtime': 'workspace:*' })],
+      verifyArchitecture(workspace, [
+        ['hosts/cli', 'src/index.ts', "import '@agent-harness/adapters/local';"],
+        ['core', 'src/agent.ts', "import '@agent-harness/adapters/local';"],
       ]),
-    ).toContain('tools/mcp: forbidden workspace dependency on tools/tool-runtime');
-  });
-
-  it('runtime 可以组合 kernel、core 与默认 prompt 实现', () => {
-    const failures = verifyArchitecture([
-      ['kernel', manifest('kernel')],
-      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-      [
-        'context/context-runtime',
-        manifest('context-runtime', { '@agent-harness/kernel': 'workspace:*' }),
-      ],
-      [
-        'session/session-memory',
-        manifest('session-memory', { '@agent-harness/kernel': 'workspace:*' }),
-      ],
-      [
-        'runtime',
-        manifest('runtime', {
-          '@agent-harness/kernel': 'workspace:*',
-          '@agent-harness/core': 'workspace:*',
-          '@agent-harness/context-runtime': 'workspace:*',
-        }),
-      ],
-    ]);
-    expect(failures).toEqual([]);
-  });
-
-  it('拒绝未分类 package，防止新增目录绕过规则', () => {
-    expect(
-      verifyArchitecture([
-        ['kernel', manifest('kernel')],
-        ['misc/unknown', manifest('unknown', { '@agent-harness/kernel': 'workspace:*' })],
-      ]),
-    ).toContain('misc/unknown: package path is not classified');
-  });
-
-  it('拒绝不存在的 workspace 依赖', () => {
-    expect(
-      verifyArchitecture([
-        ['kernel', manifest('kernel')],
-        ['core', manifest('core', { '@agent-harness/missing': 'workspace:*' })],
-      ]),
-    ).toContain('core: unknown workspace dependency @agent-harness/missing');
-  });
-
-  it('不能通过 optionalDependency 绕过生产依赖规则', () => {
-    const kernel = manifest('kernel');
-    kernel.optionalDependencies = { '@agent-harness/core': 'workspace:*' };
-    expect(
-      verifyArchitecture([
-        ['kernel', kernel],
-        ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-      ]),
-    ).toContain('kernel: forbidden workspace dependency on core');
-  });
-
-  it('不能通过 devDependency 从 adapter 生产源码导入 core', () => {
-    expect(
-      verifyArchitecture(
-        [
-          ['kernel', manifest('kernel')],
-          ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-          ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
-        ],
-        [['tools/mcp', 'src/index.ts', "import { Agent } from '@agent-harness/core'"]],
-      ),
-    ).toContain('tools/mcp/src/index.ts: forbidden workspace import core');
-  });
-
-  it('检查无插值模板形式的动态导入', () => {
-    expect(
-      verifyArchitecture(
-        [
-          ['kernel', manifest('kernel')],
-          ['tools/local', manifest('local', { '@agent-harness/kernel': 'workspace:*' })],
-          ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
-        ],
-        [['tools/mcp', 'src/index.ts', 'await import(`@agent-harness/local`)']],
-      ),
-    ).toContain('tools/mcp/src/index.ts: forbidden workspace import tools/local');
-  });
-
-  it('忽略注释和普通字符串中的 import 文本', () => {
-    expect(
-      verifyArchitecture(
-        [
-          ['kernel', manifest('kernel')],
-          ['tools/local', manifest('local', { '@agent-harness/kernel': 'workspace:*' })],
-          ['tools/mcp', manifest('mcp', { '@agent-harness/kernel': 'workspace:*' })],
-        ],
-        [
-          [
-            'tools/mcp',
-            'src/index.ts',
-            '// import { ToolRegistry } from "@agent-harness/local"\nconst example = "import(\\"@agent-harness/local\\")"',
-          ],
-        ],
-      ),
-    ).toEqual([]);
-  });
-
-  it('拒绝生产源码以相对路径跨越 package 边界', () => {
-    expect(
-      verifyArchitecture(
-        [
-          ['kernel', manifest('kernel')],
-          ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-        ],
-        [['core', 'src/index.ts', "export * from '../../kernel/src/index.js'"]],
-      ),
-    ).toContain(
-      'core/src/index.ts: relative import escapes package boundary: ../../kernel/src/index.js',
-    );
-  });
-
-  it('协议无关生产源码不得导入 I/O 或第三方模块', () => {
-    const manifests = [
-      ['kernel', manifest('kernel')],
-      ['core', manifest('core', { '@agent-harness/kernel': 'workspace:*' })],
-      [
-        'session/session-memory',
-        manifest('session-memory', {
-          '@agent-harness/kernel': 'workspace:*',
-        }),
-      ],
-    ];
-    expect(
-      verifyArchitecture(manifests, [
-        ['kernel', 'src/index.ts', "import { readFile } from 'node:fs/promises'"],
-      ]),
-    ).toContain('kernel/src/index.ts: protocol-neutral source cannot import node:fs/promises');
-    expect(
-      verifyArchitecture(manifests, [
-        ['core', 'src/index.ts', "import client from 'provider-sdk'"],
-        ['session/session-memory', 'src/index.ts', "import { open } from 'node:fs/promises'"],
-      ]),
-    ).toEqual([
-      'core/src/index.ts: protocol-neutral source cannot import provider-sdk',
-      'session/session-memory/src/index.ts: protocol-neutral source cannot import node:fs/promises',
-    ]);
+    ).toContain('core/src/agent.ts: forbidden workspace import adapters');
   });
 });

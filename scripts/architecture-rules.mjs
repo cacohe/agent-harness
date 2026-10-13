@@ -13,42 +13,16 @@ export function verifyArchitecture(manifests, sources = []) {
     'src/lifecycle.ts',
     'src/model-usage.ts',
   ]);
-  const protocolNeutralOwners = new Set([
-    'kernel',
-    'core',
-    'context/context-runtime',
-    'memory/memory-context',
-    'session/session-memory',
-    'skills/skill-context',
-  ]);
+  const protocolNeutralOwners = new Set(['kernel', 'core']);
   const allowedByOwner = new Map([
     ['kernel', new Set(['kernel'])],
     ['core', new Set(['kernel'])],
     ['adapters', new Set(['kernel'])],
-    ['context/context-runtime', new Set(['kernel'])],
-    ['memory/memory-context', new Set(['kernel'])],
-    ['session/session-memory', new Set(['kernel'])],
-    ['skills/skill-context', new Set(['kernel'])],
-    ['tools/local', new Set(['kernel'])],
-    ['runtime', new Set(['kernel', 'core', 'adapters', 'context/context-runtime'])],
+    ['runtime', new Set(['kernel', 'core', 'adapters'])],
     ['test-support', new Set(['kernel', 'core', 'adapters'])],
     ['hosts/cli', new Set(['kernel', 'core', 'adapters', 'runtime'])],
     ['hosts/web', new Set(['kernel', 'adapters', 'runtime'])],
   ]);
-  for (const owner of [
-    'llm/gateway',
-    'llm/openai-compatible',
-    'memory/memory-gateway',
-    'platform/platform-http',
-    'session/session-jsonl',
-    'skills/skill-filesystem',
-    'skills/skill-tool',
-    'tools/mcp',
-    'tools/platform-policy',
-    'tools/sandbox-docker',
-  ]) {
-    allowedByOwner.set(owner, new Set(['kernel']));
-  }
 
   const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]));
   const failures = [];

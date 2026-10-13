@@ -218,7 +218,7 @@ pnpm agent run --config /绝对路径/config.json --session demo-1 --message "�
 | 目标             | 落点                                                         |
 | -------------- | ---------------------------------------------------------- |
 | 领域事件 / 消息形状    | `packages/kernel`，并更新投影与恢复逻辑 |
-| Prompt / 上下文实现  | 接口在 `packages/kernel`，默认组装与投影放 `packages/context/context-runtime`，能力贡献器放对应能力域 |
+| Prompt / 上下文实现  | 接口在 `packages/kernel`，默认组装与投影放 `packages/adapters/context`，能力贡献器也位于 `packages/adapters` 对应子目录 |
 | 会话读写 / 恢复分析    | 接口、生命周期校验与恢复修复在 `packages/kernel`，内存实现放 `session-memory`，持久化实现放 `session-jsonl` |
 | 模型协议           | 接口在 `packages/kernel`；实现在 `packages/llm/*` |
 | 工具             | 协议与通用运行时在 `packages/kernel/src/tools`；在 host/runtime 组合时注入 |
