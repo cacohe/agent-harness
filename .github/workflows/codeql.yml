@@ -17,6 +17,8 @@ permissions:
 jobs:
   analyze:
     name: JavaScript / TypeScript
+    # Code scanning 在公开仓库可免费启用；私有阶段不把未启用的服务当作 CI 失败。
+    if: github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
