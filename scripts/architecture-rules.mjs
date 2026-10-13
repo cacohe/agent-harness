@@ -6,10 +6,12 @@ export function verifyArchitecture(manifests, sources = []) {
   const coreSourceFiles = new Set([
     'src/agent-id-reservations.ts',
     'src/agent.ts',
-    'src/execution-support.ts',
+    'src/cancellation.ts',
+    'src/execution-metadata.ts',
     'src/inbox.ts',
     'src/index.ts',
     'src/lifecycle.ts',
+    'src/model-usage.ts',
   ]);
   const protocolNeutralOwners = new Set([
     'kernel',

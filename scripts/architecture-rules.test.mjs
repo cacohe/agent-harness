@@ -97,7 +97,10 @@ describe('架构依赖规则', () => {
     );
     expect(
       verifyArchitecture(manifests, [
+        ['core', 'src/cancellation.ts', 'export function throwIfAborted() {}'],
+        ['core', 'src/execution-metadata.ts', 'export function freezeExecutionMetadata() {}'],
         ['core', 'src/lifecycle.ts', 'export function buildTerminalEvents() {}'],
+        ['core', 'src/model-usage.ts', 'export function assertCumulativeUsage() {}'],
         ['core', 'src/inbox.ts', 'export class AgentInbox {}'],
       ]),
     ).toEqual([]);

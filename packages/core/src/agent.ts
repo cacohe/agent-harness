@@ -23,14 +23,8 @@ import {
   type UserMessage,
 } from '@agent-harness/kernel';
 import { AgentIdReservations } from './agent-id-reservations.js';
-import {
-  assertCumulativeUsage,
-  freezeExecutionMetadata,
-  isAbortSignal,
-  throwIfAborted,
-  utf8ByteLength,
-  waitForSignal,
-} from './execution-support.js';
+import { isAbortSignal, throwIfAborted, waitForSignal } from './cancellation.js';
+import { freezeExecutionMetadata } from './execution-metadata.js';
 import { AgentInbox, type QueuedRun } from './inbox.js';
 import {
   type ActiveTurn,
@@ -39,6 +33,9 @@ import {
   createStep,
   type Step,
 } from './lifecycle.js';
+import { assertCumulativeUsage } from './model-usage.js';
+
+const textEncoder = new TextEncoder();
 
 /**
  * 只依赖 Kernel capability 接口的可重放 Agent 核心循环。
@@ -444,4 +441,9 @@ export class Agent {
       }
     }
   }
+}
+
+/** 计算模型事件文本的 UTF-8 字节数，供单次输出预算使用。 */
+function utf8ByteLength(value: string): number {
+  return textEncoder.encode(value).byteLength;
 }
