@@ -114,7 +114,7 @@ pnpm run build
 - `settlementTimeoutMs`：失败/取消路径上 terminal settlement 的超时
 - `runTimeoutMs`：单个 turn 的协作式执行期限，默认 120 秒；provider 与工具必须响应 `AbortSignal`
 - `modelAttemptTimeoutMs`、`toolTimeoutMs`：单次模型 attempt 与工具调用的协作式期限，默认分别为 90 秒与 30 秒；它们不能延长 turn 总期限
-- `maxModelOutputBytes`、`maxToolResultBytes`、`maxInputBytes`：模型输出、单个工具终态结果与输入上下文的字节预算，默认各 1 MiB；超出工具结果预算时会记录受限的失败结果
+- `maxModelOutputBytes`、`maxToolResultBytes`、`maxInputBytes`：模型输出、单个工具返回载荷与输入上下文的字节预算，默认各 1 MiB；工具预算不含协议元数据，超限时会记录受限的失败结果
 - `maxQueuedRuns`：等待串行执行的输入上限，默认 32；队列满时新输入会被拒绝
 - `agentProfile`（可选）：包含非空 `id`、`version` 与 `instructions` 的版本化 Agent 静态指令；不写入会话事件
 - 本地直连模型使用 `model.baseUrl`、`model.model` 和 `model.apiKeyEnv`：OpenAI-compatible API 根、模型名与存放 API key 的环境变量名（默认 `DEEPSEEK_API_KEY`）

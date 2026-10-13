@@ -8,9 +8,9 @@
 
 ## 决策
 
-Core 为模型 attempt、单次工具调用、单个工具终态结果与等待中的 FIFO 输入分别设定可配置边界。Runtime 与本地 Host 提供以下默认值：模型 attempt 90 秒、工具调用 30 秒、工具结果 1 MiB、等待队列 32 条。turn 的 `runTimeoutMs` 仍是总硬上限；子 deadline 仅收紧，不延长父 signal。
+Core 为模型 attempt、单次工具调用、单个工具返回载荷与等待中的 FIFO 输入分别设定可配置边界。Runtime 与本地 Host 提供以下默认值：模型 attempt 90 秒、工具调用 30 秒、工具返回载荷 1 MiB、等待队列 32 条。载荷预算不包括 `callId`、状态和 Core 生成的受限失败结果等协议元数据。turn 的 `runTimeoutMs` 仍是总硬上限；子 deadline 仅收紧，不延长父 signal。
 
-超出工具结果预算时，Core 不持久化原始载荷，而是写入带原调用 ID 的 `ToolResultTooLargeError` 失败结果，使下一 step 能看到可审计、有限大小的事实。队列已满时，新输入以 `AgentBusyError` 立即失败，已接纳输入不受影响。
+超出工具返回载荷预算时，Core 不持久化原始载荷，而是写入带原调用 ID 的 `ToolResultTooLargeError` 失败结果，使下一 step 能看到可审计、有限大小的事实。工具的局部 deadline 仅取消该工具：收到由 deadline 导致的 rejection 时，Core 将其规范化为 `cancelled` 工具结果并继续该 turn；父 turn 取消仍会终止整个 turn。队列已满时，新输入以 `AgentBusyError` 立即失败，已接纳输入不受影响。
 
 所有模型和工具 `AgentExecutionEvent` 都直接包含可选 `executionId`。它来自 turn 开始时冻结的 `ExecutionMetadata`；未传执行上下文的调用保持字段缺失。此决策不引入 attempt 重试：重试必须由 Provider 或未来显式的 attempt 语义拥有，不能由 Core 隐式重放副作用。
 

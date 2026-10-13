@@ -1156,17 +1156,19 @@ describe('Agent', () => {
       },
       { events: [{ type: 'text.delta', text: '继续执行' }] },
     ]);
-    const tool = fakeTool('wait', async (_input, context) => {
-      await new Promise<never>((_resolve, reject) => {
-        context.signal.addEventListener('abort', () => reject(context.signal.reason), {
-          once: true,
-        });
-      });
-    });
+    const tools = new ScriptedToolCapability(
+      [{ name: 'wait', description: '等待', inputSchema: {} }],
+      async (_call, context) =>
+        new Promise<never>((_resolve, reject) => {
+          context.signal.addEventListener('abort', () => reject(context.signal.reason), {
+            once: true,
+          });
+        }),
+    );
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([tool]),
+      tools,
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       toolTimeoutMs: 20,

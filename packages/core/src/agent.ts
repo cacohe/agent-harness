@@ -472,20 +472,28 @@ export class Agent {
           ...(execution === undefined ? {} : { execution }),
         });
       } catch (error) {
-        if (toolStartedAt !== undefined)
-          this.#notifyExecution({
-            type: toolSignal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
-            sessionId: this.#session.sessionId,
-            turnId,
-            stepId,
-            attemptId: attempt.attemptId,
-            ...executionEvent,
-            toolCallId: call.id,
-            toolName: call.name,
-            ...this.#withDuration(toolStartedAt),
-            ...(error instanceof Error ? { errorName: error.name } : {}),
-          });
-        throw error;
+        if (toolSignal.aborted && !signal.aborted) {
+          result = {
+            status: 'cancelled',
+            callId: call.id,
+            reason: `工具调用超过 toolTimeoutMs (${this.#toolTimeoutMs})`,
+          };
+        } else {
+          if (toolStartedAt !== undefined)
+            this.#notifyExecution({
+              type: toolSignal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
+              sessionId: this.#session.sessionId,
+              turnId,
+              stepId,
+              attemptId: attempt.attemptId,
+              ...executionEvent,
+              toolCallId: call.id,
+              toolName: call.name,
+              ...this.#withDuration(toolStartedAt),
+              ...(error instanceof Error ? { errorName: error.name } : {}),
+            });
+          throw error;
+        }
       }
       result = this.#boundToolResult(result);
       attempt.toolResults.set(call.id, result);
@@ -525,9 +533,9 @@ export class Agent {
     return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)]);
   }
 
-  /** 工具已经执行但结果过大时，持久化可解释的 failure 而非遗漏终态。 */
+  /** 限制工具返回的可变载荷，避免其无限写入会话与后续 prompt。 */
   #boundToolResult(result: ToolResult): ToolResult {
-    const bytes = utf8ByteLength(JSON.stringify(result));
+    const bytes = utf8ByteLength(JSON.stringify(this.#toolResultPayload(result)));
     if (bytes <= this.#maxToolResultBytes) return result;
     return {
       status: 'failure',
@@ -537,6 +545,21 @@ export class Agent {
         message: `工具结果超过 maxToolResultBytes (${this.#maxToolResultBytes})`,
       },
     };
+  }
+
+  /** 不把协议元数据计入预算；预算针对不受 Core 控制的工具返回载荷。 */
+  #toolResultPayload(result: ToolResult): unknown {
+    switch (result.status) {
+      case 'success':
+        return result.output;
+      case 'failure':
+        return result.error;
+      case 'cancelled':
+      case 'unknown':
+        return result.reason;
+      default:
+        return assertNever(result);
+    }
   }
 
   #executionEvent(execution: ExecutionMetadata | undefined): {

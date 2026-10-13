@@ -31,7 +31,7 @@ packages/
 
 ## 执行与会话
 
-一个 turn 包含零个或多个 step。每个 Agent 同时只有一个活动 turn，Core 用有容量边界的 FIFO inbox 串行领取输入；每个 `run` 只获得其自身 turn 的结果或错误。取消使用 `AbortSignal`。开始的 turn 与 step 在成功、失败和取消路径均恰好结算一次。`runTimeoutMs` 是 turn 总期限，模型 attempt 与单次工具调用有各自的协作式 deadline；单个工具终态结果在写入会话前受 UTF-8 字节预算约束，超限时替换为可审计的失败结果（ADR 0053）。
+一个 turn 包含零个或多个 step。每个 Agent 同时只有一个活动 turn，Core 用有容量边界的 FIFO inbox 串行领取输入；每个 `run` 只获得其自身 turn 的结果或错误。取消使用 `AbortSignal`。开始的 turn 与 step 在成功、失败和取消路径均恰好结算一次。`runTimeoutMs` 是 turn 总期限，模型 attempt 与单次工具调用有各自的协作式 deadline；单个工具返回载荷在写入会话前受 UTF-8 字节预算约束（不含协议元数据），超限时替换为可审计的失败结果（ADR 0053）。
 
 会话事件日志是模型可见历史、重放、恢复、审计和 UI 重建的事实源；流式 chunk 仅为临时 observer 通知。每个会话身份只有一个 writer，sequence 严格单调，事件 batch 原子追加。`kernel/session` 验证生命周期历史；发现有效尾部中断时，Runtime 在暴露 Agent 前以原子 batch 补齐未知工具结果与 interrupted 结算。结构性矛盾拒绝恢复。
 

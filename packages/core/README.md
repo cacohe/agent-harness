@@ -2,7 +2,7 @@
 
 ## 职责
 
-实现单一会话级串行 Agent 执行器：接纳输入并以有容量边界的 FIFO 调度 turn，执行 turn/step 生命周期、流式 assistant 结算、工具续步与取消。它维护 turn、模型 attempt、单次工具调用及工具结果写入的独立资源边界，但不拥有具体 adapter 或重试策略。
+实现单一会话级串行 Agent 执行器：接纳输入并以有容量边界的 FIFO 调度 turn，执行 turn/step 生命周期、流式 assistant 结算、工具续步与取消。它维护 turn、模型 attempt、单次工具调用及工具返回载荷写入的独立资源边界，但不拥有具体 adapter 或重试策略。
 
 ## 使用
 

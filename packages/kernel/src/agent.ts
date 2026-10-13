@@ -134,7 +134,7 @@ export interface AgentOptions {
   /** 单次工具调用的协作式 deadline。 */
   readonly toolTimeoutMs?: number;
   readonly maxModelOutputBytes?: number;
-  /** 单个工具终态结果写入会话前允许的最大 UTF-8 字节数。 */
+  /** 单个工具返回载荷写入会话前允许的最大 UTF-8 字节数；不含协议元数据。 */
   readonly maxToolResultBytes?: number;
   /** 等待 FIFO 领取的输入上限；不包含当前活动 turn。 */
   readonly maxQueuedRuns?: number;
