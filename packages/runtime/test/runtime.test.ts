@@ -76,6 +76,23 @@ async function jsonlRepository(): Promise<JsonlSessionRepository> {
 }
 
 describe('AgentRuntime', () => {
+  it('冻结并通过默认 prompt 注入版本化 AgentProfile', async () => {
+    const profile = { id: 'coding', version: '2026-10', instructions: '先检查再修改。' };
+    const model = new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: '完成' }] }]);
+    const instance = runtime(repositoryReturning(new InMemorySessionLog(id('profile'))), model, {
+      agentProfile: profile,
+    });
+    profile.instructions = '已被调用方修改';
+
+    const handle = await instance.create(id('profile'), { signal: signal() });
+    await handle.agent.run(user('开始'));
+
+    expect(model.requests[0]?.messages).toEqual([
+      { role: 'system', content: '先检查再修改。' },
+      user('开始'),
+    ]);
+  });
+
   it('通过 JSONL 完成 create-run-close-resume-run', async () => {
     const sessions = await jsonlRepository();
     const sessionId = id('jsonl-resume');

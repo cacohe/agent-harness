@@ -77,7 +77,7 @@ input -> turn/start -> step/start -> model stream -> assistant settlement
 
 ## 替换接缝
 
-首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`kernel` 拥有这些协议无关接口；`context/context-runtime` 的默认 prompt 实现以完整用户 turn 为边界裁剪历史，并限制输入字节数。组合方必须为 Agent 显式注入 `PromptAssembler`，可以提供 system prompt、受限 `ContextContributor` 或替换策略。贡献器只产生 system 消息，静态提示词和贡献内容都计入输入预算；异步贡献器接收本次 run 的取消信号。当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`skills/skill-context` 的 `EnabledSkillsContext` 只注入名称、ID 和描述，不读取正文。`MemoryRetriever` 可以检索长期记忆，`memory/memory-context` 的 `RetrievedMemoryContext` 仅将有限的临时检索结果加入系统上下文，不将其写入会话事件。会话事件日志继续只保存对话事实。每个接缝包含 `kernel` 契约、至少一个实现，以及 `runtime` 或 host 中的组合点。
+首批替换接缝包括模型 provider、会话持久化、prompt 组装、工具定义、工具执行策略、标识符、时间、日志和 host 协议。`kernel` 按 `context`、`skills`、`memory` 等能力域拥有协议无关接口；`context/context-runtime` 的默认 prompt 实现以完整用户 turn 为边界裁剪历史，并限制输入字节数。Host 或 Platform 可以为 Agent 选择带 ID、版本与静态指令的 `AgentProfile`；Runtime 使用默认 prompt 组装器时冻结 profile 并将指令作为最前面的 system message。Host 的工作区、工具和安全边界可位于 profile 指令之前。自定义 `PromptAssembler` 完全拥有组装顺序，不能同时由 Runtime 注入 profile。贡献器只产生 system 消息，profile、Host 静态提示词和贡献内容都计入输入预算；异步贡献器接收本次 run 的取消信号。profile 不写入会话事件，审计需求应使用独立契约。当前时间通过注入的 `Clock` 提供。`SkillCatalog` 由 Host 或 Platform 提供已启用 Skill 的摘要与按需正文读取接口，`skills/skill-context` 的 `EnabledSkillsContext` 只注入名称、ID 和描述，不读取正文。`MemoryRetriever` 可以检索长期记忆，`memory/memory-context` 的 `RetrievedMemoryContext` 仅将有限的临时检索结果加入系统上下文，不将其写入会话事件。会话事件日志继续只保存对话事实。每个接缝包含 `kernel` 契约、至少一个实现，以及 `runtime` 或 host 中的组合点。
 
 `skills/skill-filesystem` 从 Host 明确配置的根目录和启用列表构建 `SkillCatalog`。adapter 在 Linux Host 上根据已打开文件描述符校验真实路径，在目录边界内限制元数据与正文读取并校验 frontmatter；初始化只保存摘要，正文由工具或其他明确调用方按 ID 读取。CLI 负责创建该 adapter，并通过 `EnabledSkillsContext` 将摘要接入 prompt。
 

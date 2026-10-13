@@ -1,4 +1,5 @@
 import { isAbsolute, resolve } from 'node:path';
+import type { AgentProfile } from '@agent-harness/kernel';
 
 /** CLI 参数与配置校验失败。 */
 export class CliUsageError extends Error {
@@ -58,7 +59,7 @@ export interface CliConfig {
   readonly runTimeoutMs: number;
   readonly maxModelOutputBytes: number;
   readonly maxInputBytes: number;
-  readonly systemPrompt?: string;
+  readonly agentProfile?: AgentProfile;
   readonly model: CliModelConfig;
   readonly shell: ShellConfig;
   readonly mcp?: McpConfig;
@@ -87,7 +88,7 @@ export async function readConfig(
     'runTimeoutMs',
     'maxModelOutputBytes',
     'maxInputBytes',
-    'systemPrompt',
+    'agentProfile',
   ]);
   const model = object(root.model, 'model 配置');
   const sessionRoot = text(root.sessionRoot, 'sessionRoot');
@@ -104,14 +105,24 @@ export async function readConfig(
         : positive(root.maxModelOutputBytes, 'maxModelOutputBytes'),
     maxInputBytes:
       root.maxInputBytes === undefined ? 1_048_576 : positive(root.maxInputBytes, 'maxInputBytes'),
-    ...(root.systemPrompt === undefined
+    ...(root.agentProfile === undefined
       ? {}
-      : { systemPrompt: text(root.systemPrompt, 'systemPrompt') }),
+      : { agentProfile: readAgentProfile(root.agentProfile) }),
     model: modelConfig(model),
     shell: readShellConfig(root.shell, defaultCwd),
     ...(root.mcp === undefined ? {} : { mcp: readMcpConfig(root.mcp) }),
     ...(root.skills === undefined ? {} : { skills: readSkillsConfig(root.skills) }),
     ...(root.memory === undefined ? {} : { memory: readMemoryConfig(root.memory) }),
+  };
+}
+
+function readAgentProfile(value: unknown): AgentProfile {
+  const profile = object(value, 'agentProfile');
+  exact(profile, ['id', 'version', 'instructions'], 'agentProfile');
+  return {
+    id: text(profile.id, 'agentProfile.id'),
+    version: text(profile.version, 'agentProfile.version'),
+    instructions: text(profile.instructions, 'agentProfile.instructions'),
   };
 }
 

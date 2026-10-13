@@ -31,9 +31,9 @@ export function createSessionRegistry(
     create(observer: AgentObserver, workspace: string): AgentRuntime {
       const workspacePrompt = `你正在本地工作目录 ${workspace} 中协助用户。必须使用 list_dir、read_file、write_file 在该目录内查看和修改文件。工具路径相对于工作目录；禁止访问工作目录之外。当前 Web Host 不提供 shell。`;
       const systemPrompt =
-        config.systemPrompt === undefined
+        config.agentProfile === undefined
           ? workspacePrompt
-          : `${workspacePrompt}\n\n${config.systemPrompt}`;
+          : `${workspacePrompt}\n\n${config.agentProfile.instructions}`;
       return new AgentRuntime({
         sessions,
         model,

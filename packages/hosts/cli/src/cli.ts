@@ -119,7 +119,9 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
         maxInputBytes: config.maxInputBytes,
         prompts: new BoundedPromptAssembler({
           maxInputBytes: config.maxInputBytes,
-          ...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
+          ...(config.agentProfile === undefined
+            ? {}
+            : { systemPrompt: config.agentProfile.instructions }),
           contributors: [
             ...(skills === undefined ? [] : [new EnabledSkillsContext(skills)]),
             ...(memory === undefined ? [] : [new RetrievedMemoryContext(memory.retriever)]),

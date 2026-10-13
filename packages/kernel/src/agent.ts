@@ -1,4 +1,4 @@
-import type { PromptAssembler } from './context.js';
+import type { PromptAssembler } from './context/protocol.js';
 import type {
   AttemptId,
   ExecutionId,
@@ -78,6 +78,13 @@ export interface AgentOptions {
 export interface AgentRunOptions {
   readonly signal?: AbortSignal;
   readonly execution?: ExecutionMetadata;
+}
+
+/** 由 Host 或 Platform 选择的、版本化的 Agent 静态指令。 */
+export interface AgentProfile {
+  readonly id: string;
+  readonly version: string;
+  readonly instructions: string;
 }
 
 /** 一次 turn 已冻结执行身份的最小审计快照；不会投影给模型。 */

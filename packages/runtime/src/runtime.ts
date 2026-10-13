@@ -4,6 +4,7 @@ import { Agent } from '@agent-harness/core';
 import {
   type AgentIdGenerator,
   type AgentObserver,
+  type AgentProfile,
   type AttemptId,
   analyzeSessionLifecycle,
   brandId,
@@ -63,7 +64,8 @@ export interface AgentRuntimeOptions {
   readonly runTimeoutMs?: number;
   readonly maxModelOutputBytes?: number;
   readonly maxInputBytes?: number;
-  readonly systemPrompt?: string;
+  /** 由 Host 或 Platform 解析并提供的静态 Agent 指令。 */
+  readonly agentProfile?: AgentProfile;
   readonly prompts?: PromptAssembler;
   readonly observers?: readonly AgentObserver[];
   readonly idGenerators?: AgentIdGeneratorFactory;
@@ -95,6 +97,7 @@ export class AgentRuntime {
   readonly #setupControllers = new Set<AbortController>();
   readonly #setupWaiters = new Set<() => void>();
   readonly #settlementSignals: SettlementSignalFactory;
+  readonly #agentProfile: AgentProfile | undefined;
   #closing = false;
   #closePromise: Promise<void> | undefined;
 
@@ -118,7 +121,11 @@ export class AgentRuntime {
         throw new TypeError(`${name} 必须是正整数`);
       }
     }
+    if (options.agentProfile !== undefined && options.prompts !== undefined) {
+      throw new TypeError('agentProfile 不能与自定义 prompts 同时提供');
+    }
     this.#options = options;
+    this.#agentProfile = freezeAgentProfile(options.agentProfile);
     this.#settlementSignals = {
       create: () => AbortSignal.timeout(options.settlementTimeoutMs),
     };
@@ -181,9 +188,9 @@ export class AgentRuntime {
             this.#options.prompts ??
             new BoundedPromptAssembler({
               maxInputBytes: this.#options.maxInputBytes ?? DEFAULT_MAX_INPUT_BYTES,
-              ...(this.#options.systemPrompt === undefined
+              ...(this.#agentProfile === undefined
                 ? {}
-                : { systemPrompt: this.#options.systemPrompt }),
+                : { systemPrompt: this.#agentProfile.instructions }),
             }),
           runTimeoutMs: this.#options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS,
           maxModelOutputBytes: this.#options.maxModelOutputBytes ?? DEFAULT_MAX_MODEL_OUTPUT_BYTES,
@@ -273,6 +280,25 @@ async function repairSession(
     });
   }
   return plan.usedIds;
+}
+
+function freezeAgentProfile(profile: AgentProfile | undefined): AgentProfile | undefined {
+  if (profile === undefined) return undefined;
+  if (typeof profile !== 'object' || profile === null || Array.isArray(profile)) {
+    throw new TypeError('agentProfile 必须是对象');
+  }
+  const keys = Object.keys(profile);
+  const expected = ['id', 'instructions', 'version'];
+  if (keys.length !== expected.length || !expected.every((key) => keys.includes(key))) {
+    throw new TypeError('agentProfile 只能包含 id、version 与 instructions');
+  }
+  const { id, version, instructions } = profile;
+  for (const [name, value] of Object.entries({ id, version, instructions })) {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new TypeError(`agentProfile.${name} 必须是非空字符串`);
+    }
+  }
+  return Object.freeze({ id, version, instructions });
 }
 
 const emptyUsedIds: SessionLifecycleIdNamespaces = Object.freeze({

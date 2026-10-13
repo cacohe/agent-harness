@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path';
+import type { AgentProfile } from '@agent-harness/kernel';
 
 /** Web Host 配置错误。 */
 export class WebUsageError extends Error {
@@ -13,7 +14,7 @@ export interface WebHostConfig {
   readonly maxModelOutputBytes: number;
   readonly maxInputBytes: number;
   readonly sessionIdleTimeoutMs: number;
-  readonly systemPrompt?: string;
+  readonly agentProfile?: AgentProfile;
   readonly model: {
     readonly id: string;
     readonly baseUrl: string;
@@ -42,7 +43,7 @@ export async function readWebConfig(
       'maxModelOutputBytes',
       'maxInputBytes',
       'sessionIdleTimeoutMs',
-      'systemPrompt',
+      'agentProfile',
     ],
   );
   const model = object(root.model, 'model 配置');
@@ -65,15 +66,23 @@ export async function readWebConfig(
       'sessionIdleTimeoutMs',
       60_000,
     ),
-    ...(root.systemPrompt === undefined
-      ? {}
-      : { systemPrompt: text(root.systemPrompt, 'systemPrompt') }),
+    ...(root.agentProfile === undefined ? {} : { agentProfile: agentProfile(root.agentProfile) }),
     model: {
       id: text(model.id, 'model.id'),
       baseUrl: text(model.baseUrl, 'model.baseUrl'),
       model: text(model.model, 'model.model'),
       apiKeyEnv: environmentName(model.apiKeyEnv, 'model.apiKeyEnv'),
     },
+  };
+}
+
+function agentProfile(value: unknown): AgentProfile {
+  const profile = object(value, 'agentProfile');
+  exact(profile, ['id', 'version', 'instructions'], []);
+  return {
+    id: text(profile.id, 'agentProfile.id'),
+    version: text(profile.version, 'agentProfile.version'),
+    instructions: text(profile.instructions, 'agentProfile.instructions'),
   };
 }
 
