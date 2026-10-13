@@ -97,6 +97,8 @@ describe('LocalWebServer', () => {
       const scriptText = await script.text();
       expect(scriptText).toContain('function renderMarkdown');
       expect(scriptText).toContain('restoreSession');
+      expect(scriptText).toContain('PENDING_SUBMISSIONS_KEY');
+      expect(scriptText).toContain('messageIdFor');
       expect(scriptText).toContain('/open');
 
       const icon = await fetch(new URL('/favicon.svg', address));
