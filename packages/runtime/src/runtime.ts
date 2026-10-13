@@ -4,8 +4,8 @@ import { Agent } from '@agent-harness/core';
 import {
   type AgentIdGenerator,
   type AgentObserver,
-  analyzeSessionLifecycle,
   type AttemptId,
+  analyzeSessionLifecycle,
   brandId,
   type MessageId,
   type ModelProvider,

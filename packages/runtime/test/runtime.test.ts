@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   AgentClosedError,
-  analyzeSessionLifecycle,
   AgentIdCollisionError,
   type AgentIdGenerator,
   type AttemptId,
+  analyzeSessionLifecycle,
   brandId,
   type EventEnvelope,
   type MessageId,

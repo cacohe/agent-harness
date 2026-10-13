@@ -39,10 +39,7 @@ export function verifyArchitecture(manifests, sources = []) {
     ['session/session-memory', new Set(['kernel'])],
     ['skills/skill-context', new Set(['kernel'])],
     ['tools/local', new Set(['kernel'])],
-    [
-      'runtime',
-      new Set(['kernel', 'core', 'context/context-runtime']),
-    ],
+    ['runtime', new Set(['kernel', 'core', 'context/context-runtime'])],
     ['test-support', new Set(['kernel', 'core', 'session/session-memory'])],
     [
       'hosts/cli',

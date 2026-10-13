@@ -4,8 +4,8 @@ export * from './agent.js';
 export * from './context.js';
 export * from './facts.js';
 export * from './model.js';
-export * from './session/protocol.js';
 export { analyzeSessionLifecycle } from './session/lifecycle.js';
+export * from './session/protocol.js';
 export * from './tools/protocol.js';
 export {
   CompositeToolCapability,

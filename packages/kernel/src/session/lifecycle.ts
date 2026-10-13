@@ -10,12 +10,12 @@ import {
   type StepOutcome,
   type TurnId,
 } from '../facts.js';
+import type { ToolCallId } from '../tools/protocol.js';
 import {
   SessionLifecycleCorruptionError,
   type SessionLifecycleIdNamespaces,
   type SessionLifecycleRepairPlan,
 } from './protocol.js';
-import type { ToolCallId } from '../tools/protocol.js';
 
 /**
  * 验证完整事件日志的生命周期关系，并为唯一允许的尾部中断生成修复。

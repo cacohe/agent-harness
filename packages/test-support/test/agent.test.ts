@@ -2,9 +2,9 @@ import { BoundedPromptAssembler, CurrentTimeContext } from '@agent-harness/conte
 import { Agent } from '@agent-harness/core';
 import {
   AgentClosedError,
-  analyzeSessionLifecycle,
   type AgentExecutionEvent,
   AgentIdCollisionError,
+  analyzeSessionLifecycle,
   brandId,
   type EventEnvelope,
   type ExecutionId,
