@@ -98,6 +98,7 @@ describe('架构依赖规则', () => {
     expect(
       verifyArchitecture(manifests, [
         ['core', 'src/lifecycle.ts', 'export function buildTerminalEvents() {}'],
+        ['core', 'src/inbox.ts', 'export class AgentInbox {}'],
       ]),
     ).toEqual([]);
   });

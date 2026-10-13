@@ -7,6 +7,7 @@ export function verifyArchitecture(manifests, sources = []) {
     'src/agent-id-reservations.ts',
     'src/agent.ts',
     'src/execution-support.ts',
+    'src/inbox.ts',
     'src/index.ts',
     'src/lifecycle.ts',
   ]);
