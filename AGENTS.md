@@ -8,6 +8,7 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 - 实现重要架构变更前或同时在 `docs/decisions/` 记录决定。
 - 每个 Coding Agent 或 Review Agent 使用独立 Git worktree；编码与审查必须由不同 Agent 执行。
 - 新增特性必须在独立 feature branch 上完成并创建 Pull Request；禁止直接向 `main` 提交或推送。修复 PR 审查意见继续提交到该 feature branch。
+- Pull Request 的 CI 通过后可以直接合并，不需要人工确认；合并前仍须满足适用的独立审查要求。
 - 人类所有者决定架构。Agent 可以实现已接受的决定、指出缺失决定并提出具体选项，但不能静默选择实质不同的架构。
 - 交付变更前运行 `pnpm run check`，并报告实际执行的命令。
 
