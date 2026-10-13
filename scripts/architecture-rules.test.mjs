@@ -37,10 +37,7 @@ describe('架构依赖规则', () => {
 
   it('禁止 kernel、core 和 adapters 向外依赖', () => {
     expect(
-      verifyArchitecture([
-        ...workspace,
-        manifest('unclassified', '@agent-harness/unclassified'),
-      ]),
+      verifyArchitecture([...workspace, manifest('unclassified', '@agent-harness/unclassified')]),
     ).toContain('unclassified: package path is not classified');
     expect(
       verifyArchitecture([
