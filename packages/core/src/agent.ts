@@ -1,4 +1,4 @@
-/** Agent 核心循环状态机，只依赖 Kernel 定义并由组合方注入的 capability 接口。 */
+/** 会话级串行 Agent 执行器，只依赖 Kernel 定义并由组合方注入 capability 接口。 */
 import {
   AgentClosedError,
   type AgentExecutionEvent,
@@ -38,8 +38,8 @@ import { assertCumulativeUsage } from './model-usage.js';
 const textEncoder = new TextEncoder();
 
 /**
- * 只依赖 Kernel capability 接口的可重放 Agent 核心循环。
- * 同一时刻至多一个活动 turn；已打开的 turn/step 在成功、失败与取消路径上恰好结算一次。
+ * 只依赖 Kernel capability 接口的会话级串行 Agent 执行器。
+ * 它接纳输入、按 FIFO 调度 turn，并保证已打开的 turn/step 在成功、失败与取消路径上恰好结算一次。
  */
 export class Agent {
   readonly #model: ModelProvider;
@@ -107,7 +107,7 @@ export class Agent {
     this.#inbox.rejectAll(new AgentClosedError('Agent 已停止接纳新的 run'));
   }
 
-  /** 等待当前活动彻底离开 Agent 状态机。 */
+  /** 等待当前 drain 完成，其中包含活动 turn 与已接纳的排队输入。 */
   async whenIdle(): Promise<void> {
     for (;;) {
       const draining = this.#draining;
@@ -118,8 +118,8 @@ export class Agent {
   }
 
   /**
-   * 执行一次 turn：写入用户消息，循环 step，直至无工具调用或触及步数上限。
-   * 失败或取消时用独立结算信号补写尚未闭合的 turn/step 事件，再重新抛出原错误。
+   * 接纳一条用户输入，按 FIFO 等待执行，并返回其对应 turn 的最终助手消息。
+   * 若在领取前取消，仅从等待队列移除，不会写入会话事件。
    */
   run(
     message: UserMessage,
@@ -150,19 +150,20 @@ export class Agent {
       }
       externalSignal.addEventListener('abort', onAbort, { once: true });
       this.#inbox.enqueue(queued);
-      this.#startDraining();
+      this.#ensureInboxDraining();
     });
   }
 
-  /** 启动且仅启动一个 drain；每个排队输入的失败不会阻断后续输入。 */
-  #startDraining(): void {
+  /** 确保只有一个 FIFO drain；单个输入失败不会阻断后续输入。 */
+  #ensureInboxDraining(): void {
     if (this.#draining !== undefined) return;
     this.#draining = this.#drainInbox().finally(() => {
       this.#draining = undefined;
-      if (this.#inbox.hasPending) this.#startDraining();
+      if (this.#inbox.hasPending) this.#ensureInboxDraining();
     });
   }
 
+  /** 串行领取已接纳输入，并仅结算各自调用，不让单项失败中断后续领取。 */
   async #drainInbox(): Promise<void> {
     for (;;) {
       const queued = this.#inbox.claim();

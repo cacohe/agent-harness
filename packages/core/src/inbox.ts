@@ -9,7 +9,7 @@ export interface QueuedRun {
   readonly clearAbortListener: () => void;
 }
 
-/** 串行领取用户输入，保证同一会话在任意时刻只有一个 writer。 */
+/** 保存尚未开始的用户输入，由 Agent 以 FIFO 顺序串行领取。 */
 export class AgentInbox {
   readonly #runs: QueuedRun[] = [];
 

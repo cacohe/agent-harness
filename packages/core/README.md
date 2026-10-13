@@ -2,7 +2,7 @@
 
 ## 职责
 
-实现单一 Agent 核心循环状态机，包括 FIFO inbox、turn/step 生命周期、流式 assistant 结算、工具续步与取消。
+实现单一会话级串行 Agent 执行器：接纳输入并以 FIFO 调度 turn，执行 turn/step 生命周期、流式 assistant 结算、工具续步与取消。
 
 ## 使用
 
