@@ -1305,7 +1305,7 @@ describe('Agent', () => {
     ]);
   });
 
-  it('工具抛错时报告失败，终态 ToolResult 仍报告完成', async () => {
+  it('工具抛错或取消时报告对应终态，终态 ToolResult 仍报告完成', async () => {
     const callId = brandId<'ToolCallId'>('call-1') as ToolCallId;
     const createAgent = (
       execute: ScriptedToolCapability['execute'],
@@ -1359,7 +1359,7 @@ describe('Agent', () => {
     await expect(cancelledRun).rejects.toThrow('cancel tool');
     expect(cancelledThrownObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
       expect.objectContaining({ type: 'tool.started' }),
-      expect.objectContaining({ type: 'tool.failed', errorName: 'Error' }),
+      expect.objectContaining({ type: 'tool.cancelled', errorName: 'Error' }),
     ]);
 
     const resultObserved: AgentExecutionEvent[] = [];

@@ -74,7 +74,7 @@ export type AgentExecutionEvent =
       readonly status: 'success' | 'failure' | 'cancelled' | 'unknown';
     }
   | {
-      readonly type: 'tool.failed';
+      readonly type: 'tool.failed' | 'tool.cancelled';
       readonly sessionId: SessionId;
       readonly turnId: TurnId;
       readonly stepId: StepId;

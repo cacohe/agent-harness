@@ -448,7 +448,7 @@ export class Agent {
       } catch (error) {
         if (toolStartedAt !== undefined)
           this.#notifyExecution({
-            type: 'tool.failed',
+            type: signal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
             sessionId: this.#session.sessionId,
             turnId,
             stepId,
