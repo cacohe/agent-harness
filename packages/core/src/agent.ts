@@ -9,6 +9,7 @@ import {
   type AgentRunOptions,
   type AssistantMessage,
   assertNever,
+  type Clock,
   type ExecutionMetadata,
   isAbortError,
   type ModelProvider,
@@ -48,6 +49,7 @@ export class Agent {
   readonly #ids: AgentIdGenerator;
   readonly #maxSteps: number;
   readonly #settlementSignals: SettlementSignalFactory;
+  readonly #clock: Clock | undefined;
   readonly #prompts: PromptAssembler;
   readonly #runTimeoutMs: number | undefined;
   readonly #maxModelOutputBytes: number | undefined;
@@ -84,6 +86,7 @@ export class Agent {
     this.#ids = options.ids;
     this.#maxSteps = options.maxSteps;
     this.#settlementSignals = options.settlementSignals;
+    this.#clock = options.clock;
     this.#prompts = options.prompts;
     this.#runTimeoutMs = options.runTimeoutMs;
     this.#maxModelOutputBytes = options.maxModelOutputBytes;
@@ -299,9 +302,6 @@ export class Agent {
       signal,
     );
 
-    // 准备模型
-    const prepared = await this.#model.prepare(signal);
-    throwIfAborted(signal);
     const attempt: Attempt = {
       attemptId: this.#reservations.attempt(this.#ids.attempt()),
       partialText: '',
@@ -315,47 +315,82 @@ export class Agent {
     let inputTokens = 0;
     let outputTokens = 0;
     let usageSequence = 0;
+    const modelStartedAt = this.#now();
+    if (modelStartedAt !== undefined)
+      this.#notifyExecution({
+        type: 'model.started',
+        sessionId: this.#session.sessionId,
+        turnId,
+        stepId,
+        attemptId: attempt.attemptId,
+        startedAt: modelStartedAt,
+      });
 
-    // 循环获取模型流式生成时的中间输出
-    for await (const event of prepared.stream(request, signal)) {
+    try {
+      const prepared = await this.#model.prepare(signal);
       throwIfAborted(signal);
-      this.#notifyStream(event);
-      switch (event.type) {
-        // 文本增量
-        case 'text.delta':
-          outputBytes += utf8ByteLength(event.text);
-          this.#assertOutputBudget(outputBytes);
-          attempt.partialText += event.text;
-          break;
+      // 循环获取模型流式生成时的中间输出
+      for await (const event of prepared.stream(request, signal)) {
+        throwIfAborted(signal);
+        this.#notifyStream(event);
+        switch (event.type) {
+          // 文本增量
+          case 'text.delta':
+            outputBytes += utf8ByteLength(event.text);
+            this.#assertOutputBudget(outputBytes);
+            attempt.partialText += event.text;
+            break;
 
-        // 工具调用
-        case 'tool.call':
-          outputBytes += utf8ByteLength(JSON.stringify(event.call));
-          this.#assertOutputBudget(outputBytes);
-          this.#reservations.toolCall(event.call.id);
-          attempt.observedToolCalls.push(event.call);
-          break;
+          // 工具调用
+          case 'tool.call':
+            outputBytes += utf8ByteLength(JSON.stringify(event.call));
+            this.#assertOutputBudget(outputBytes);
+            this.#reservations.toolCall(event.call.id);
+            attempt.observedToolCalls.push(event.call);
+            break;
 
-        // 使用量
-        case 'usage':
-          assertCumulativeUsage(event.inputTokens, event.outputTokens, inputTokens, outputTokens);
-          usageSequence += 1;
-          this.#notifyExecution({
-            type: 'model.usage',
-            sessionId: this.#session.sessionId,
-            turnId,
-            stepId,
-            attemptId: attempt.attemptId,
-            usageSequence,
-            inputTokensDelta: event.inputTokens - inputTokens,
-            outputTokensDelta: event.outputTokens - outputTokens,
-          });
-          inputTokens = event.inputTokens;
-          outputTokens = event.outputTokens;
-          break;
-        default:
-          assertNever(event);
+          // 使用量
+          case 'usage':
+            assertCumulativeUsage(event.inputTokens, event.outputTokens, inputTokens, outputTokens);
+            usageSequence += 1;
+            this.#notifyExecution({
+              type: 'model.usage',
+              sessionId: this.#session.sessionId,
+              turnId,
+              stepId,
+              attemptId: attempt.attemptId,
+              usageSequence,
+              inputTokensDelta: event.inputTokens - inputTokens,
+              outputTokensDelta: event.outputTokens - outputTokens,
+            });
+            inputTokens = event.inputTokens;
+            outputTokens = event.outputTokens;
+            break;
+          default:
+            assertNever(event);
+        }
       }
+      if (modelStartedAt !== undefined)
+        this.#notifyExecution({
+          type: 'model.completed',
+          sessionId: this.#session.sessionId,
+          turnId,
+          stepId,
+          attemptId: attempt.attemptId,
+          durationMs: this.#durationSince(modelStartedAt),
+        });
+    } catch (error) {
+      if (modelStartedAt !== undefined)
+        this.#notifyExecution({
+          type: 'model.failed',
+          sessionId: this.#session.sessionId,
+          turnId,
+          stepId,
+          attemptId: attempt.attemptId,
+          durationMs: this.#durationSince(modelStartedAt),
+          ...(error instanceof Error ? { errorName: error.name } : {}),
+        });
+      throw error;
     }
     throwIfAborted(signal);
 
@@ -390,11 +425,35 @@ export class Agent {
 
     // 执行工具调用
     for (const call of attempt.observedToolCalls) {
+      const toolStartedAt = this.#now();
+      if (toolStartedAt !== undefined)
+        this.#notifyExecution({
+          type: 'tool.started',
+          sessionId: this.#session.sessionId,
+          turnId,
+          stepId,
+          attemptId: attempt.attemptId,
+          toolCallId: call.id,
+          toolName: call.name,
+          startedAt: toolStartedAt,
+        });
       const result = await this.#tools.execute(call, {
         signal,
         ...(execution === undefined ? {} : { execution }),
       });
       attempt.toolResults.set(call.id, result);
+      if (toolStartedAt !== undefined)
+        this.#notifyExecution({
+          type: 'tool.completed',
+          sessionId: this.#session.sessionId,
+          turnId,
+          stepId,
+          attemptId: attempt.attemptId,
+          toolCallId: call.id,
+          toolName: call.name,
+          durationMs: this.#durationSince(toolStartedAt),
+          status: result.status,
+        });
       // 提交工具调用完成事件
       await this.#append([{ type: 'tool.completed', turnId, stepId, result }], signal);
       attempt.persistedToolResults.add(call.id);
@@ -411,6 +470,21 @@ export class Agent {
     if (this.#maxModelOutputBytes !== undefined && bytes > this.#maxModelOutputBytes) {
       throw new Error(`模型输出超过 maxModelOutputBytes (${this.#maxModelOutputBytes})`);
     }
+  }
+
+  #now(): Date | undefined {
+    if (this.#clock === undefined) return undefined;
+    const value = this.#clock.now();
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+      throw new TypeError('Clock.now 必须返回有效 Date');
+    }
+    return value;
+  }
+
+  #durationSince(startedAt: Date): number {
+    const finishedAt = this.#now();
+    if (finishedAt === undefined) throw new Error('执行观测时钟不可用');
+    return Math.max(0, finishedAt.getTime() - startedAt.getTime());
   }
 
   /** 提交会话事件，并向 observer 发送与持久化事实一致的通知。 */

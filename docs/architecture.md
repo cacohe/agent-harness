@@ -43,6 +43,8 @@ Kernel 以 context、skills、memory、模型、会话和工具等能力域定�
 
 `AgentProfile` 带 ID、版本和静态指令。Runtime 只在使用默认 prompt 组装器时冻结并注入它；自定义 `PromptAssembler` 完全拥有组装顺序。Profile 当前不写入会话事件，审计需求必须使用独立契约。
 
+`AgentObserver` 接收持久 `session.event`、模型 usage 及模型/工具的开始、完成、失败观测事件。Runtime 注入的 Clock 使这些事件包含稳定关联 ID 与耗时；投递是最佳努力，可靠 trace 与审计由 Host 或 Platform adapter 的 outbox 实现。
+
 工具领域只位于 `kernel/tools/protocol.ts` 与 `kernel/tools/runtime.ts`。`PolicyControlledTools` 在副作用前调用策略；Sandbox、Platform 许可与 MCP 通过 adapters 接入。Kernel 和 Core 不依赖外部网络协议、账户模型、SDK、文件系统或进程。
 
 ## 生命周期

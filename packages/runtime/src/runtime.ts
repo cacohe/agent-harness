@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BoundedPromptAssembler } from '@agent-harness/adapters/context';
+import { BoundedPromptAssembler, SystemClock } from '@agent-harness/adapters/context';
 import { Agent } from '@agent-harness/core';
 import {
   type AgentIdGenerator,
@@ -8,6 +8,7 @@ import {
   type AttemptId,
   analyzeSessionLifecycle,
   brandId,
+  type Clock,
   type MessageId,
   type ModelProvider,
   PolicyControlledTools,
@@ -69,6 +70,7 @@ export interface AgentRuntimeOptions {
   readonly prompts?: PromptAssembler;
   readonly observers?: readonly AgentObserver[];
   readonly idGenerators?: AgentIdGeneratorFactory;
+  readonly clock?: Clock;
 }
 
 export interface RuntimeOperationOptions {
@@ -184,6 +186,7 @@ export class AgentRuntime {
           ids: generatedIds,
           maxSteps: this.#options.maxSteps,
           settlementSignals: this.#settlementSignals,
+          clock: this.#options.clock ?? new SystemClock(),
           prompts:
             this.#options.prompts ??
             new BoundedPromptAssembler({

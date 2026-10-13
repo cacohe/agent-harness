@@ -1,4 +1,4 @@
-import type { PromptAssembler } from './context/protocol.js';
+import type { Clock, PromptAssembler } from './context/protocol.js';
 import type {
   AttemptId,
   ExecutionId,
@@ -34,6 +34,44 @@ export interface AgentObserver {
 export type AgentExecutionEvent =
   | { readonly type: 'session.event'; readonly envelope: EventEnvelope }
   | {
+      readonly type: 'model.started';
+      readonly sessionId: SessionId;
+      readonly turnId: TurnId;
+      readonly stepId: StepId;
+      readonly attemptId: AttemptId;
+      readonly startedAt: Date;
+    }
+  | {
+      readonly type: 'model.completed' | 'model.failed';
+      readonly sessionId: SessionId;
+      readonly turnId: TurnId;
+      readonly stepId: StepId;
+      readonly attemptId: AttemptId;
+      readonly durationMs: number;
+      readonly errorName?: string;
+    }
+  | {
+      readonly type: 'tool.started';
+      readonly sessionId: SessionId;
+      readonly turnId: TurnId;
+      readonly stepId: StepId;
+      readonly attemptId: AttemptId;
+      readonly toolCallId: ToolCallId;
+      readonly toolName: string;
+      readonly startedAt: Date;
+    }
+  | {
+      readonly type: 'tool.completed';
+      readonly sessionId: SessionId;
+      readonly turnId: TurnId;
+      readonly stepId: StepId;
+      readonly attemptId: AttemptId;
+      readonly toolCallId: ToolCallId;
+      readonly toolName: string;
+      readonly durationMs: number;
+      readonly status: 'success' | 'failure' | 'cancelled' | 'unknown';
+    }
+  | {
       readonly type: 'model.usage';
       readonly sessionId: SessionId;
       readonly turnId: TurnId;
@@ -66,6 +104,8 @@ export interface AgentOptions {
   readonly ids: AgentIdGenerator;
   readonly maxSteps: number;
   readonly settlementSignals: SettlementSignalFactory;
+  /** 由组合方注入；执行观测不读取进程全局时间。 */
+  readonly clock?: Clock;
   /** 由 Runtime 或 Host 显式注入；Core 不拥有默认 prompt 策略。 */
   readonly prompts: PromptAssembler;
   readonly runTimeoutMs?: number;
