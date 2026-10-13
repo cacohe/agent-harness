@@ -12,7 +12,7 @@ Agent Harness Lab 不是 prompt wrapper，也不是多租户 Agent SaaS。它用
 
 - 单 writer、可重放的会话事实与中断恢复。
 - turn/step 的成功、失败、取消恰好一次结算。
-- 模型 attempt、工具调用、工具载荷与输入队列的独立资源边界。
+- 模型 attempt、工具调用、工具载荷与输入队列的独立资源边界（工具载荷预算不等于事件总大小，见 [ADR 0053](docs/decisions/0053-runtime-resource-governance.md)）。
 - 工具授权、MCP、Skills、Memory 与模型 provider 的显式替换接缝。
 - 稳定 `messageId` 的提交幂等性与可关联的执行观测事件。
 
