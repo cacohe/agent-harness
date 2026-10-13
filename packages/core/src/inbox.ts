@@ -43,4 +43,9 @@ export class AgentInbox {
   get hasPending(): boolean {
     return this.#runs.length > 0;
   }
+
+  /** 当前尚未开始的输入数量。 */
+  get size(): number {
+    return this.#runs.length;
+  }
 }

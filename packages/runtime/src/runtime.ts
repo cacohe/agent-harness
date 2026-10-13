@@ -27,8 +27,12 @@ import { flushAndClose, waitFor } from './lifecycle.js';
 
 const neverAbortedSignal = new AbortController().signal;
 const DEFAULT_RUN_TIMEOUT_MS = 120_000;
+const DEFAULT_MODEL_ATTEMPT_TIMEOUT_MS = 90_000;
+const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_MODEL_OUTPUT_BYTES = 1_048_576;
+const DEFAULT_MAX_TOOL_RESULT_BYTES = 1_048_576;
 const DEFAULT_MAX_INPUT_BYTES = 1_048_576;
+const DEFAULT_MAX_QUEUED_RUNS = 32;
 
 /** 为新建或恢复的 Agent 创建一组标识符。 */
 export interface AgentIdGeneratorFactory {
@@ -63,8 +67,12 @@ export interface AgentRuntimeOptions {
   readonly maxSteps: number;
   readonly settlementTimeoutMs: number;
   readonly runTimeoutMs?: number;
+  readonly modelAttemptTimeoutMs?: number;
+  readonly toolTimeoutMs?: number;
   readonly maxModelOutputBytes?: number;
+  readonly maxToolResultBytes?: number;
   readonly maxInputBytes?: number;
+  readonly maxQueuedRuns?: number;
   /** 由 Host 或 Platform 解析并提供的静态 Agent 指令。 */
   readonly agentProfile?: AgentProfile;
   readonly prompts?: PromptAssembler;
@@ -116,8 +124,12 @@ export class AgentRuntime {
     }
     for (const [name, value] of [
       ['runTimeoutMs', options.runTimeoutMs],
+      ['modelAttemptTimeoutMs', options.modelAttemptTimeoutMs],
+      ['toolTimeoutMs', options.toolTimeoutMs],
       ['maxModelOutputBytes', options.maxModelOutputBytes],
+      ['maxToolResultBytes', options.maxToolResultBytes],
       ['maxInputBytes', options.maxInputBytes],
+      ['maxQueuedRuns', options.maxQueuedRuns],
     ] as const) {
       if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
         throw new TypeError(`${name} 必须是正整数`);
@@ -196,7 +208,12 @@ export class AgentRuntime {
                 : { systemPrompt: this.#agentProfile.instructions }),
             }),
           runTimeoutMs: this.#options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS,
+          modelAttemptTimeoutMs:
+            this.#options.modelAttemptTimeoutMs ?? DEFAULT_MODEL_ATTEMPT_TIMEOUT_MS,
+          toolTimeoutMs: this.#options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS,
           maxModelOutputBytes: this.#options.maxModelOutputBytes ?? DEFAULT_MAX_MODEL_OUTPUT_BYTES,
+          maxToolResultBytes: this.#options.maxToolResultBytes ?? DEFAULT_MAX_TOOL_RESULT_BYTES,
+          maxQueuedRuns: this.#options.maxQueuedRuns ?? DEFAULT_MAX_QUEUED_RUNS,
           ...(this.#options.observers === undefined ? {} : { observers: this.#options.observers }),
           reservedIds: usedIds,
         });

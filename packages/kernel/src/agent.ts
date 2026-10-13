@@ -39,6 +39,7 @@ export type AgentExecutionEvent =
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
+      readonly executionId?: ExecutionId;
       readonly startedAt: Date;
     }
   | {
@@ -47,6 +48,7 @@ export type AgentExecutionEvent =
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
+      readonly executionId?: ExecutionId;
       /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
       readonly durationMs?: number;
       readonly errorName?: string;
@@ -57,6 +59,7 @@ export type AgentExecutionEvent =
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
+      readonly executionId?: ExecutionId;
       readonly toolCallId: ToolCallId;
       readonly toolName: string;
       readonly startedAt: Date;
@@ -67,6 +70,7 @@ export type AgentExecutionEvent =
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
+      readonly executionId?: ExecutionId;
       readonly toolCallId: ToolCallId;
       readonly toolName: string;
       /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
@@ -79,6 +83,7 @@ export type AgentExecutionEvent =
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
+      readonly executionId?: ExecutionId;
       readonly toolCallId: ToolCallId;
       readonly toolName: string;
       /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
@@ -91,6 +96,7 @@ export type AgentExecutionEvent =
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
+      readonly executionId?: ExecutionId;
       readonly usageSequence: number;
       readonly inputTokensDelta: number;
       readonly outputTokensDelta: number;
@@ -123,7 +129,15 @@ export interface AgentOptions {
   /** 由 Runtime 或 Host 显式注入；Core 不拥有默认 prompt 策略。 */
   readonly prompts: PromptAssembler;
   readonly runTimeoutMs?: number;
+  /** 单次模型 prepare 与流式调用的协作式 deadline。 */
+  readonly modelAttemptTimeoutMs?: number;
+  /** 单次工具调用的协作式 deadline。 */
+  readonly toolTimeoutMs?: number;
   readonly maxModelOutputBytes?: number;
+  /** 单个工具返回载荷写入会话前允许的最大 UTF-8 字节数；不含协议元数据。 */
+  readonly maxToolResultBytes?: number;
+  /** 等待 FIFO 领取的输入上限；不包含当前活动 turn。 */
+  readonly maxQueuedRuns?: number;
   readonly observers?: readonly AgentObserver[];
   readonly reservedIds?: AgentIdReservationSeed;
 }
@@ -151,6 +165,11 @@ export interface ExecutionMetadata {
 /** Agent 已关闭错误。 */
 export class AgentClosedError extends Error {
   override readonly name = 'AgentClosedError';
+}
+
+/** 表示会话的 FIFO 输入队列已经达到容量上限。 */
+export class AgentBusyError extends Error {
+  override readonly name = 'AgentBusyError';
 }
 
 /** Agent 标识符冲突错误。 */

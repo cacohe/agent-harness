@@ -1,5 +1,6 @@
 /** 会话级串行 Agent 执行器，只依赖 Kernel 定义并由组合方注入 capability 接口。 */
 import {
+  AgentBusyError,
   AgentClosedError,
   type AgentExecutionEvent,
   type AgentIdGenerator,
@@ -10,6 +11,7 @@ import {
   type AssistantMessage,
   assertNever,
   type Clock,
+  type ExecutionId,
   type ExecutionMetadata,
   isAbortError,
   type ModelProvider,
@@ -38,6 +40,10 @@ import {
 import { assertCumulativeUsage } from './model-usage.js';
 
 const textEncoder = new TextEncoder();
+const DEFAULT_MODEL_ATTEMPT_TIMEOUT_MS = 90_000;
+const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_TOOL_RESULT_BYTES = 1_048_576;
+const DEFAULT_MAX_QUEUED_RUNS = 32;
 
 /**
  * 只依赖 Kernel capability 接口的会话级串行 Agent 执行器。
@@ -53,7 +59,11 @@ export class Agent {
   readonly #clock: Clock | undefined;
   readonly #prompts: PromptAssembler;
   readonly #runTimeoutMs: number | undefined;
+  readonly #modelAttemptTimeoutMs: number;
+  readonly #toolTimeoutMs: number;
   readonly #maxModelOutputBytes: number | undefined;
+  readonly #maxToolResultBytes: number;
+  readonly #maxQueuedRuns: number;
   readonly #observers: readonly AgentObserver[];
   readonly #reservations: AgentIdReservations; // 标识符预留池，保证同一个 Agent 里，turn / step / attempt / message / toolCall 的 ID 不重复
   readonly #inbox = new AgentInbox();
@@ -67,17 +77,17 @@ export class Agent {
     if (!Number.isInteger(options.maxSteps) || options.maxSteps < 1) {
       throw new Error('maxSteps must be a positive integer');
     }
-    if (
-      options.runTimeoutMs !== undefined &&
-      (!Number.isSafeInteger(options.runTimeoutMs) || options.runTimeoutMs < 1)
-    ) {
-      throw new TypeError('runTimeoutMs 必须是正整数');
-    }
-    if (
-      options.maxModelOutputBytes !== undefined &&
-      (!Number.isSafeInteger(options.maxModelOutputBytes) || options.maxModelOutputBytes < 1)
-    ) {
-      throw new TypeError('maxModelOutputBytes 必须是正整数');
+    for (const [name, value] of [
+      ['runTimeoutMs', options.runTimeoutMs],
+      ['modelAttemptTimeoutMs', options.modelAttemptTimeoutMs],
+      ['toolTimeoutMs', options.toolTimeoutMs],
+      ['maxModelOutputBytes', options.maxModelOutputBytes],
+      ['maxToolResultBytes', options.maxToolResultBytes],
+      ['maxQueuedRuns', options.maxQueuedRuns],
+    ] as const) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
+        throw new TypeError(`${name} 必须是正整数`);
+      }
     }
 
     // 赋值参数
@@ -90,7 +100,11 @@ export class Agent {
     this.#clock = options.clock;
     this.#prompts = options.prompts;
     this.#runTimeoutMs = options.runTimeoutMs;
+    this.#modelAttemptTimeoutMs = options.modelAttemptTimeoutMs ?? DEFAULT_MODEL_ATTEMPT_TIMEOUT_MS;
+    this.#toolTimeoutMs = options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     this.#maxModelOutputBytes = options.maxModelOutputBytes;
+    this.#maxToolResultBytes = options.maxToolResultBytes ?? DEFAULT_MAX_TOOL_RESULT_BYTES;
+    this.#maxQueuedRuns = options.maxQueuedRuns ?? DEFAULT_MAX_QUEUED_RUNS;
     this.#observers = options.observers ?? [];
     this.#reservations = new AgentIdReservations(options.reservedIds);
   }
@@ -150,6 +164,10 @@ export class Agent {
       };
       if (externalSignal.aborted) {
         reject(externalSignal.reason);
+        return;
+      }
+      if (this.#inbox.size >= this.#maxQueuedRuns) {
+        reject(new AgentBusyError(`Agent 输入队列已达到上限 ${this.#maxQueuedRuns}`));
         return;
       }
       externalSignal.addEventListener('abort', onAbort, { once: true });
@@ -291,6 +309,7 @@ export class Agent {
     signal: AbortSignal,
     execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
+    const executionEvent = this.#executionEvent(execution);
     // 提交 step 开始事件
     const stepId = step.stepId;
     await this.#append([{ type: 'step.started', turnId, stepId }], signal);
@@ -304,8 +323,9 @@ export class Agent {
     );
 
     // 准备模型；准备失败尚未形成 attempt，保持其不会消耗 attempt 标识符的恢复语义。
-    const prepared = await this.#model.prepare(signal);
-    throwIfAborted(signal);
+    const modelSignal = this.#deadlineSignal(signal, this.#modelAttemptTimeoutMs);
+    const prepared = await this.#model.prepare(modelSignal);
+    throwIfAborted(modelSignal);
     const attempt: Attempt = {
       attemptId: this.#reservations.attempt(this.#ids.attempt()),
       partialText: '',
@@ -327,13 +347,14 @@ export class Agent {
         turnId,
         stepId,
         attemptId: attempt.attemptId,
+        ...executionEvent,
         startedAt: modelStartedAt,
       });
 
     try {
       // 循环获取模型流式生成时的中间输出
-      for await (const event of prepared.stream(request, signal)) {
-        throwIfAborted(signal);
+      for await (const event of prepared.stream(request, modelSignal)) {
+        throwIfAborted(modelSignal);
         this.#notifyStream(event);
         switch (event.type) {
           // 文本增量
@@ -361,6 +382,7 @@ export class Agent {
               turnId,
               stepId,
               attemptId: attempt.attemptId,
+              ...executionEvent,
               usageSequence,
               inputTokensDelta: event.inputTokens - inputTokens,
               outputTokensDelta: event.outputTokens - outputTokens,
@@ -379,16 +401,18 @@ export class Agent {
           turnId,
           stepId,
           attemptId: attempt.attemptId,
+          ...executionEvent,
           ...this.#withDuration(modelStartedAt),
         });
     } catch (error) {
       if (modelStartedAt !== undefined)
         this.#notifyExecution({
-          type: signal.aborted || isAbortError(error) ? 'model.cancelled' : 'model.failed',
+          type: modelSignal.aborted || isAbortError(error) ? 'model.cancelled' : 'model.failed',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
           attemptId: attempt.attemptId,
+          ...executionEvent,
           ...this.#withDuration(modelStartedAt),
           ...(error instanceof Error ? { errorName: error.name } : {}),
         });
@@ -427,6 +451,7 @@ export class Agent {
 
     // 执行工具调用
     for (const call of attempt.observedToolCalls) {
+      const toolSignal = this.#deadlineSignal(signal, this.#toolTimeoutMs);
       const toolStartedAt = this.#now();
       if (toolStartedAt !== undefined)
         this.#notifyExecution({
@@ -435,6 +460,7 @@ export class Agent {
           turnId,
           stepId,
           attemptId: attempt.attemptId,
+          ...executionEvent,
           toolCallId: call.id,
           toolName: call.name,
           startedAt: toolStartedAt,
@@ -442,24 +468,34 @@ export class Agent {
       let result: ToolResult;
       try {
         result = await this.#tools.execute(call, {
-          signal,
+          signal: toolSignal,
           ...(execution === undefined ? {} : { execution }),
         });
       } catch (error) {
-        if (toolStartedAt !== undefined)
-          this.#notifyExecution({
-            type: signal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
-            sessionId: this.#session.sessionId,
-            turnId,
-            stepId,
-            attemptId: attempt.attemptId,
-            toolCallId: call.id,
-            toolName: call.name,
-            ...this.#withDuration(toolStartedAt),
-            ...(error instanceof Error ? { errorName: error.name } : {}),
-          });
-        throw error;
+        if (toolSignal.aborted && !signal.aborted) {
+          result = {
+            status: 'cancelled',
+            callId: call.id,
+            reason: `工具调用超过 toolTimeoutMs (${this.#toolTimeoutMs})`,
+          };
+        } else {
+          if (toolStartedAt !== undefined)
+            this.#notifyExecution({
+              type: toolSignal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
+              sessionId: this.#session.sessionId,
+              turnId,
+              stepId,
+              attemptId: attempt.attemptId,
+              ...executionEvent,
+              toolCallId: call.id,
+              toolName: call.name,
+              ...this.#withDuration(toolStartedAt),
+              ...(error instanceof Error ? { errorName: error.name } : {}),
+            });
+          throw error;
+        }
       }
+      result = this.#boundToolResult(result);
       attempt.toolResults.set(call.id, result);
       if (toolStartedAt !== undefined)
         this.#notifyExecution({
@@ -468,6 +504,7 @@ export class Agent {
           turnId,
           stepId,
           attemptId: attempt.attemptId,
+          ...executionEvent,
           toolCallId: call.id,
           toolName: call.name,
           ...this.#withDuration(toolStartedAt),
@@ -489,6 +526,46 @@ export class Agent {
     if (this.#maxModelOutputBytes !== undefined && bytes > this.#maxModelOutputBytes) {
       throw new Error(`模型输出超过 maxModelOutputBytes (${this.#maxModelOutputBytes})`);
     }
+  }
+
+  /** 局部 deadline 只能缩短父 turn 的有效期，不能延长或绕过取消。 */
+  #deadlineSignal(parent: AbortSignal, timeoutMs: number): AbortSignal {
+    return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)]);
+  }
+
+  /** 限制工具返回的可变载荷，避免其无限写入会话与后续 prompt。 */
+  #boundToolResult(result: ToolResult): ToolResult {
+    const bytes = utf8ByteLength(JSON.stringify(this.#toolResultPayload(result)));
+    if (bytes <= this.#maxToolResultBytes) return result;
+    return {
+      status: 'failure',
+      callId: result.callId,
+      error: {
+        name: 'ToolResultTooLargeError',
+        message: `工具结果超过 maxToolResultBytes (${this.#maxToolResultBytes})`,
+      },
+    };
+  }
+
+  /** 不把协议元数据计入预算；预算针对不受 Core 控制的工具返回载荷。 */
+  #toolResultPayload(result: ToolResult): unknown {
+    switch (result.status) {
+      case 'success':
+        return result.output;
+      case 'failure':
+        return result.error;
+      case 'cancelled':
+      case 'unknown':
+        return result.reason;
+      default:
+        return assertNever(result);
+    }
+  }
+
+  #executionEvent(execution: ExecutionMetadata | undefined): {
+    readonly executionId?: ExecutionId;
+  } {
+    return execution === undefined ? {} : { executionId: execution.id };
   }
 
   #now(): Date | undefined {

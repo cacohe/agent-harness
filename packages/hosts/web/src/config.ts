@@ -11,8 +11,12 @@ export interface WebHostConfig {
   readonly maxSteps: number;
   readonly settlementTimeoutMs: number;
   readonly runTimeoutMs: number;
+  readonly modelAttemptTimeoutMs: number;
+  readonly toolTimeoutMs: number;
   readonly maxModelOutputBytes: number;
+  readonly maxToolResultBytes: number;
   readonly maxInputBytes: number;
+  readonly maxQueuedRuns: number;
   readonly sessionIdleTimeoutMs: number;
   readonly agentProfile?: AgentProfile;
   readonly model: {
@@ -40,8 +44,12 @@ export async function readWebConfig(
     ['sessionRoot', 'maxSteps', 'settlementTimeoutMs', 'model'],
     [
       'runTimeoutMs',
+      'modelAttemptTimeoutMs',
+      'toolTimeoutMs',
       'maxModelOutputBytes',
+      'maxToolResultBytes',
       'maxInputBytes',
+      'maxQueuedRuns',
       'sessionIdleTimeoutMs',
       'agentProfile',
     ],
@@ -55,12 +63,20 @@ export async function readWebConfig(
     maxSteps: positive(root.maxSteps, 'maxSteps'),
     settlementTimeoutMs: positive(root.settlementTimeoutMs, 'settlementTimeoutMs'),
     runTimeoutMs: optionalPositive(root.runTimeoutMs, 'runTimeoutMs', 120_000),
+    modelAttemptTimeoutMs: optionalPositive(
+      root.modelAttemptTimeoutMs,
+      'modelAttemptTimeoutMs',
+      90_000,
+    ),
+    toolTimeoutMs: optionalPositive(root.toolTimeoutMs, 'toolTimeoutMs', 30_000),
     maxModelOutputBytes: optionalPositive(
       root.maxModelOutputBytes,
       'maxModelOutputBytes',
       1_048_576,
     ),
+    maxToolResultBytes: optionalPositive(root.maxToolResultBytes, 'maxToolResultBytes', 1_048_576),
     maxInputBytes: optionalPositive(root.maxInputBytes, 'maxInputBytes', 1_048_576),
+    maxQueuedRuns: optionalPositive(root.maxQueuedRuns, 'maxQueuedRuns', 32),
     sessionIdleTimeoutMs: optionalPositive(
       root.sessionIdleTimeoutMs,
       'sessionIdleTimeoutMs',

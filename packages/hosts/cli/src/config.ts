@@ -57,8 +57,12 @@ export interface CliConfig {
   readonly maxSteps: number;
   readonly settlementTimeoutMs: number;
   readonly runTimeoutMs: number;
+  readonly modelAttemptTimeoutMs: number;
+  readonly toolTimeoutMs: number;
   readonly maxModelOutputBytes: number;
+  readonly maxToolResultBytes: number;
   readonly maxInputBytes: number;
+  readonly maxQueuedRuns: number;
   readonly agentProfile?: AgentProfile;
   readonly model: CliModelConfig;
   readonly shell: ShellConfig;
@@ -86,8 +90,12 @@ export async function readConfig(
     'skills',
     'memory',
     'runTimeoutMs',
+    'modelAttemptTimeoutMs',
+    'toolTimeoutMs',
     'maxModelOutputBytes',
+    'maxToolResultBytes',
     'maxInputBytes',
+    'maxQueuedRuns',
     'agentProfile',
   ]);
   const model = object(root.model, 'model 配置');
@@ -99,12 +107,24 @@ export async function readConfig(
     settlementTimeoutMs: positive(root.settlementTimeoutMs, 'settlementTimeoutMs'),
     runTimeoutMs:
       root.runTimeoutMs === undefined ? 120_000 : positive(root.runTimeoutMs, 'runTimeoutMs'),
+    modelAttemptTimeoutMs:
+      root.modelAttemptTimeoutMs === undefined
+        ? 90_000
+        : positive(root.modelAttemptTimeoutMs, 'modelAttemptTimeoutMs'),
+    toolTimeoutMs:
+      root.toolTimeoutMs === undefined ? 30_000 : positive(root.toolTimeoutMs, 'toolTimeoutMs'),
     maxModelOutputBytes:
       root.maxModelOutputBytes === undefined
         ? 1_048_576
         : positive(root.maxModelOutputBytes, 'maxModelOutputBytes'),
+    maxToolResultBytes:
+      root.maxToolResultBytes === undefined
+        ? 1_048_576
+        : positive(root.maxToolResultBytes, 'maxToolResultBytes'),
     maxInputBytes:
       root.maxInputBytes === undefined ? 1_048_576 : positive(root.maxInputBytes, 'maxInputBytes'),
+    maxQueuedRuns:
+      root.maxQueuedRuns === undefined ? 32 : positive(root.maxQueuedRuns, 'maxQueuedRuns'),
     ...(root.agentProfile === undefined
       ? {}
       : { agentProfile: readAgentProfile(root.agentProfile) }),
