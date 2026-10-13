@@ -12,7 +12,7 @@ hosts -> runtime -> core -> kernel
   +----------+--------+-> capability implementations / adapters -> kernel
 ```
 
-`kernel` 没有 workspace 依赖，并集中定义 Agent 循环使用的全部协议无关概念与接口。单一 `core` package 只包含 Agent 核心循环并且只依赖 `kernel`。Prompt、上下文、会话、工具等实现位于各自能力域；它们与 adapter 的生产依赖都只能指向 `kernel`。Runtime 与 host 负责组合实现；测试可以通过 devDependency 使用需要的实现。
+`kernel` 没有 workspace 依赖，并集中定义 Agent 循环使用的全部协议无关概念与接口。单一 `core` package 只包含 Agent 核心循环并且只依赖 `kernel`。所有具体 Prompt、上下文、会话、工具、模型、Skills 与 Memory 实现位于 `adapters`，其生产依赖只指向 `kernel`。Runtime 与 Host 负责组合实现；测试可以通过 devDependency 使用需要的实现。
 
 增加或修改 workspace 依赖后运行 `pnpm run gate:architecture`。该 gate 是机械检查规则的权威实现。
 
