@@ -3,8 +3,12 @@
   "maxSteps": 8,
   "settlementTimeoutMs": 30000,
   "runTimeoutMs": 120000,
+  "modelAttemptTimeoutMs": 90000,
+  "toolTimeoutMs": 30000,
   "maxModelOutputBytes": 1048576,
+  "maxToolResultBytes": 1048576,
   "maxInputBytes": 1048576,
+  "maxQueuedRuns": 32,
   "model": {
     "id": "openai-compatible",
     "baseUrl": "https://api.deepseek.com/v1",

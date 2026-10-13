@@ -23,7 +23,7 @@ async function skill(rootPath: string, id: string, text: string): Promise<void> 
   await writeFile(join(path, 'SKILL.md'), text);
 }
 
-describe('FilesystemSkillCatalog', () => {
+describe.skipIf(process.platform !== 'linux')('FilesystemSkillCatalog', () => {
   it('只列出摘要，并按 ID 读取正文', async () => {
     const path = await root();
     await skill(path, 'review', '---\ndescription: 审查代码\nname: review\n---\n正文\n');

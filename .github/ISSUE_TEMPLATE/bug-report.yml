@@ -1,0 +1,33 @@
+name: 缺陷报告
+description: 报告可复现的非安全问题
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿在公开 Issue 中提交漏洞细节、API key、认证 header 或会话敏感数据。安全问题请参阅 SECURITY.md。"
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 提交、分支或版本
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: "操作系统、Node.js、pnpm，以及是否使用 CLI、Web、MCP 或 Skills。"
+    validations:
+      required: true
