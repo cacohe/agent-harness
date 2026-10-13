@@ -1,20 +1,14 @@
-import {
-  type AssistantSettlement,
-  type AttemptId,
-  assertNever,
-  type EventEnvelope,
-  type MessageId,
-  type SessionEvent,
-  type SessionId,
-  type StepId,
-  type StepOutcome,
-  type TurnId,
-} from '../facts.js';
+import { assertNever } from '../exhaustiveness.js';
+import type { AttemptId, MessageId, SessionId, StepId, TurnId } from '../identifiers.js';
+import type { AssistantSettlement } from '../model.js';
 import type { ToolCallId } from '../tools/protocol.js';
 import {
+  type EventEnvelope,
+  type SessionEvent,
   SessionLifecycleCorruptionError,
   type SessionLifecycleIdNamespaces,
   type SessionLifecycleRepairPlan,
+  type StepOutcome,
 } from './protocol.js';
 
 /**

@@ -1,5 +1,5 @@
-import type { EventEnvelope, ModelMessage } from './facts.js';
-import type { ModelRequest } from './model.js';
+import type { ModelMessage, ModelRequest } from './model.js';
+import type { EventEnvelope } from './session/protocol.js';
 import type { ModelToolDefinition } from './tools/protocol.js';
 
 /** 提示词组装器 —— 组装完整的 Agent 请求。 */

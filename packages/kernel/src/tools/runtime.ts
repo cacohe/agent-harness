@@ -1,5 +1,6 @@
-import type { ExecutionMetadata, JsonValue } from '../facts.js';
-import { assertJsonValue, isAbortError, serializeError } from '../facts.js';
+import type { ExecutionMetadata } from '../agent.js';
+import type { JsonValue } from '../serialization.js';
+import { assertJsonValue, isAbortError, serializeError } from '../serialization.js';
 import type {
   ModelToolDefinition,
   SandboxDispatcher,

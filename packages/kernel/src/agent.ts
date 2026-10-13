@@ -1,16 +1,14 @@
 import type { PromptAssembler } from './context.js';
 import type {
   AttemptId,
-  EventEnvelope,
-  ExecutionMetadata,
+  ExecutionId,
   MessageId,
   SessionId,
   StepId,
   TurnId,
-  TurnOutcome,
-} from './facts.js';
+} from './identifiers.js';
 import type { ModelProvider, ModelStreamEvent } from './model.js';
-import type { SessionLog } from './session/protocol.js';
+import type { EventEnvelope, SessionLog, TurnOutcome } from './session/protocol.js';
 import type { ToolCallId, ToolCapability } from './tools/protocol.js';
 
 /** 当前 Agent 状态。 */
@@ -80,6 +78,13 @@ export interface AgentOptions {
 export interface AgentRunOptions {
   readonly signal?: AbortSignal;
   readonly execution?: ExecutionMetadata;
+}
+
+/** 一次 turn 已冻结执行身份的最小审计快照；不会投影给模型。 */
+export interface ExecutionMetadata {
+  readonly id: ExecutionId;
+  readonly subject: string;
+  readonly authorizationVersion: string;
 }
 
 /** Agent 已关闭错误。 */

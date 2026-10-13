@@ -1,14 +1,90 @@
+import type { ExecutionMetadata } from '../agent.js';
 import type {
   AttemptId,
-  EventEnvelope,
   MessageId,
   SessionBatchId,
-  SessionEvent,
   SessionId,
   StepId,
   TurnId,
-} from '../facts.js';
-import type { ToolCallId } from '../tools/protocol.js';
+} from '../identifiers.js';
+import type { AssistantSettlement, UserMessage } from '../model.js';
+import type { SerializedError } from '../serialization.js';
+import type { ToolCallId, ToolCompleted } from '../tools/protocol.js';
+
+/** step 结束时的状态。 */
+export type StepOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted';
+
+/** turn 结束时的状态。 */
+export type TurnOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted';
+
+/** turn 开始。 */
+export interface TurnStarted {
+  readonly type: 'turn.started';
+  readonly turnId: TurnId;
+  readonly execution?: ExecutionMetadata;
+}
+
+/** 用户消息写入会话。 */
+export interface UserMessageAppended {
+  readonly type: 'user.message';
+  readonly message: UserMessage;
+}
+
+/** step 开始。 */
+export interface StepStarted {
+  readonly type: 'step.started';
+  readonly turnId: TurnId;
+  readonly stepId: StepId;
+}
+
+/** LLM 调用结果已结算并持久化。 */
+export interface AssistantSettled {
+  readonly type: 'assistant.settled';
+  readonly turnId: TurnId;
+  readonly stepId: StepId;
+  readonly settlement: AssistantSettlement;
+}
+
+/** step 已闭合。 */
+export interface StepEnded {
+  readonly type: 'step.ended';
+  readonly turnId: TurnId;
+  readonly stepId: StepId;
+  readonly outcome: StepOutcome;
+}
+
+/** turn 已闭合。 */
+export interface TurnEnded {
+  readonly type: 'turn.ended';
+  readonly turnId: TurnId;
+  readonly outcome: TurnOutcome;
+  readonly error?: SerializedError;
+}
+
+/**
+ * 会话事件日志中的领域事件。
+ * 是模型可见历史、重放、恢复与审计的事实源；流式 chunk 不在此列。
+ */
+export type SessionEvent =
+  | TurnStarted
+  | UserMessageAppended
+  | StepStarted
+  | AssistantSettled
+  | ToolCompleted
+  | StepEnded
+  | TurnEnded;
+
+/**
+ * 持久化时包裹 SessionEvent 的统一格式。
+ * sequence 在会话内严格单调；timestamp 为 ISO-8601 字符串。
+ */
+export interface EventEnvelope {
+  readonly version: 1;
+  readonly sessionId: SessionId;
+  readonly sequence: number;
+  readonly timestamp: string;
+  readonly event: SessionEvent;
+}
 
 /** 提供不可变的会话事件快照。 */
 export interface SessionReader {

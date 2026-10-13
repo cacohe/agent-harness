@@ -1,11 +1,6 @@
-import type {
-  BrandedString,
-  ExecutionMetadata,
-  JsonValue,
-  SerializedError,
-  StepId,
-  TurnId,
-} from '../facts.js';
+import type { ExecutionMetadata } from '../agent.js';
+import type { BrandedString, StepId, TurnId } from '../identifiers.js';
+import type { JsonValue, SerializedError } from '../serialization.js';
 
 /** 工具调用的品牌标识符。 */
 export type ToolCallId = BrandedString<'ToolCallId'>;
