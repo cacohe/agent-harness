@@ -31,7 +31,7 @@ packages/
 
 ## 执行与会话
 
-一个 turn 包含零个或多个 step。每个 Agent 同时只有一个活动 turn，Core 用 FIFO inbox 串行领取输入；每个 `run` 只获得其自身 turn 的结果或错误。取消使用 `AbortSignal`。开始的 turn 与 step 在成功、失败和取消路径均恰好结算一次。
+一个 turn 包含零个或多个 step。每个 Agent 同时只有一个活动 turn，Core 用有容量边界的 FIFO inbox 串行领取输入；每个 `run` 只获得其自身 turn 的结果或错误。取消使用 `AbortSignal`。开始的 turn 与 step 在成功、失败和取消路径均恰好结算一次。`runTimeoutMs` 是 turn 总期限，模型 attempt 与单次工具调用有各自的协作式 deadline；单个工具终态结果在写入会话前受 UTF-8 字节预算约束，超限时替换为可审计的失败结果（ADR 0053）。
 
 会话事件日志是模型可见历史、重放、恢复、审计和 UI 重建的事实源；流式 chunk 仅为临时 observer 通知。每个会话身份只有一个 writer，sequence 严格单调，事件 batch 原子追加。`kernel/session` 验证生命周期历史；发现有效尾部中断时，Runtime 在暴露 Agent 前以原子 batch 补齐未知工具结果与 interrupted 结算。结构性矛盾拒绝恢复。
 
@@ -45,7 +45,7 @@ Kernel 以 context、skills、memory、模型、会话和工具等能力域定�
 
 `AgentProfile` 带 ID、版本和静态指令。Runtime 只在使用默认 prompt 组装器时冻结并注入它；自定义 `PromptAssembler` 完全拥有组装顺序。Profile 当前不写入会话事件，审计需求必须使用独立契约。
 
-`AgentObserver` 接收持久 `session.event`、模型 usage 及模型/工具的开始、完成、失败观测事件。Runtime 注入的 Clock 使这些事件包含稳定关联 ID 与耗时；投递是最佳努力，可靠 trace 与审计由 Host 或 Platform adapter 的 outbox 实现。
+`AgentObserver` 接收持久 `session.event`、模型 usage 及模型/工具的开始、完成、失败观测事件。Runtime 注入的 Clock 使这些事件包含稳定关联 ID 与耗时；传入执行上下文时，所有模型和工具事件还直接携带冻结后的 `executionId`。投递是最佳努力，可靠 trace 与审计由 Host 或 Platform adapter 的 outbox 实现。
 
 工具领域只位于 `kernel/tools/protocol.ts` 与 `kernel/tools/runtime.ts`。`PolicyControlledTools` 在副作用前调用策略；Sandbox、Platform 许可与 MCP 通过 adapters 接入。Kernel 和 Core 不依赖外部网络协议、账户模型、SDK、文件系统或进程。
 

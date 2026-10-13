@@ -43,8 +43,12 @@ export function createSessionRegistry(
         maxSteps: config.maxSteps,
         settlementTimeoutMs: config.settlementTimeoutMs,
         runTimeoutMs: config.runTimeoutMs,
+        modelAttemptTimeoutMs: config.modelAttemptTimeoutMs,
+        toolTimeoutMs: config.toolTimeoutMs,
         maxModelOutputBytes: config.maxModelOutputBytes,
+        maxToolResultBytes: config.maxToolResultBytes,
         maxInputBytes: config.maxInputBytes,
+        maxQueuedRuns: config.maxQueuedRuns,
         prompts: new BoundedPromptAssembler({
           maxInputBytes: config.maxInputBytes,
           systemPrompt,

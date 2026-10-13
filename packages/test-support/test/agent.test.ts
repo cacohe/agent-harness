@@ -4,6 +4,7 @@ import { InMemorySessionLog } from '@agent-harness/adapters/session-memory';
 import { EnabledSkillsContext } from '@agent-harness/adapters/skill-context';
 import { Agent } from '@agent-harness/core';
 import {
+  AgentBusyError,
   AgentClosedError,
   type AgentExecutionEvent,
   AgentIdCollisionError,
@@ -108,6 +109,59 @@ describe('Agent', () => {
         .filter((envelope) => envelope.event.type === 'user.message')
         .map((envelope) => (envelope.event as { readonly message: UserMessage }).message.content),
     ).toEqual(['first', 'second']);
+    expect(model.requests).toHaveLength(2);
+  });
+
+  it('输入队列达到上限时拒绝新输入，但不影响已接纳输入', async () => {
+    const session = new InMemorySessionLog(sessionId);
+    let signalFirstPrepared!: () => void;
+    let releaseFirst!: () => void;
+    const firstPrepared = new Promise<void>((resolve) => {
+      signalFirstPrepared = resolve;
+    });
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const model = new ScriptedModelProvider([
+      {
+        events: [{ type: 'text.delta', text: 'first reply' }],
+        prepare: async () => {
+          signalFirstPrepared();
+          await firstRelease;
+        },
+      },
+      { events: [{ type: 'text.delta', text: 'second reply' }] },
+    ]);
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      maxQueuedRuns: 1,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    });
+
+    const first = agent.run(user('first'));
+    await firstPrepared;
+    const second = agent.run({
+      id: brandId<'MessageId'>('user-2') as MessageId,
+      role: 'user',
+      content: 'second',
+    });
+
+    await expect(
+      agent.run({
+        id: brandId<'MessageId'>('user-3') as MessageId,
+        role: 'user',
+        content: 'third',
+      }),
+    ).rejects.toBeInstanceOf(AgentBusyError);
+
+    releaseFirst();
+    await expect(first).resolves.toMatchObject({ content: 'first reply' });
+    await expect(second).resolves.toMatchObject({ content: 'second reply' });
     expect(model.requests).toHaveLength(2);
   });
 
@@ -631,6 +685,75 @@ describe('Agent', () => {
     expectClosed(events);
   });
 
+  it('模型 attempt 到达独立 deadline 后结算当前 turn', async () => {
+    const session = new InMemorySessionLog(sessionId);
+    let signalPrepared!: () => void;
+    const prepared = new Promise<void>((resolve) => {
+      signalPrepared = resolve;
+    });
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        {
+          events: [],
+          prepare: async (signal) => {
+            signalPrepared();
+            await new Promise<never>((_resolve, reject) => {
+              signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            });
+          },
+        },
+      ]),
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      modelAttemptTimeoutMs: 20,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    });
+
+    const running = agent.run(user());
+    await prepared;
+    await expect(running).rejects.toBeDefined();
+    expect((await readEvents(session)).at(-1)?.event).toMatchObject({
+      type: 'turn.ended',
+      outcome: 'failed',
+    });
+  });
+
+  it('工具结果超过预算时写入边界失败结果而非原始载荷', async () => {
+    const callId = brandId<'ToolCallId'>('call-large-result') as ToolCallId;
+    const session = new InMemorySessionLog(sessionId);
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        {
+          events: [{ type: 'tool.call', call: { id: callId, name: 'large', input: {} } }],
+        },
+        { events: [{ type: 'text.delta', text: '已处理' }] },
+      ]),
+      session,
+      tools: new ToolRegistry([fakeTool('large', async () => ({ value: 'x'.repeat(128) }))]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      maxToolResultBytes: 32,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    });
+
+    await expect(agent.run(user())).resolves.toMatchObject({ content: '已处理' });
+    expect(
+      (await readEvents(session)).find((envelope) => envelope.event.type === 'tool.completed')
+        ?.event,
+    ).toMatchObject({
+      type: 'tool.completed',
+      result: {
+        status: 'failure',
+        callId,
+        error: { name: 'ToolResultTooLargeError' },
+      },
+    });
+  });
+
   it('提交普通回复并完整闭合 turn 和 step', async () => {
     const session = new InMemorySessionLog(sessionId);
     const model = new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'done' }] }]);
@@ -1022,6 +1145,43 @@ describe('Agent', () => {
       outcome: 'cancelled',
     });
     expectClosed(events);
+  });
+
+  it('工具调用到达独立 deadline 后记录取消结果', async () => {
+    const callId = brandId<'ToolCallId'>('call-timeout') as ToolCallId;
+    const session = new InMemorySessionLog(sessionId);
+    const model = new ScriptedModelProvider([
+      {
+        events: [{ type: 'tool.call', call: { id: callId, name: 'wait', input: {} } }],
+      },
+      { events: [{ type: 'text.delta', text: '继续执行' }] },
+    ]);
+    const tool = fakeTool('wait', async (_input, context) => {
+      await new Promise<never>((_resolve, reject) => {
+        context.signal.addEventListener('abort', () => reject(context.signal.reason), {
+          once: true,
+        });
+      });
+    });
+    const agent = new Agent({
+      model,
+      session,
+      tools: new ToolRegistry([tool]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      toolTimeoutMs: 20,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    });
+
+    await expect(agent.run(user())).resolves.toMatchObject({ content: '继续执行' });
+    expect(
+      (await readEvents(session)).find((envelope) => envelope.event.type === 'tool.completed')
+        ?.event,
+    ).toMatchObject({
+      type: 'tool.completed',
+      result: { status: 'cancelled' },
+    });
   });
 
   it('普通会话 I/O 响应 run signal，并用一个独立信号提交 terminal batch', async () => {
@@ -1472,6 +1632,43 @@ describe('Agent', () => {
         )
         .map((event) => event.envelope.sequence),
     ).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('模型与工具观测事件携带已冻结的 executionId', async () => {
+    const callId = brandId<'ToolCallId'>('call-observed-execution') as ToolCallId;
+    const executionId = brandId<'ExecutionId'>('execution-observed') as ExecutionId;
+    const observed: AgentExecutionEvent[] = [];
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        {
+          events: [{ type: 'tool.call', call: { id: callId, name: 'lookup', input: {} } }],
+        },
+        { events: [{ type: 'text.delta', text: '完成' }] },
+      ]),
+      session: new InMemorySessionLog(sessionId),
+      tools: new ToolRegistry([fakeTool('lookup', async () => ({ ok: true }))]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onExecution: (event) => observed.push(event) }],
+    });
+
+    await agent.run(user(), {
+      execution: {
+        id: executionId,
+        subject: 'user-1',
+        authorizationVersion: 'v1',
+      },
+    });
+
+    const runtimeEvents = observed.filter((event) => event.type !== 'session.event');
+    expect(runtimeEvents).not.toHaveLength(0);
+    expect(runtimeEvents).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'model.started' })]),
+    );
+    expect(runtimeEvents.every((event) => event.executionId === executionId)).toBe(true);
   });
 
   it('以 sessionId 区分相同 attempt 标识符的不同会话用量', async () => {
