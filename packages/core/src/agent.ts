@@ -20,6 +20,7 @@ import {
   SettlementPersistenceError,
   type SettlementSignalFactory,
   type ToolCapability,
+  type ToolResult,
   type TurnId,
   type UserMessage,
 } from '@agent-harness/kernel';
@@ -302,6 +303,9 @@ export class Agent {
       signal,
     );
 
+    // 准备模型；准备失败尚未形成 attempt，保持其不会消耗 attempt 标识符的恢复语义。
+    const prepared = await this.#model.prepare(signal);
+    throwIfAborted(signal);
     const attempt: Attempt = {
       attemptId: this.#reservations.attempt(this.#ids.attempt()),
       partialText: '',
@@ -327,8 +331,6 @@ export class Agent {
       });
 
     try {
-      const prepared = await this.#model.prepare(signal);
-      throwIfAborted(signal);
       // 循环获取模型流式生成时的中间输出
       for await (const event of prepared.stream(request, signal)) {
         throwIfAborted(signal);
@@ -377,17 +379,17 @@ export class Agent {
           turnId,
           stepId,
           attemptId: attempt.attemptId,
-          durationMs: this.#durationSince(modelStartedAt),
+          ...this.#withDuration(modelStartedAt),
         });
     } catch (error) {
       if (modelStartedAt !== undefined)
         this.#notifyExecution({
-          type: 'model.failed',
+          type: signal.aborted || isAbortError(error) ? 'model.cancelled' : 'model.failed',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
           attemptId: attempt.attemptId,
-          durationMs: this.#durationSince(modelStartedAt),
+          ...this.#withDuration(modelStartedAt),
           ...(error instanceof Error ? { errorName: error.name } : {}),
         });
       throw error;
@@ -437,10 +439,27 @@ export class Agent {
           toolName: call.name,
           startedAt: toolStartedAt,
         });
-      const result = await this.#tools.execute(call, {
-        signal,
-        ...(execution === undefined ? {} : { execution }),
-      });
+      let result: ToolResult;
+      try {
+        result = await this.#tools.execute(call, {
+          signal,
+          ...(execution === undefined ? {} : { execution }),
+        });
+      } catch (error) {
+        if (toolStartedAt !== undefined)
+          this.#notifyExecution({
+            type: 'tool.failed',
+            sessionId: this.#session.sessionId,
+            turnId,
+            stepId,
+            attemptId: attempt.attemptId,
+            toolCallId: call.id,
+            toolName: call.name,
+            ...this.#withDuration(toolStartedAt),
+            ...(error instanceof Error ? { errorName: error.name } : {}),
+          });
+        throw error;
+      }
       attempt.toolResults.set(call.id, result);
       if (toolStartedAt !== undefined)
         this.#notifyExecution({
@@ -451,7 +470,7 @@ export class Agent {
           attemptId: attempt.attemptId,
           toolCallId: call.id,
           toolName: call.name,
-          durationMs: this.#durationSince(toolStartedAt),
+          ...this.#withDuration(toolStartedAt),
           status: result.status,
         });
       // 提交工具调用完成事件
@@ -474,17 +493,20 @@ export class Agent {
 
   #now(): Date | undefined {
     if (this.#clock === undefined) return undefined;
-    const value = this.#clock.now();
-    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-      throw new TypeError('Clock.now 必须返回有效 Date');
+    try {
+      const value = this.#clock.now();
+      if (!(value instanceof Date) || Number.isNaN(value.getTime())) return undefined;
+      return value;
+    } catch {
+      // 时钟仅服务于瞬态观测，不能影响 Agent 的执行或结算。
+      return undefined;
     }
-    return value;
   }
 
-  #durationSince(startedAt: Date): number {
+  #withDuration(startedAt: Date): { readonly durationMs?: number } {
     const finishedAt = this.#now();
-    if (finishedAt === undefined) throw new Error('执行观测时钟不可用');
-    return Math.max(0, finishedAt.getTime() - startedAt.getTime());
+    if (finishedAt === undefined) return {};
+    return { durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()) };
   }
 
   /** 提交会话事件，并向 observer 发送与持久化事实一致的通知。 */

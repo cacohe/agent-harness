@@ -8,7 +8,7 @@
 
 ## 决策
 
-Kernel 扩展 `AgentExecutionEvent`，加入模型与工具的开始、完成、失败事件，携带 session、turn、step、attempt 与工具调用关联 ID。Core 仅在组合方提供 `Clock` 时发射带时间的事件；Runtime 为生产 handle 注入 `SystemClock`。observer 投递保持最佳努力，不写入会话日志。
+Kernel 扩展 `AgentExecutionEvent`，加入模型与工具的开始、完成、失败、取消事件，携带 session、turn、step、attempt 与工具调用关联 ID。Core 仅在组合方提供 `Clock` 时发射带时间的事件；Runtime 为生产 handle 注入 `SystemClock`。时钟抛错或返回无效时间时跳过新的开始事件；已发送开始事件仍会发送终态，但省略耗时。observer 投递保持最佳努力，不写入会话日志。
 
 可靠审计、trace 导出和 outbox 由 Host 或 Platform adapter 在 observer 下游实现并自行去重、持久化。
 

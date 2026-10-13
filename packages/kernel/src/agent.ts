@@ -42,12 +42,13 @@ export type AgentExecutionEvent =
       readonly startedAt: Date;
     }
   | {
-      readonly type: 'model.completed' | 'model.failed';
+      readonly type: 'model.completed' | 'model.failed' | 'model.cancelled';
       readonly sessionId: SessionId;
       readonly turnId: TurnId;
       readonly stepId: StepId;
       readonly attemptId: AttemptId;
-      readonly durationMs: number;
+      /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
+      readonly durationMs?: number;
       readonly errorName?: string;
     }
   | {
@@ -68,8 +69,21 @@ export type AgentExecutionEvent =
       readonly attemptId: AttemptId;
       readonly toolCallId: ToolCallId;
       readonly toolName: string;
-      readonly durationMs: number;
+      /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
+      readonly durationMs?: number;
       readonly status: 'success' | 'failure' | 'cancelled' | 'unknown';
+    }
+  | {
+      readonly type: 'tool.failed';
+      readonly sessionId: SessionId;
+      readonly turnId: TurnId;
+      readonly stepId: StepId;
+      readonly attemptId: AttemptId;
+      readonly toolCallId: ToolCallId;
+      readonly toolName: string;
+      /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
+      readonly durationMs?: number;
+      readonly errorName?: string;
     }
   | {
       readonly type: 'model.usage';

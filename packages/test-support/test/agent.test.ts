@@ -1219,6 +1219,182 @@ describe('Agent', () => {
     expectClosed(await readEvents(session));
   });
 
+  it('以注入时钟成对报告模型执行的开始与终态', async () => {
+    const observed: AgentExecutionEvent[] = [];
+    const timestamps = [new Date('2026-10-13T00:00:00.000Z'), new Date('2026-10-13T00:00:00.025Z')];
+    const agent = new Agent({
+      model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
+      session: new InMemorySessionLog(sessionId),
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => timestamps.shift() ?? new Date('invalid') },
+      observers: [{ onExecution: (event) => observed.push(event) }],
+    });
+
+    await agent.run(user());
+
+    expect(observed.filter((event) => event.type.startsWith('model.'))).toEqual([
+      expect.objectContaining({
+        type: 'model.started',
+        startedAt: new Date('2026-10-13T00:00:00.000Z'),
+      }),
+      expect.objectContaining({ type: 'model.completed', durationMs: 25 }),
+    ]);
+  });
+
+  it('模型失败或取消时为已开始的调用报告对应终态', async () => {
+    const failedObserved: AgentExecutionEvent[] = [];
+    const failedAgent = new Agent({
+      model: new ScriptedModelProvider([{ events: [], error: new Error('model failed') }]),
+      session: new InMemorySessionLog(sessionId),
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date() },
+      observers: [{ onExecution: (event) => failedObserved.push(event) }],
+    });
+
+    await expect(failedAgent.run(user())).rejects.toThrow('model failed');
+    expect(failedObserved.filter((event) => event.type.startsWith('model.'))).toEqual([
+      expect.objectContaining({ type: 'model.started' }),
+      expect.objectContaining({ type: 'model.failed', errorName: 'Error' }),
+    ]);
+
+    const cancelledObserved: AgentExecutionEvent[] = [];
+    let prepareStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      prepareStarted = resolve;
+    });
+    const cancelledAgent = new Agent({
+      model: {
+        id: 'blocking-model',
+        async prepare() {
+          return {
+            async *stream(_request, signal) {
+              prepareStarted();
+              await new Promise<never>((_resolve, reject) => {
+                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+              });
+            },
+          };
+        },
+      },
+      session: new InMemorySessionLog(sessionId),
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date() },
+      observers: [{ onExecution: (event) => cancelledObserved.push(event) }],
+    });
+    const controller = new AbortController();
+    const run = cancelledAgent.run(user(), controller.signal);
+    await started;
+    controller.abort(new Error('cancel model'));
+
+    await expect(run).rejects.toThrow('cancel model');
+    expect(cancelledObserved.filter((event) => event.type.startsWith('model.'))).toEqual([
+      expect.objectContaining({ type: 'model.started' }),
+      expect.objectContaining({ type: 'model.cancelled', errorName: 'Error' }),
+    ]);
+  });
+
+  it('工具抛错时报告失败，终态 ToolResult 仍报告完成', async () => {
+    const callId = brandId<'ToolCallId'>('call-1') as ToolCallId;
+    const createAgent = (
+      execute: ScriptedToolCapability['execute'],
+      observed: AgentExecutionEvent[],
+    ) =>
+      new Agent({
+        model: new ScriptedModelProvider([
+          { events: [{ type: 'tool.call', call: { id: callId, name: 'lookup', input: {} } }] },
+          { events: [{ type: 'text.delta', text: 'done' }] },
+        ]),
+        session: new InMemorySessionLog(sessionId),
+        tools: new ScriptedToolCapability(
+          [{ name: 'lookup', description: '查询', inputSchema: {} }],
+          execute,
+        ),
+        ids: new SequentialAgentIds(),
+        maxSteps: 4,
+        settlementSignals: new TestSettlementSignals(),
+        prompts: defaultPrompts(),
+        clock: { now: () => new Date() },
+        observers: [{ onExecution: (event) => observed.push(event) }],
+      });
+
+    const thrownObserved: AgentExecutionEvent[] = [];
+    const thrownAgent = createAgent(async () => {
+      throw new Error('tool failed');
+    }, thrownObserved);
+    await expect(thrownAgent.run(user())).rejects.toThrow('tool failed');
+    expect(thrownObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
+      expect.objectContaining({ type: 'tool.started' }),
+      expect.objectContaining({ type: 'tool.failed', errorName: 'Error' }),
+    ]);
+
+    const cancelledThrownObserved: AgentExecutionEvent[] = [];
+    let executionStarted!: () => void;
+    const executionStartedPromise = new Promise<void>((resolve) => {
+      executionStarted = resolve;
+    });
+    const cancelledThrownAgent = createAgent(async (_call, context) => {
+      executionStarted();
+      await new Promise<never>((_resolve, reject) => {
+        context.signal.addEventListener('abort', () => reject(context.signal.reason), {
+          once: true,
+        });
+      });
+    }, cancelledThrownObserved);
+    const controller = new AbortController();
+    const cancelledRun = cancelledThrownAgent.run(user(), controller.signal);
+    await executionStartedPromise;
+    controller.abort(new Error('cancel tool'));
+    await expect(cancelledRun).rejects.toThrow('cancel tool');
+    expect(cancelledThrownObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
+      expect.objectContaining({ type: 'tool.started' }),
+      expect.objectContaining({ type: 'tool.failed', errorName: 'Error' }),
+    ]);
+
+    const resultObserved: AgentExecutionEvent[] = [];
+    const resultAgent = createAgent(
+      async () => ({ status: 'cancelled', callId, reason: 'tool cancelled' }),
+      resultObserved,
+    );
+    await resultAgent.run(user());
+    expect(resultObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
+      expect.objectContaining({ type: 'tool.started' }),
+      expect.objectContaining({ type: 'tool.completed', status: 'cancelled' }),
+    ]);
+  });
+
+  it('时钟故障不会影响 Agent 的执行或结算', async () => {
+    const session = new InMemorySessionLog(sessionId);
+    const agent = new Agent({
+      model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
+      session,
+      tools: new ToolRegistry([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: {
+        now: () => {
+          throw new Error('clock failed');
+        },
+      },
+    });
+
+    await expect(agent.run(user())).resolves.toMatchObject({ content: 'ok' });
+    expectClosed(await readEvents(session));
+  });
+
   it('在提交会话事件后发送生命周期通知，并关联模型用量', async () => {
     const session = new InMemorySessionLog(sessionId);
     const observed: AgentExecutionEvent[] = [];
