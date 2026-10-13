@@ -4,7 +4,7 @@
 
 Agent Harness Lab 不是 prompt wrapper，也不是多租户 Agent SaaS。它用 append-only 会话事件作为模型可见历史与恢复事实源，以显式状态机运行 turn/step，并用 capability、adapter 与 host 的清晰边界组合模型、工具、Skills、Memory 和会话存储。
 
-[架构说明](docs/architecture.md) · [架构决定](docs/decisions/) · [贡献指南](CONTRIBUTING.md) · [安全政策](SECURITY.md) · [Apache-2.0](LICENSE)
+[English](README.en.md) · [架构说明](docs/architecture.md) · [执行图](docs/diagrams.md) · [架构决定](docs/decisions/) · [贡献指南](CONTRIBUTING.md) · [安全政策](SECURITY.md) · [Apache-2.0](LICENSE)
 
 ## 为什么存在
 
@@ -60,6 +60,12 @@ pnpm agent resume --session demo-1 --message "继续上一次的话题" --messag
 pnpm agent chat --session demo-1 --message "你好"
 ```
 
+无需 API key 的确定性演示会执行一次工具调用、工具结果持久化与续步：
+
+```bash
+pnpm demo
+```
+
 本地 Web Host：
 
 ```bash
@@ -91,6 +97,8 @@ pnpm run check
 | 文档 | 内容 |
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | 当前架构、所有权和依赖方向 |
+| [docs/diagrams.md](docs/diagrams.md) | 架构与 turn 生命周期图 |
+| [docs/articles/](docs/articles/) | 会话事实与资源治理的设计文章 |
 | [docs/decisions/](docs/decisions/) | 已接受的设计决定与取舍 |
 | [docs/public-repository-checklist.md](docs/public-repository-checklist.md) | 公开仓库前后的维护者检查项 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献流程与代码约定 |
