@@ -43,6 +43,8 @@ Kernel 以 context、skills、memory、模型、会话和工具等能力域定�
 
 `adapters/local-runtime` 收敛 CLI 和 Web 共用的本地 JSONL 与 OpenAI-compatible 默认构造。Host 保留已解析配置、环境变量/凭据、工作目录安全边界、MCP/Platform 命令和 HTTP/CLI 交互协议，因此默认装配可读且可替换，不会在两个 Host 中演化为两套实现。
 
+本地 JSONL 会话只支持单一 writer，不能由多个进程、容器或服务实例共享同一会话根目录。Web Host 只服务于 loopback 的单用户本地场景，不能作为远程或多租户服务暴露。filesystem Skills 的已打开文件路径校验依赖 Linux `/proc` 语义；Windows 开发者应通过 WSL 使用该能力。
+
 `AgentProfile` 带 ID、版本和静态指令。Runtime 只在使用默认 prompt 组装器时冻结并注入它；自定义 `PromptAssembler` 完全拥有组装顺序。Profile 当前不写入会话事件，审计需求必须使用独立契约。
 
 `AgentObserver` 接收持久 `session.event`、模型 usage 及模型/工具的开始、完成、失败观测事件。Runtime 注入的 Clock 使这些事件包含稳定关联 ID 与耗时；传入执行上下文时，所有模型和工具事件还直接携带冻结后的 `executionId`。投递是最佳努力，可靠 trace 与审计由 Host 或 Platform adapter 的 outbox 实现。
