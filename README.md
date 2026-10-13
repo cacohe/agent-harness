@@ -1,6 +1,6 @@
 # Agent Harness Lab
 
-面向生产设计的 Agent Harness 实现。实现保持精简、便于理解，同时保留可靠运行时所需的失败、取消、持久化与组件替换能力。
+面向本地和自托管环境的 TypeScript Agent Runtime 参考实现。它关注可靠执行所需的会话持久化与恢复、串行调度、工具调用边界、上下文组装与可组合能力接入；它不是多租户 Agent 平台或完整业务产品。
 
 核心思路：用 **append-only 会话事件日志** 作为模型可见历史的唯一事实源，用显式 **Agent 状态机** 驱动 turn/step 循环，通过 **capability 接口 + adapter + host** 组合应用，不使用服务定位器或进程全局运行时。
 
@@ -19,8 +19,7 @@ hosts → runtime → core → kernel
 |------|----------|------|
 | Kernel | `packages/kernel` | Agent 概念、状态、接口、事件与错误 |
 | Core | `packages/core` | Agent 核心循环状态机 |
-| Capability 实现 | `context/context-runtime`、`memory/memory-context`、`session/session-memory`、`skills/skill-context` | 上下文与会话的协议无关实现 |
-| Adapter | `llm/openai-compatible`、`llm/gateway`、`platform/platform-http`、`session/session-jsonl`、`tools/mcp`、`tools/platform-policy` | 外部系统实现 |
+| Adapters | `packages/adapters` | 上下文、JSONL、模型、MCP、Skills、Memory 与本地工具的具体实现 |
 | 组合根 | `packages/runtime` | `create` / `resume` / 生命周期 |
 | 进程入口 | `packages/hosts/*` | 配置、信号、stdout/stderr |
 
@@ -51,27 +50,7 @@ docs/                     架构与已接受决定（ADR）
 packages/
   kernel/                 Agent 概念、状态、接口、事件与错误
   core/                   Inbox 与 Agent 核心循环状态机
-  context/
-    context-runtime/      Prompt 组装、时间上下文与模型消息投影
-  llm/
-    openai-compatible/    OpenAI-compatible Chat Completions
-    gateway/              Platform LLM Gateway adapter
-  memory/
-    memory-context/       长期记忆上下文贡献器
-    memory-gateway/       Platform 长期记忆与文件导入 Gateway adapter
-  platform/
-    platform-http/        Platform Gateway 与 Permit HTTP adapter
-  tools/
-    mcp/                  MCP 工具 adapter
-    platform-policy/      Platform 一次性工具许可 adapter
-    sandbox-docker/       Docker OCI Sandbox dispatcher
-  session/
-    session-memory/       内存会话实现
-    session-jsonl/        JSONL 会话存储 adapter
-  skills/
-    skill-context/        已启用 Skill 摘要上下文贡献器
-    skill-filesystem/     受限文件系统 Skill catalog
-    skill-tool/           Skill 正文加载工具 adapter
+  adapters/               按能力域分目录的具体 adapter 与本地默认装配
   runtime/                显式组合与 handle 生命周期
   hosts/
     cli/                  单进程 JSON 配置 CLI

@@ -1,5 +1,5 @@
+import type { McpClient, McpToolDescriptor } from '@agent-harness/adapters/mcp';
 import { assertJsonValue, type JsonValue } from '@agent-harness/kernel';
-import type { McpClient, McpToolDescriptor } from '@agent-harness/mcp';
 import { Client } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 

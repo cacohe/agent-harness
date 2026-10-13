@@ -1,6 +1,15 @@
 import { appendFile, mkdtemp, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { JsonlSessionRepository } from '@agent-harness/adapters/session-jsonl';
+import {
+  createJsonlRepositoryForTesting,
+  createNodeJsonlIoForTesting,
+  encodePathSegment,
+  type JsonlFile,
+  type JsonlIo,
+  wrapJsonlFile,
+} from '@agent-harness/adapters/session-jsonl/testing';
 import {
   brandId,
   type MessageId,
@@ -19,15 +28,6 @@ import {
   type ToolCallId,
   type TurnId,
 } from '@agent-harness/kernel';
-import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
-import {
-  createJsonlRepositoryForTesting,
-  createNodeJsonlIoForTesting,
-  encodePathSegment,
-  type JsonlFile,
-  type JsonlIo,
-  wrapJsonlFile,
-} from '@agent-harness/session-jsonl/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const signal = (): AbortSignal => new AbortController().signal;

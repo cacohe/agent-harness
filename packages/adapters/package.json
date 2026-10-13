@@ -1,0 +1,28 @@
+{
+  "name": "@agent-harness/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./context": "./lib/context/src/index.js",
+    "./gateway": "./lib/gateway/src/index.js",
+    "./local": "./lib/local/src/index.js",
+    "./local-runtime": "./lib/local-runtime/src/index.js",
+    "./mcp": "./lib/mcp/src/index.js",
+    "./memory-context": "./lib/memory-context/src/index.js",
+    "./memory-gateway": "./lib/memory-gateway/src/index.js",
+    "./openai-compatible": "./lib/openai-compatible/src/index.js",
+    "./platform-http": "./lib/platform-http/src/index.js",
+    "./platform-policy": "./lib/platform-policy/src/index.js",
+    "./sandbox-docker": "./lib/sandbox-docker/src/index.js",
+    "./session-jsonl": "./lib/session-jsonl/src/index.js",
+    "./session-jsonl/testing": "./lib/session-jsonl/src/testing.js",
+    "./session-memory": "./lib/session-memory/src/index.js",
+    "./skill-context": "./lib/skill-context/src/index.js",
+    "./skill-filesystem": "./lib/skill-filesystem/src/index.js",
+    "./skill-tool": "./lib/skill-tool/src/index.js"
+  },
+  "dependencies": {
+    "@agent-harness/kernel": "workspace:*"
+  }
+}

@@ -1,6 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { JsonlSessionRepository } from '@agent-harness/adapters/session-jsonl';
+import { InMemorySessionLog } from '@agent-harness/adapters/session-memory';
 import {
   AgentClosedError,
   AgentIdCollisionError,
@@ -25,8 +27,6 @@ import {
   type UserMessage,
 } from '@agent-harness/kernel';
 import { AgentRuntime, RuntimeClosedError } from '@agent-harness/runtime';
-import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
-import { InMemorySessionLog } from '@agent-harness/session-memory';
 import { ScriptedModelProvider, SequentialAgentIds } from '@agent-harness/test-support';
 import { afterEach, describe, expect, it } from 'vitest';
 

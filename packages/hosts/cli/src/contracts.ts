@@ -1,4 +1,4 @@
-import type { McpClient } from '@agent-harness/mcp';
+import type { McpClient } from '@agent-harness/adapters/mcp';
 import type { readBoundedDocumentFile } from './document-file.js';
 import type { StdioMcpClientOptions } from './mcp-stdio.js';
 

@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { runCli } from './cli.js';
 
-export { createShellTool } from '@agent-harness/local';
+export { createShellTool } from '@agent-harness/adapters/local';
 export {
   type CliDependencies,
   type CliOutput,

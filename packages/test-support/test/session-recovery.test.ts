@@ -1,4 +1,4 @@
-import { deriveModelMessages } from '@agent-harness/context-runtime';
+import { deriveModelMessages } from '@agent-harness/adapters/context';
 import {
   type AttemptId,
   analyzeSessionLifecycle,

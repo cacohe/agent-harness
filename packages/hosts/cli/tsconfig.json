@@ -7,9 +7,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    {
-      "path": "../../context/context-runtime"
-    },
+    { "path": "../../adapters" },
     {
       "path": "../../core"
     },
@@ -17,40 +15,7 @@
       "path": "../../kernel"
     },
     {
-      "path": "../../llm/gateway"
-    },
-    {
-      "path": "../../memory/memory-gateway"
-    },
-    {
-      "path": "../../memory/memory-context"
-    },
-    {
-      "path": "../../tools/mcp"
-    },
-    {
-      "path": "../../llm/openai-compatible"
-    },
-    {
-      "path": "../../platform/platform-http"
-    },
-    {
       "path": "../../runtime"
-    },
-    {
-      "path": "../../session/session-jsonl"
-    },
-    {
-      "path": "../../skills/skill-filesystem"
-    },
-    {
-      "path": "../../skills/skill-context"
-    },
-    {
-      "path": "../../skills/skill-tool"
-    },
-    {
-      "path": "../../tools/local"
     }
   ]
 }

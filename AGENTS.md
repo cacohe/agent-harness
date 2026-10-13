@@ -26,6 +26,10 @@ Agent Harness Lab 是面向生产设计的 Agent Harness 实现。代码应足�
 - 仓库中的 Markdown、AGENTS、ADR、Skill、JSDoc 和代码注释统一使用中文；代码标识符、包名、协议字段和必要错误码保留英文。
 - 文件末尾恰好保留一个换行。格式与 lint 由 `pnpm run lint`（Biome）检查；依赖方向、package 元数据、类型检查和测试必须由 `scripts/` 或 package script 中的可执行 gate 检查。
 
+## 新增 package 的条件
+
+默认新增目录和模块，不新增 workspace package。只有满足至少一项时才新增独立 package：必须由构建系统阻止其依赖某层；拥有独立的第三方依赖或运行环境；是稳定且会被独立替换的 capability 边界；或具有不同的构建、发布、权限或许可证要求。仅因文件数量少、名称不同或未来可能复用，不构成新增 package 的理由。
+
 ## 代码质量与 Clean Code
 
 - 以高内聚、低耦合为首要设计目标。一个模块、类或函数只承担一个清晰职责；把因同一原因变化的行为放在一起，把因不同原因变化的行为分开。
@@ -53,14 +57,7 @@ docs/                              架构与决定
 packages/
   kernel/                          Agent 概念、状态、接口、事件、错误与通用运行时
   core/                            Inbox 与 Agent 核心循环状态机
-  context/context-runtime/         Prompt 组装、时间上下文与模型消息投影
-  llm/
-    openai-compatible/             OpenAI-compatible 模型 adapter
-  session/
-    session-memory/                内存会话实现
-    session-jsonl/                 JSONL 会话存储 adapter
-  memory/memory-context/           长期记忆上下文贡献器
-  skills/skill-context/            已启用 Skill 摘要上下文贡献器
+  adapters/                        JSONL、模型、MCP、Skills、Memory 与本地工具等具体实现
   runtime/                         显式组合与生命周期
   hosts/cli/                       CLI 等进程入口
   test-support/                    确定性 fake 与 fixture

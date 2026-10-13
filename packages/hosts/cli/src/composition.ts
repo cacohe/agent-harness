@@ -1,23 +1,24 @@
-import { LlmGatewayModelProvider } from '@agent-harness/gateway';
-import {
-  CompositeToolCapability,
-  DuplicateToolNameError,
-  type ToolDefinition,
-  ToolRegistry,
-} from '@agent-harness/kernel';
-import { createShellTool } from '@agent-harness/local';
-import { type McpClient, McpToolAdapter } from '@agent-harness/mcp';
+import { LlmGatewayModelProvider } from '@agent-harness/adapters/gateway';
+import { createShellTool } from '@agent-harness/adapters/local';
+import { createLocalOpenAiModel } from '@agent-harness/adapters/local-runtime';
+import { type McpClient, McpToolAdapter } from '@agent-harness/adapters/mcp';
 import {
   createMemoryWriterTool,
   MemoryGatewayDocumentDeleter,
   MemoryGatewayDocumentImporter,
   MemoryGatewayDocumentStatusReader,
   MemoryGatewayRetriever,
-} from '@agent-harness/memory-gateway';
-import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible';
-import { PlatformHttpClient } from '@agent-harness/platform-http';
-import type { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem';
-import { createSkillLoaderTool } from '@agent-harness/skill-tool';
+} from '@agent-harness/adapters/memory-gateway';
+import type { OpenAiCompatibleModelProvider } from '@agent-harness/adapters/openai-compatible';
+import { PlatformHttpClient } from '@agent-harness/adapters/platform-http';
+import type { FilesystemSkillCatalog } from '@agent-harness/adapters/skill-filesystem';
+import { createSkillLoaderTool } from '@agent-harness/adapters/skill-tool';
+import {
+  CompositeToolCapability,
+  DuplicateToolNameError,
+  type ToolDefinition,
+  ToolRegistry,
+} from '@agent-harness/kernel';
 import { type CliConfig, type CliModelConfig, CliUsageError } from './config.js';
 import type { CliDependencies } from './contracts.js';
 import { StdioMcpClient, type StdioMcpClientOptions } from './mcp-stdio.js';
@@ -74,7 +75,7 @@ export function createModelProvider(
 ): OpenAiCompatibleModelProvider | LlmGatewayModelProvider {
   if ('baseUrl' in config) {
     const apiKey = requiredEnvironment(dependencies.env, config.apiKeyEnv);
-    return new OpenAiCompatibleModelProvider({
+    return createLocalOpenAiModel({
       id: config.id,
       baseUrl: config.baseUrl,
       apiKey,

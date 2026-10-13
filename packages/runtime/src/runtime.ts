@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BoundedPromptAssembler } from '@agent-harness/context-runtime';
+import { BoundedPromptAssembler } from '@agent-harness/adapters/context';
 import { Agent } from '@agent-harness/core';
 import {
   type AgentIdGenerator,

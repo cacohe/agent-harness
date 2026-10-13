@@ -1,12 +1,12 @@
 import { readFile as nodeReadFile } from 'node:fs/promises';
-import { BoundedPromptAssembler } from '@agent-harness/context-runtime';
+import { BoundedPromptAssembler } from '@agent-harness/adapters/context';
+import { createLocalSessionRepository } from '@agent-harness/adapters/local-runtime';
+import type { McpToolAdapter } from '@agent-harness/adapters/mcp';
+import { RetrievedMemoryContext } from '@agent-harness/adapters/memory-context';
+import { EnabledSkillsContext } from '@agent-harness/adapters/skill-context';
+import { FilesystemSkillCatalog } from '@agent-harness/adapters/skill-filesystem';
 import { brandId, type MessageId, type SessionId } from '@agent-harness/kernel';
-import type { McpToolAdapter } from '@agent-harness/mcp';
-import { RetrievedMemoryContext } from '@agent-harness/memory-context';
 import { AgentRuntime } from '@agent-harness/runtime';
-import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
-import { EnabledSkillsContext } from '@agent-harness/skill-context';
-import { FilesystemSkillCatalog } from '@agent-harness/skill-filesystem';
 import { createStdinLines, openChatSession, runChatLoop } from './chat.js';
 import { parseArgv } from './command.js';
 import {
@@ -109,7 +109,7 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
           ? undefined
           : await FilesystemSkillCatalog.create(config.skills, processController.signal);
       runtime = new AgentRuntime({
-        sessions: new JsonlSessionRepository({ rootDirectory: config.sessionRoot }),
+        sessions: createLocalSessionRepository(config.sessionRoot),
         model: createModelProvider(config.model, config.maxModelOutputBytes, dependencies),
         tools: composeTools(config, mcp, skills, memory?.writerTool),
         maxSteps: config.maxSteps,

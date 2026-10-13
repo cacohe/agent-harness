@@ -7,11 +7,8 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../../context/context-runtime" },
+    { "path": "../../adapters" },
     { "path": "../../kernel" },
-    { "path": "../../llm/openai-compatible" },
-    { "path": "../../runtime" },
-    { "path": "../../session/session-jsonl" },
-    { "path": "../../tools/local" }
+    { "path": "../../runtime" }
   ]
 }

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { WorkspaceError } from '@agent-harness/adapters/local';
 import { SessionNotFoundError } from '@agent-harness/kernel';
-import { WorkspaceError } from '@agent-harness/local';
 import { type WebSessionController, WebSessionNotFoundError } from './session-registry.js';
 import { uiScript } from './ui/client.js';
 import { uiFavicon } from './ui/favicon.js';

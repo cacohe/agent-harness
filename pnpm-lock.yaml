@@ -21,11 +21,11 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@24.13.6)
 
-  packages/context/context-runtime:
+  packages/adapters:
     dependencies:
       '@agent-harness/kernel':
         specifier: workspace:*
-        version: link:../../kernel
+        version: link:../kernel
 
   packages/core:
     dependencies:
@@ -35,113 +35,41 @@ importers:
 
   packages/hosts/cli:
     dependencies:
-      '@agent-harness/context-runtime':
+      '@agent-harness/adapters':
         specifier: workspace:*
-        version: link:../../context/context-runtime
+        version: link:../../adapters
       '@agent-harness/core':
         specifier: workspace:*
         version: link:../../core
-      '@agent-harness/gateway':
-        specifier: workspace:*
-        version: link:../../llm/gateway
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../../kernel
-      '@agent-harness/local':
-        specifier: workspace:*
-        version: link:../../tools/local
-      '@agent-harness/mcp':
-        specifier: workspace:*
-        version: link:../../tools/mcp
-      '@agent-harness/memory-context':
-        specifier: workspace:*
-        version: link:../../memory/memory-context
-      '@agent-harness/memory-gateway':
-        specifier: workspace:*
-        version: link:../../memory/memory-gateway
-      '@agent-harness/openai-compatible':
-        specifier: workspace:*
-        version: link:../../llm/openai-compatible
-      '@agent-harness/platform-http':
-        specifier: workspace:*
-        version: link:../../platform/platform-http
       '@agent-harness/runtime':
         specifier: workspace:*
         version: link:../../runtime
-      '@agent-harness/session-jsonl':
-        specifier: workspace:*
-        version: link:../../session/session-jsonl
-      '@agent-harness/skill-context':
-        specifier: workspace:*
-        version: link:../../skills/skill-context
-      '@agent-harness/skill-filesystem':
-        specifier: workspace:*
-        version: link:../../skills/skill-filesystem
-      '@agent-harness/skill-tool':
-        specifier: workspace:*
-        version: link:../../skills/skill-tool
       '@modelcontextprotocol/client':
         specifier: ^2.3.1
         version: 2.3.1
 
   packages/hosts/web:
     dependencies:
-      '@agent-harness/context-runtime':
+      '@agent-harness/adapters':
         specifier: workspace:*
-        version: link:../../context/context-runtime
+        version: link:../../adapters
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../../kernel
-      '@agent-harness/local':
-        specifier: workspace:*
-        version: link:../../tools/local
-      '@agent-harness/openai-compatible':
-        specifier: workspace:*
-        version: link:../../llm/openai-compatible
       '@agent-harness/runtime':
         specifier: workspace:*
         version: link:../../runtime
-      '@agent-harness/session-jsonl':
-        specifier: workspace:*
-        version: link:../../session/session-jsonl
 
   packages/kernel: {}
 
-  packages/llm/gateway:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/llm/openai-compatible:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/memory/memory-context:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/memory/memory-gateway:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/platform/platform-http:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
   packages/runtime:
     dependencies:
-      '@agent-harness/context-runtime':
+      '@agent-harness/adapters':
         specifier: workspace:*
-        version: link:../context/context-runtime
+        version: link:../adapters
       '@agent-harness/core':
         specifier: workspace:*
         version: link:../core
@@ -149,91 +77,21 @@ importers:
         specifier: workspace:*
         version: link:../kernel
     devDependencies:
-      '@agent-harness/session-jsonl':
-        specifier: workspace:*
-        version: link:../session/session-jsonl
-      '@agent-harness/session-memory':
-        specifier: workspace:*
-        version: link:../session/session-memory
       '@agent-harness/test-support':
         specifier: workspace:*
         version: link:../test-support
 
-  packages/session/session-jsonl:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/session/session-memory:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/skills/skill-context:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/skills/skill-filesystem:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/skills/skill-tool:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
   packages/test-support:
     dependencies:
+      '@agent-harness/adapters':
+        specifier: workspace:*
+        version: link:../adapters
       '@agent-harness/core':
         specifier: workspace:*
         version: link:../core
       '@agent-harness/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-harness/session-memory':
-        specifier: workspace:*
-        version: link:../session/session-memory
-    devDependencies:
-      '@agent-harness/context-runtime':
-        specifier: workspace:*
-        version: link:../context/context-runtime
-      '@agent-harness/memory-context':
-        specifier: workspace:*
-        version: link:../memory/memory-context
-      '@agent-harness/skill-context':
-        specifier: workspace:*
-        version: link:../skills/skill-context
-
-  packages/tools/local:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/tools/mcp:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/tools/platform-policy:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-
-  packages/tools/sandbox-docker:
-    dependencies:
-      '@agent-harness/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
 
 packages:
 

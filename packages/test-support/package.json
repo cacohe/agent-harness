@@ -7,13 +7,8 @@
     ".": "./lib/index.js"
   },
   "dependencies": {
+    "@agent-harness/adapters": "workspace:*",
     "@agent-harness/core": "workspace:*",
-    "@agent-harness/kernel": "workspace:*",
-    "@agent-harness/session-memory": "workspace:*"
-  },
-  "devDependencies": {
-    "@agent-harness/context-runtime": "workspace:*",
-    "@agent-harness/memory-context": "workspace:*",
-    "@agent-harness/skill-context": "workspace:*"
+    "@agent-harness/kernel": "workspace:*"
   }
 }

@@ -10,11 +10,8 @@
     ".": "./lib/index.js"
   },
   "dependencies": {
-    "@agent-harness/context-runtime": "workspace:*",
+    "@agent-harness/adapters": "workspace:*",
     "@agent-harness/kernel": "workspace:*",
-    "@agent-harness/local": "workspace:*",
-    "@agent-harness/openai-compatible": "workspace:*",
-    "@agent-harness/runtime": "workspace:*",
-    "@agent-harness/session-jsonl": "workspace:*"
+    "@agent-harness/runtime": "workspace:*"
   }
 }

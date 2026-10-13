@@ -1,3 +1,4 @@
+import { InMemorySessionLog } from '@agent-harness/adapters/session-memory';
 import type {
   EventEnvelope,
   SessionEvent,
@@ -6,7 +7,6 @@ import type {
   SessionOperationOptions,
   SettlementSignalFactory,
 } from '@agent-harness/kernel';
-import { InMemorySessionLog } from '@agent-harness/session-memory';
 
 /** 每次结算创建独立、默认不会自行取消的测试信号。 */
 export class TestSettlementSignals implements SettlementSignalFactory {

@@ -1,4 +1,5 @@
-import { deriveModelMessages } from '@agent-harness/context-runtime';
+import { deriveModelMessages } from '@agent-harness/adapters/context';
+import { InMemorySessionLog } from '@agent-harness/adapters/session-memory';
 import {
   brandId,
   type EventEnvelope,
@@ -9,7 +10,6 @@ import {
   type ToolCallId,
   type TurnId,
 } from '@agent-harness/kernel';
-import { InMemorySessionLog } from '@agent-harness/session-memory';
 import { describe, expect, it } from 'vitest';
 
 describe('InMemorySessionLog', () => {

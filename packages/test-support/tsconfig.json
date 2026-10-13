@@ -12,8 +12,6 @@
     {
       "path": "../kernel"
     },
-    {
-      "path": "../session/session-memory"
-    }
+    { "path": "../adapters" }
   ]
 }

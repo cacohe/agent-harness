@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["*/src/**/*.ts", "*/*/src/**/*.ts"],
+  "references": [{ "path": "../kernel" }]
+}

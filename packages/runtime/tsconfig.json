@@ -7,9 +7,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    {
-      "path": "../context/context-runtime"
-    },
+    { "path": "../adapters" },
     {
       "path": "../core"
     },

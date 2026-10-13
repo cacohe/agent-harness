@@ -21,7 +21,21 @@ export function verifyArchitecture(manifests, sources = []) {
     'session/session-memory',
     'skills/skill-context',
   ]);
-  const adapters = [
+  const allowedByOwner = new Map([
+    ['kernel', new Set(['kernel'])],
+    ['core', new Set(['kernel'])],
+    ['adapters', new Set(['kernel'])],
+    ['context/context-runtime', new Set(['kernel'])],
+    ['memory/memory-context', new Set(['kernel'])],
+    ['session/session-memory', new Set(['kernel'])],
+    ['skills/skill-context', new Set(['kernel'])],
+    ['tools/local', new Set(['kernel'])],
+    ['runtime', new Set(['kernel', 'core', 'adapters', 'context/context-runtime'])],
+    ['test-support', new Set(['kernel', 'core', 'adapters'])],
+    ['hosts/cli', new Set(['kernel', 'core', 'adapters', 'runtime'])],
+    ['hosts/web', new Set(['kernel', 'adapters', 'runtime'])],
+  ]);
+  for (const owner of [
     'llm/gateway',
     'llm/openai-compatible',
     'memory/memory-gateway',
@@ -32,50 +46,9 @@ export function verifyArchitecture(manifests, sources = []) {
     'tools/mcp',
     'tools/platform-policy',
     'tools/sandbox-docker',
-  ];
-  const allowedByOwner = new Map([
-    ['kernel', new Set(['kernel'])],
-    ['core', new Set(['kernel'])],
-    ['context/context-runtime', new Set(['kernel'])],
-    ['memory/memory-context', new Set(['kernel'])],
-    ['session/session-memory', new Set(['kernel'])],
-    ['skills/skill-context', new Set(['kernel'])],
-    ['tools/local', new Set(['kernel'])],
-    ['runtime', new Set(['kernel', 'core', 'context/context-runtime'])],
-    ['test-support', new Set(['kernel', 'core', 'session/session-memory'])],
-    [
-      'hosts/cli',
-      new Set([
-        'kernel',
-        'core',
-        'context/context-runtime',
-        'tools/local',
-        'llm/gateway',
-        'llm/openai-compatible',
-        'memory/memory-context',
-        'memory/memory-gateway',
-        'platform/platform-http',
-        'runtime',
-        'session/session-jsonl',
-        'skills/skill-context',
-        'skills/skill-filesystem',
-        'skills/skill-tool',
-        'tools/mcp',
-      ]),
-    ],
-    [
-      'hosts/web',
-      new Set([
-        'kernel',
-        'context/context-runtime',
-        'tools/local',
-        'llm/openai-compatible',
-        'runtime',
-        'session/session-jsonl',
-      ]),
-    ],
-  ]);
-  for (const path of adapters) allowedByOwner.set(path, new Set(['kernel']));
+  ]) {
+    allowedByOwner.set(owner, new Set(['kernel']));
+  }
 
   const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]));
   const failures = [];
@@ -99,7 +72,7 @@ export function verifyArchitecture(manifests, sources = []) {
         }
         continue;
       }
-      const dependencyPath = packageByName.get(dependency);
+      const dependencyPath = resolveWorkspacePackagePath(dependency, packageByName);
       if (dependencyPath === undefined) {
         failures.push(`${owner}: unknown workspace dependency ${dependency}`);
       } else if (allowed !== undefined && !allowed.has(dependencyPath)) {
@@ -130,7 +103,7 @@ export function verifyArchitecture(manifests, sources = []) {
         continue;
       }
       if (specifier.startsWith('@agent-harness/')) {
-        const dependencyPath = packageByName.get(specifier);
+        const dependencyPath = resolveWorkspacePackagePath(specifier, packageByName);
         if (dependencyPath === undefined) {
           failures.push(`${owner}/${file}: unknown workspace import ${specifier}`);
         } else if (allowed !== undefined && !allowed.has(dependencyPath)) {
@@ -144,6 +117,13 @@ export function verifyArchitecture(manifests, sources = []) {
     }
   }
   return failures;
+}
+
+function resolveWorkspacePackagePath(specifier, packageByName) {
+  const direct = packageByName.get(specifier);
+  if (direct !== undefined) return direct;
+  const packageName = [...packageByName.keys()].find((name) => specifier.startsWith(`${name}/`));
+  return packageName === undefined ? undefined : packageByName.get(packageName);
 }
 
 function exportedNames(source) {

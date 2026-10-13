@@ -1,10 +1,10 @@
 # 架构
 
-Agent Harness Lab 使用 append-only 会话事件日志和显式 Agent 状态机。运行时将 capability 接口与具体 adapter 组合，capability 所属 package 不通过全局上下文发现依赖。
+Agent Harness Lab 是面向本地和自托管环境的 TypeScript Agent Runtime 参考实现。它使用 append-only 会话事件日志和显式 Agent 状态机，并以可组合 adapter 接入模型、会话、工具、Skills 与 Memory；它不试图提供多租户控制面或完整业务产品。
 
 ## 依赖层次
 
-`kernel` 定义 Agent 循环使用的全部协议无关概念、状态、接口、事件与错误。单一 `core` package 只实现 Agent 核心循环状态机。上下文、会话和工具实现分别属于 `context/`、`session/` 和 `tools/` 能力域；adapter 实现外部存储与模型协议。`runtime` 校验并组合 Agent 循环及协议无关实现，`hosts` 组合外部 adapter 并通过进程协议暴露应用。
+`kernel` 定义 Agent 循环使用的全部协议无关概念、状态、接口、事件与错误。单一 `core` package 只实现 Agent 核心循环状态机。`adapters` 集中保存具体的上下文、会话、工具、模型、Skills 与 Memory 实现，并只依赖 kernel。`runtime` 校验并组合 Agent 循环；`hosts` 负责配置、凭据、进程协议和生命周期。
 
 依赖统一指向 `kernel`。Core、能力实现和 adapter 都只依赖内核契约，彼此不建立生产依赖；Runtime 和 Host 在组合点注入具体实现。
 
@@ -16,28 +16,12 @@ workspace 按能力域分组（见 ADR 0011），npm 包名仍为 `@agent-harnes
 packages/
   kernel/                      Agent 概念、状态、接口、事件与错误
   core/                        Agent 核心循环状态机
-  context/
-    context-runtime/           Prompt 组装、时间上下文与模型消息投影
+  adapters/                    按能力域组织的具体 adapter 与本地默认装配
   tools/
     local/                     可复用本地 Shell 与工作目录工具
     mcp/                       MCP 工具 adapter
     platform-policy/           Platform 一次性工具许可 adapter
     sandbox-docker/            Docker OCI Sandbox dispatcher
-  llm/
-    openai-compatible/         Chat Completions adapter
-    gateway/                   Platform LLM Gateway adapter
-  memory/
-    memory-context/            长期记忆上下文贡献器
-    memory-gateway/            Platform 长期记忆与文件导入 Gateway adapter
-  platform/
-    platform-http/             Platform Gateway 与 Permit HTTP adapter
-  session/
-    session-memory/            内存会话实现
-    session-jsonl/             JSONL 会话 adapter
-  skills/
-    skill-context/             已启用 Skill 摘要上下文贡献器
-    skill-filesystem/          受限文件系统 Skill catalog
-    skill-tool/                Skill 正文加载工具 adapter
   runtime/                     显式组合根
   hosts/cli/                   命令行进程入口
   hosts/web/                   本地 Web UI 与 SSE 进程入口

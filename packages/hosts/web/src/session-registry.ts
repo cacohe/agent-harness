@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
+import { resolveWorkspaceDirectory } from '@agent-harness/adapters/local';
 import {
   type AgentObserver,
   brandId,
@@ -8,7 +9,6 @@ import {
   SessionAlreadyExistsError,
   type SessionId,
 } from '@agent-harness/kernel';
-import { resolveWorkspaceDirectory } from '@agent-harness/local';
 import type { AgentRuntime, AgentRuntimeHandle } from '@agent-harness/runtime';
 import { SessionEventStream } from './events.js';
 import { projectChatTranscript } from './transcript.js';

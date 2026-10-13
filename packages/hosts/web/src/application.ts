@@ -1,9 +1,11 @@
-import { BoundedPromptAssembler } from '@agent-harness/context-runtime';
+import { BoundedPromptAssembler } from '@agent-harness/adapters/context';
+import { createWorkspaceTools } from '@agent-harness/adapters/local';
+import {
+  createLocalOpenAiModel,
+  createLocalSessionRepository,
+} from '@agent-harness/adapters/local-runtime';
 import { type AgentObserver, brandId, type SessionId, ToolRegistry } from '@agent-harness/kernel';
-import { createWorkspaceTools } from '@agent-harness/local';
-import { OpenAiCompatibleModelProvider } from '@agent-harness/openai-compatible';
 import { AgentRuntime } from '@agent-harness/runtime';
-import { JsonlSessionRepository } from '@agent-harness/session-jsonl';
 import type { WebHostConfig } from './config.js';
 import { WebUsageError } from './config.js';
 import { SessionRegistry, type SessionRuntimeFactory } from './session-registry.js';
@@ -18,9 +20,9 @@ export function createSessionRegistry(
   if (apiKey === undefined || apiKey.length === 0) {
     throw new WebUsageError(`环境变量 ${config.model.apiKeyEnv} 未设置`);
   }
-  const sessions = new JsonlSessionRepository({ rootDirectory: config.sessionRoot });
+  const sessions = createLocalSessionRepository(config.sessionRoot);
   const workspaces = new SessionWorkspaceStore(config.sessionRoot);
-  const model = new OpenAiCompatibleModelProvider({
+  const model = createLocalOpenAiModel({
     id: config.model.id,
     baseUrl: config.model.baseUrl,
     apiKey,

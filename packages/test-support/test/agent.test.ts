@@ -1,4 +1,7 @@
-import { BoundedPromptAssembler, CurrentTimeContext } from '@agent-harness/context-runtime';
+import { BoundedPromptAssembler, CurrentTimeContext } from '@agent-harness/adapters/context';
+import { RetrievedMemoryContext } from '@agent-harness/adapters/memory-context';
+import { InMemorySessionLog } from '@agent-harness/adapters/session-memory';
+import { EnabledSkillsContext } from '@agent-harness/adapters/skill-context';
 import { Agent } from '@agent-harness/core';
 import {
   AgentClosedError,
@@ -16,9 +19,6 @@ import {
   ToolRegistry,
   type UserMessage,
 } from '@agent-harness/kernel';
-import { RetrievedMemoryContext } from '@agent-harness/memory-context';
-import { InMemorySessionLog } from '@agent-harness/session-memory';
-import { EnabledSkillsContext } from '@agent-harness/skill-context';
 import {
   ControlledSessionLog,
   fakeTool,
