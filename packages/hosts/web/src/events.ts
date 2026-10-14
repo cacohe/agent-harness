@@ -46,7 +46,9 @@ export class SessionEventStream {
       const pending = subscriber.pending ?? [];
       subscriber.pending = undefined;
       for (const event of pending) {
-        if (event.sequence !== undefined && event.sequence <= initial.sequence) continue;
+        if (event.sequence !== undefined && event.sequence <= initial.sequence) {
+          continue;
+        }
         if (!response.write(event.payload)) {
           response.end();
           this.#subscribers.delete(subscriber);
@@ -80,7 +82,9 @@ export class SessionEventStream {
   }
 
   close(): void {
-    for (const subscriber of this.#subscribers) subscriber.response.end();
+    for (const subscriber of this.#subscribers) {
+      subscriber.response.end();
+    }
     this.#subscribers.clear();
   }
 }

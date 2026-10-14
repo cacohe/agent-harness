@@ -2,14 +2,24 @@ import { isAbortError } from '@agent-harness/kernel';
 import { CliUsageError } from './config.js';
 
 export function diagnostic(error: unknown, signal: AbortSignal): string {
-  if (signal.aborted || isAbortError(error)) return '命令已取消';
-  if (error instanceof CliUsageError) return `参数或配置错误：${error.message}`;
+  if (signal.aborted || isAbortError(error)) {
+    return '命令已取消';
+  }
+  if (error instanceof CliUsageError) {
+    return `参数或配置错误：${error.message}`;
+  }
   const session = describeSafeSessionError(error);
-  if (session !== undefined) return session;
+  if (session !== undefined) {
+    return session;
+  }
   const provider = describeSafeProviderError(error);
-  if (provider !== undefined) return `命令执行失败：${provider}`;
+  if (provider !== undefined) {
+    return `命令执行失败：${provider}`;
+  }
   const system = describeSafeSystemError(error);
-  if (system !== undefined) return `命令执行失败：${system}`;
+  if (system !== undefined) {
+    return `命令执行失败：${system}`;
+  }
   return '命令执行失败；详情已被抑制以避免泄露敏感信息';
 }
 
@@ -17,7 +27,9 @@ export function diagnostic(error: unknown, signal: AbortSignal): string {
 function describeSafeProviderError(error: unknown): string | undefined {
   const candidates = error instanceof AggregateError ? error.errors : [error];
   for (const candidate of candidates) {
-    if (!(candidate instanceof Error)) continue;
+    if (!(candidate instanceof Error)) {
+      continue;
+    }
     switch (candidate.name) {
       case 'OpenAiCompatibleHttpError':
       case 'OpenAiCompatibleProtocolError':
@@ -39,7 +51,9 @@ function describeSafeProviderError(error: unknown): string | undefined {
 function describeSafeSessionError(error: unknown): string | undefined {
   const candidates = error instanceof AggregateError ? error.errors : [error];
   for (const candidate of candidates) {
-    if (!(candidate instanceof Error)) continue;
+    if (!(candidate instanceof Error)) {
+      continue;
+    }
     switch (candidate.name) {
       case 'SessionAlreadyExistsError':
         return `${candidate.message}；已有会话请改用 resume 或 chat`;
@@ -65,7 +79,9 @@ function describeSafeSessionError(error: unknown): string | undefined {
 function describeSafeSystemError(error: unknown): string | undefined {
   const candidates = error instanceof AggregateError ? error.errors : [error];
   for (const candidate of candidates) {
-    if (!(candidate instanceof Error)) continue;
+    if (!(candidate instanceof Error)) {
+      continue;
+    }
     const code =
       'code' in candidate && typeof candidate.code === 'string' ? candidate.code : undefined;
     if (

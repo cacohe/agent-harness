@@ -8,7 +8,9 @@ export class SessionWorkspaceStore {
   readonly #directory: string;
 
   constructor(sessionRoot: string) {
-    if (!isAbsolute(sessionRoot)) throw new TypeError('sessionRoot 必须是绝对路径');
+    if (!isAbsolute(sessionRoot)) {
+      throw new TypeError('sessionRoot 必须是绝对路径');
+    }
     this.#directory = resolve(sessionRoot, 'web-workspaces');
   }
 
@@ -26,7 +28,9 @@ export class SessionWorkspaceStore {
     try {
       text = await readFile(this.#path(sessionId), 'utf8');
     } catch (error) {
-      if (isNotFound(error)) return undefined;
+      if (isNotFound(error)) {
+        return undefined;
+      }
       throw error;
     }
     let value: unknown;

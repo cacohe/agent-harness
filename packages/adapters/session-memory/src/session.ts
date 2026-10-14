@@ -31,7 +31,9 @@ export class InMemorySessionLog implements SessionLog {
   ): Promise<readonly EventEnvelope[]> {
     this.#assertOpen();
     options.signal.throwIfAborted();
-    if (events.length === 0) return [];
+    if (events.length === 0) {
+      return [];
+    }
     if (
       options.expectedSequence !== undefined &&
       options.expectedSequence !== this.#events.length
@@ -41,7 +43,9 @@ export class InMemorySessionLog implements SessionLog {
     if (options.batchId !== undefined && this.#batchIds.has(options.batchId)) {
       throw new SessionSequenceConflictError('batchId 已存在');
     }
-    for (const event of events) assertJsonValue(event);
+    for (const event of events) {
+      assertJsonValue(event);
+    }
     const firstSequence = this.#events.length + 1;
     const envelopes = events.map(
       (event, index): EventEnvelope =>
@@ -55,7 +59,9 @@ export class InMemorySessionLog implements SessionLog {
     );
     options.signal.throwIfAborted();
     this.#events.push(...envelopes);
-    if (options.batchId !== undefined) this.#batchIds.add(options.batchId);
+    if (options.batchId !== undefined) {
+      this.#batchIds.add(options.batchId);
+    }
     return envelopes;
   }
 
@@ -71,13 +77,17 @@ export class InMemorySessionLog implements SessionLog {
   }
 
   async close(options: SessionOperationOptions): Promise<void> {
-    if (this.#closed) return;
+    if (this.#closed) {
+      return;
+    }
     this.#closed = true;
     options.signal.throwIfAborted();
   }
 
   #assertOpen(): void {
-    if (this.#closed) throw new SessionClosedError('会话句柄已关闭');
+    if (this.#closed) {
+      throw new SessionClosedError('会话句柄已关闭');
+    }
   }
 }
 
@@ -90,7 +100,9 @@ function immutableSnapshot<T>(value: T): T {
 }
 
 function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
-  if (typeof value !== 'object' || value === null || seen.has(value)) return value;
+  if (typeof value !== 'object' || value === null || seen.has(value)) {
+    return value;
+  }
   seen.add(value);
   for (const key of Reflect.ownKeys(value)) {
     deepFreeze(Reflect.get(value, key), seen);

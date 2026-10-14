@@ -1750,7 +1750,9 @@ describe('Agent', () => {
 });
 
 function rejectWhenAborted(signal: AbortSignal): Promise<never> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
   return new Promise<never>((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   });

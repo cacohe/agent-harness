@@ -100,7 +100,9 @@ export async function readConfig(
   ]);
   const model = object(root.model, 'model 配置');
   const sessionRoot = text(root.sessionRoot, 'sessionRoot');
-  if (!isAbsolute(sessionRoot)) throw new CliUsageError('sessionRoot 必须是绝对路径');
+  if (!isAbsolute(sessionRoot)) {
+    throw new CliUsageError('sessionRoot 必须是绝对路径');
+  }
   return {
     sessionRoot,
     maxSteps: positive(root.maxSteps, 'maxSteps'),
@@ -155,7 +157,9 @@ function readMemoryConfig(value: unknown): MemoryConfig {
     'writeEnabled',
   ]);
   const limit = memory.limit === undefined ? 8 : positive(memory.limit, 'memory.limit');
-  if (limit > 8) throw new CliUsageError('memory.limit 不能超过 8');
+  if (limit > 8) {
+    throw new CliUsageError('memory.limit 不能超过 8');
+  }
   return {
     platformBaseUrl: text(memory.platformBaseUrl, 'memory.platformBaseUrl'),
     authorizationEnv: environmentName(memory.authorizationEnv, 'memory.authorizationEnv'),
@@ -180,7 +184,9 @@ function readSkillsConfig(value: unknown): SkillsConfig {
   const skills = object(value, 'skills 配置');
   exact(skills, ['root', 'enabled'], 'skills 配置', ['maxSkillBytes']);
   const root = text(skills.root, 'skills.root');
-  if (!isAbsolute(root)) throw new CliUsageError('skills.root 必须是绝对路径');
+  if (!isAbsolute(root)) {
+    throw new CliUsageError('skills.root 必须是绝对路径');
+  }
   return {
     root,
     enabled: textArray(skills.enabled, 'skills.enabled'),
@@ -197,7 +203,9 @@ function readMcpConfig(value: unknown): McpConfig {
   const command = text(mcp.command, 'mcp.command');
   const args = mcp.args === undefined ? [] : textArray(mcp.args, 'mcp.args');
   const cwd = mcp.cwd === undefined ? undefined : text(mcp.cwd, 'mcp.cwd');
-  if (cwd !== undefined && !isAbsolute(cwd)) throw new CliUsageError('mcp.cwd 必须是绝对路径');
+  if (cwd !== undefined && !isAbsolute(cwd)) {
+    throw new CliUsageError('mcp.cwd 必须是绝对路径');
+  }
   const environment = mcp.environment === undefined ? {} : environmentMap(mcp.environment);
   return {
     command,
@@ -220,7 +228,9 @@ function readShellConfig(value: unknown, defaultCwd: string): ShellConfig {
   exact(shell, [], 'shell 配置', ['enabled', 'cwd', 'timeoutMs', 'maxOutputBytes']);
   const enabled = shell.enabled === undefined ? false : boolean(shell.enabled, 'shell.enabled');
   const cwd = shell.cwd === undefined ? resolve(defaultCwd) : text(shell.cwd, 'shell.cwd');
-  if (!isAbsolute(cwd)) throw new CliUsageError('shell.cwd 必须是绝对路径');
+  if (!isAbsolute(cwd)) {
+    throw new CliUsageError('shell.cwd 必须是绝对路径');
+  }
   return {
     enabled,
     cwd,
@@ -234,8 +244,9 @@ function readShellConfig(value: unknown, defaultCwd: string): ShellConfig {
 }
 
 function object(value: unknown, name: string): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new CliUsageError(`${name} 必须是对象`);
+  }
   return value as Record<string, unknown>;
 }
 function exact(
@@ -245,22 +256,33 @@ function exact(
   optional: readonly string[] = [],
 ): void {
   const allowed = new Set([...names, ...optional]);
-  for (const key of Object.keys(value))
-    if (!allowed.has(key)) throw new CliUsageError(`${label} 包含未知字段 ${key}`);
-  for (const key of names) if (!(key in value)) throw new CliUsageError(`${label} 缺少字段 ${key}`);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new CliUsageError(`${label} 包含未知字段 ${key}`);
+    }
+  }
+  for (const key of names) {
+    if (!(key in value)) {
+      throw new CliUsageError(`${label} 缺少字段 ${key}`);
+    }
+  }
 }
 function text(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value.length === 0)
+  if (typeof value !== 'string' || value.length === 0) {
     throw new CliUsageError(`${name} 必须是非空字符串`);
+  }
   return value;
 }
 function positive(value: unknown, name: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 1)
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
     throw new CliUsageError(`${name} 必须是正整数`);
+  }
   return value as number;
 }
 function boolean(value: unknown, name: string): boolean {
-  if (typeof value !== 'boolean') throw new CliUsageError(`${name} 必须是布尔值`);
+  if (typeof value !== 'boolean') {
+    throw new CliUsageError(`${name} 必须是布尔值`);
+  }
   return value;
 }
 function modelConfig(value: Record<string, unknown>): CliModelConfig {
@@ -284,7 +306,9 @@ function modelConfig(value: Record<string, unknown>): CliModelConfig {
 
 function environmentName(value: unknown, name: string): string {
   const result = text(value, name);
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result)) throw new CliUsageError(`${name} 必须是环境变量名`);
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result)) {
+    throw new CliUsageError(`${name} 必须是环境变量名`);
+  }
   return result;
 }
 function textArray(value: unknown, name: string): readonly string[] {
@@ -297,8 +321,9 @@ function environmentMap(value: unknown): Readonly<Record<string, string>> {
   const map = object(value, 'mcp.environment');
   const result: Record<string, string> = {};
   for (const [target, source] of Object.entries(map)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target))
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) {
       throw new CliUsageError('mcp.environment 键必须是环境变量名');
+    }
     result[target] = environmentName(source, `mcp.environment.${target}`);
   }
   return Object.freeze(result);

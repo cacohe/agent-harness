@@ -1160,7 +1160,9 @@ describe('CLI Host', () => {
         let delivered = false;
         return {
           next() {
-            if (delivered) return Promise.resolve({ done: true as const, value: undefined });
+            if (delivered) {
+              return Promise.resolve({ done: true as const, value: undefined });
+            }
             delivered = true;
             signals.listeners.get('SIGINT')?.();
             return Promise.resolve({ done: false as const, value: 'should-skip' });
@@ -1205,7 +1207,9 @@ describe('CLI Host', () => {
         config(sessionRoot, { enabled: true, cwd, timeoutMs: 10_000, maxOutputBytes: 4096 }),
       fetch: async () => {
         step += 1;
-        if (step === 1) return toolCallSse();
+        if (step === 1) {
+          return toolCallSse();
+        }
         return sse('shell-done');
       },
     });

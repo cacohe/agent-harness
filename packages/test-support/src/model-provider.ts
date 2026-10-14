@@ -24,7 +24,9 @@ export class ScriptedModelProvider implements ModelProvider {
   async prepare(signal: AbortSignal): Promise<PreparedModelCall> {
     signal.throwIfAborted();
     const script = this.#scripts.shift();
-    if (script === undefined) throw new Error('scripted model has no remaining response');
+    if (script === undefined) {
+      throw new Error('scripted model has no remaining response');
+    }
     await script.prepare?.(signal);
     signal.throwIfAborted();
     return {
@@ -44,5 +46,7 @@ async function* scriptedStream(
     signal.throwIfAborted();
     yield event;
   }
-  if (script.error !== undefined) throw script.error;
+  if (script.error !== undefined) {
+    throw script.error;
+  }
 }

@@ -9,12 +9,18 @@ export class WorkspaceError extends Error {
 /** 校验并规范化用户选择的工作目录。 */
 export async function resolveWorkspaceDirectory(path: string): Promise<string> {
   const trimmed = path.trim();
-  if (!isAbsolute(trimmed)) throw new WorkspaceError('工作目录必须是绝对路径');
+  if (!isAbsolute(trimmed)) {
+    throw new WorkspaceError('工作目录必须是绝对路径');
+  }
   try {
     const stats = await lstat(trimmed);
-    if (!stats.isDirectory()) throw new WorkspaceError('工作目录必须是已存在的目录');
+    if (!stats.isDirectory()) {
+      throw new WorkspaceError('工作目录必须是已存在的目录');
+    }
   } catch (error) {
-    if (error instanceof WorkspaceError) throw error;
+    if (error instanceof WorkspaceError) {
+      throw error;
+    }
     throw new WorkspaceError('工作目录不存在');
   }
   return await realpath(trimmed);
@@ -25,7 +31,9 @@ export async function resolveInsideWorkspace(
   workspace: string,
   inputPath: string,
 ): Promise<string> {
-  if (inputPath.trim().length === 0) throw new WorkspaceError('路径不能为空');
+  if (inputPath.trim().length === 0) {
+    throw new WorkspaceError('路径不能为空');
+  }
   const target = isAbsolute(inputPath) ? resolve(inputPath) : resolve(workspace, inputPath);
   assertInside(workspace, target);
   try {
@@ -33,7 +41,9 @@ export async function resolveInsideWorkspace(
     assertInside(workspace, real);
     return real;
   } catch (error) {
-    if (!isNotFound(error)) throw error;
+    if (!isNotFound(error)) {
+      throw error;
+    }
     const missing: string[] = [basename(target)];
     let current = dirname(target);
     while (true) {
@@ -42,8 +52,12 @@ export async function resolveInsideWorkspace(
         assertInside(workspace, realParent);
         return resolve(realParent, ...missing.toReversed());
       } catch (inner) {
-        if (!isNotFound(inner)) throw inner;
-        if (current === dirname(current)) throw error;
+        if (!isNotFound(inner)) {
+          throw inner;
+        }
+        if (current === dirname(current)) {
+          throw error;
+        }
         missing.push(basename(current));
         current = dirname(current);
       }

@@ -35,8 +35,11 @@ export class LocalWebServer {
     this.#pickWorkspace = options.pickWorkspace ?? pickWorkspaceDirectory;
     this.#server = createServer((request, response) => {
       void this.#route(request, response).catch((error) => {
-        if (!response.headersSent) sendText(response, status(error), diagnostic(error));
-        else response.end();
+        if (!response.headersSent) {
+          sendText(response, status(error), diagnostic(error));
+        } else {
+          response.end();
+        }
       });
     });
   }
@@ -50,7 +53,9 @@ export class LocalWebServer {
       });
     });
     const address = this.#server.address();
-    if (address === null || typeof address === 'string') throw new Error('Web 服务未返回 TCP 地址');
+    if (address === null || typeof address === 'string') {
+      throw new Error('Web 服务未返回 TCP 地址');
+    }
     return new URL(`http://127.0.0.1:${address.port}/`);
   }
 
@@ -71,24 +76,34 @@ export class LocalWebServer {
   }
 
   async #route(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    if (this.#closing) return sendText(response, 503, 'Web Host 正在关闭');
+    if (this.#closing) {
+      return sendText(response, 503, 'Web Host 正在关闭');
+    }
     assertLocalRequest(request);
     const method = request.method ?? 'GET';
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (method === 'GET' && url.pathname === '/')
+    if (method === 'GET' && url.pathname === '/') {
       return sendAsset(response, 'text/html; charset=utf-8', uiHtml);
-    if (method === 'GET' && (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico'))
+    }
+    if (method === 'GET' && (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico')) {
       return sendAsset(response, 'image/svg+xml; charset=utf-8', uiFavicon);
-    if (method === 'GET' && url.pathname === '/assets/app.css')
+    }
+    if (method === 'GET' && url.pathname === '/assets/app.css') {
       return sendAsset(response, 'text/css; charset=utf-8', uiCss);
-    if (method === 'GET' && url.pathname === '/assets/app.js')
+    }
+    if (method === 'GET' && url.pathname === '/assets/app.js') {
       return sendAsset(response, 'text/javascript; charset=utf-8', uiScript);
+    }
     if (method === 'POST' && url.pathname === '/workspace/browse') {
-      if (this.#browsing) return sendJson(response, 409, { cancelled: true, busy: true });
+      if (this.#browsing) {
+        return sendJson(response, 409, { cancelled: true, busy: true });
+      }
       this.#browsing = true;
       try {
         const workspace = await this.#pickWorkspace();
-        if (workspace === undefined) return sendJson(response, 409, { cancelled: true });
+        if (workspace === undefined) {
+          return sendJson(response, 409, { cancelled: true });
+        }
         return sendJson(response, 200, { workspace });
       } finally {
         this.#browsing = false;
@@ -103,7 +118,9 @@ export class LocalWebServer {
     const match = /^\/sessions\/([A-Za-z0-9_-]{1,128})\/(events|messages|cancel|close|open)$/.exec(
       url.pathname,
     );
-    if (match === null) return sendText(response, 404, '未找到路径');
+    if (match === null) {
+      return sendText(response, 404, '未找到路径');
+    }
     const sessionId = match[1];
     const operation = match[2];
     if (sessionId === undefined || operation === undefined || !sessionIdPattern.test(sessionId)) {
@@ -137,9 +154,13 @@ export class LocalWebServer {
 
 function assertLocalRequest(request: IncomingMessage): void {
   const port = request.socket.localPort;
-  if (port === undefined) throw new HttpError(400, '请求缺少本地端口');
+  if (port === undefined) {
+    throw new HttpError(400, '请求缺少本地端口');
+  }
   const authority = port === 80 ? '127.0.0.1' : `127.0.0.1:${port}`;
-  if (request.headers.host !== authority) throw new HttpError(403, '拒绝非本机来源');
+  if (request.headers.host !== authority) {
+    throw new HttpError(403, '拒绝非本机来源');
+  }
   const origin = request.headers.origin;
   if (origin !== undefined && origin !== `http://${authority}`) {
     throw new HttpError(403, '拒绝跨来源请求');
@@ -156,7 +177,9 @@ async function readMessage(request: IncomingMessage): Promise<SubmittedMessage> 
     throw new HttpError(400, '消息只能包含字符串 content 与 messageId');
   }
   const content = record.content.trim();
-  if (content.length === 0) throw new HttpError(400, '消息不能为空');
+  if (content.length === 0) {
+    throw new HttpError(400, '消息不能为空');
+  }
   if (!sessionIdPattern.test(record.messageId)) {
     throw new HttpError(400, 'messageId 无效');
   }
@@ -169,19 +192,24 @@ async function readWorkspace(request: IncomingMessage): Promise<string> {
     throw new HttpError(400, '创建会话只能包含字符串 workspace');
   }
   const workspace = record.workspace.trim();
-  if (workspace.length === 0) throw new HttpError(400, '工作目录不能为空');
+  if (workspace.length === 0) {
+    throw new HttpError(400, '工作目录不能为空');
+  }
   return workspace;
 }
 
 async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
-  if (request.headers['content-type'] !== 'application/json')
+  if (request.headers['content-type'] !== 'application/json') {
     throw new HttpError(415, 'Content-Type 必须是 application/json');
+  }
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += bytes.byteLength;
-    if (size > MAX_MESSAGE_BYTES) throw new HttpError(413, '消息超过大小限制');
+    if (size > MAX_MESSAGE_BYTES) {
+      throw new HttpError(413, '消息超过大小限制');
+    }
     chunks.push(bytes);
   }
   let value: unknown;
@@ -205,11 +233,21 @@ class HttpError extends Error {
 }
 
 function status(error: unknown): number {
-  if (error instanceof HttpError) return error.status;
-  if (error instanceof WebSessionNotFoundError) return 404;
-  if (error instanceof SessionMessageConflictError) return 409;
-  if (error instanceof SessionNotFoundError) return 404;
-  if (error instanceof WorkspaceError) return 400;
+  if (error instanceof HttpError) {
+    return error.status;
+  }
+  if (error instanceof WebSessionNotFoundError) {
+    return 404;
+  }
+  if (error instanceof SessionMessageConflictError) {
+    return 409;
+  }
+  if (error instanceof SessionNotFoundError) {
+    return 404;
+  }
+  if (error instanceof WorkspaceError) {
+    return 400;
+  }
   return 500;
 }
 

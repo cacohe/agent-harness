@@ -40,8 +40,12 @@ function fakeSpawn(handlers: {
       return true;
     }) as ChildProcess['kill'];
     queueMicrotask(() => {
-      if (handlers.stdout !== undefined) stdout.emit('data', handlers.stdout);
-      if (handlers.stderr !== undefined) stderr.emit('data', handlers.stderr);
+      if (handlers.stdout !== undefined) {
+        stdout.emit('data', handlers.stdout);
+      }
+      if (handlers.stderr !== undefined) {
+        stderr.emit('data', handlers.stderr);
+      }
     });
     if (!handlers.hangAfterKill) {
       setTimeout(() => {

@@ -27,13 +27,17 @@ export function verifyArchitecture(manifests, sources = []) {
   const packageByName = new Map(manifests.map(([path, manifest]) => [manifest.name, path]));
   const failures = [];
   for (const [owner, manifest] of manifests) {
-    if (manifest.type !== 'module') failures.push(`${owner}: package.json must set type=module`);
+    if (manifest.type !== 'module') {
+      failures.push(`${owner}: package.json must set type=module`);
+    }
     const leaf = owner.split('/').at(-1);
     if (manifest.name !== `@agent-harness/${leaf}`) {
       failures.push(`${owner}: package name must be @agent-harness/${leaf}`);
     }
     const allowed = allowedByOwner.get(owner);
-    if (allowed === undefined) failures.push(`${owner}: package path is not classified`);
+    if (allowed === undefined) {
+      failures.push(`${owner}: package path is not classified`);
+    }
     const dependencies = {
       ...manifest.dependencies,
       ...manifest.optionalDependencies,
@@ -95,7 +99,9 @@ export function verifyArchitecture(manifests, sources = []) {
 
 function resolveWorkspacePackagePath(specifier, packageByName) {
   const direct = packageByName.get(specifier);
-  if (direct !== undefined) return direct;
+  if (direct !== undefined) {
+    return direct;
+  }
   const packageName = [...packageByName.keys()].find((name) => specifier.startsWith(`${name}/`));
   return packageName === undefined ? undefined : packageByName.get(packageName);
 }
@@ -125,8 +131,9 @@ function exportedNames(source) {
       continue;
     }
     const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined;
-    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) !== true)
+    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) !== true) {
       continue;
+    }
     if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
       names.push('default');
       continue;
@@ -150,7 +157,9 @@ function collectBindingNames(binding, names) {
     return;
   }
   for (const element of binding.elements) {
-    if (!ts.isOmittedExpression(element)) collectBindingNames(element.name, names);
+    if (!ts.isOmittedExpression(element)) {
+      collectBindingNames(element.name, names);
+    }
   }
 }
 

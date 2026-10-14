@@ -11,7 +11,9 @@ export function renderMarkdown(source: string): string {
 
   function sanitizeHref(href: string): string | undefined {
     const trimmed = href.trim();
-    if (/^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) return trimmed;
+    if (/^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) {
+      return trimmed;
+    }
     return undefined;
   }
 
@@ -32,7 +34,9 @@ export function renderMarkdown(source: string): string {
     text = text.replace(/`([^`]+)`/g, (_match, code: string) => stash(`<code>${code}</code>`));
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
       const url = sanitizeHref(href.replaceAll('&amp;', '&'));
-      if (url === undefined) return label;
+      if (url === undefined) {
+        return label;
+      }
       return stash(
         `<a href="${escapeHtml(url)}" rel="noreferrer noopener" target="_blank">${label}</a>`,
       );
@@ -56,12 +60,24 @@ export function renderMarkdown(source: string): string {
 
   function isBlockStart(line: string, next: string | undefined): boolean {
     const trimmed = line.trim();
-    if (trimmed === '') return true;
-    if (/^%%FENCE\d+%%$/.test(trimmed)) return true;
-    if (/^#{1,6}\s+\S/.test(trimmed)) return true;
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) return true;
-    if (trimmed.startsWith('>')) return true;
-    if (listItem.test(line)) return true;
+    if (trimmed === '') {
+      return true;
+    }
+    if (/^%%FENCE\d+%%$/.test(trimmed)) {
+      return true;
+    }
+    if (/^#{1,6}\s+\S/.test(trimmed)) {
+      return true;
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      return true;
+    }
+    if (trimmed.startsWith('>')) {
+      return true;
+    }
+    if (listItem.test(line)) {
+      return true;
+    }
     return isTableStart(line, next);
   }
 
@@ -77,13 +93,19 @@ export function renderMarkdown(source: string): string {
   function takeTable(lines: string[], start: number): { html: string; next: number } | undefined {
     const headerLine = lines[start];
     const dividerLine = lines[start + 1];
-    if (headerLine === undefined || dividerLine === undefined) return undefined;
-    if (!isTableStart(headerLine, dividerLine)) return undefined;
+    if (headerLine === undefined || dividerLine === undefined) {
+      return undefined;
+    }
+    if (!isTableStart(headerLine, dividerLine)) {
+      return undefined;
+    }
     const rows: string[] = [];
     let index = start + 2;
     while (index < lines.length) {
       const line = lines[index];
-      if (line === undefined || line.trim() === '' || !line.includes('|') || isDivider(line)) break;
+      if (line === undefined || line.trim() === '' || !line.includes('|') || isDivider(line)) {
+        break;
+      }
       rows.push(line);
       index += 1;
     }
@@ -106,7 +128,9 @@ export function renderMarkdown(source: string): string {
 
   function takeList(lines: string[], start: number): { html: string; next: number } | undefined {
     const first = listItem.exec(lines[start] ?? '');
-    if (first === null || first[1] === undefined || first[2] === undefined) return undefined;
+    if (first === null || first[1] === undefined || first[2] === undefined) {
+      return undefined;
+    }
     const baseIndent = first[1].length;
     const ordered = /^\d+\./.test(first[2]);
     const items: Array<{ text: string; nested: string }> = [];
@@ -115,7 +139,9 @@ export function renderMarkdown(source: string): string {
       const line = lines[index] ?? '';
       if (line.trim() === '') {
         const following = lines.slice(index + 1).find((candidate) => candidate.trim() !== '');
-        if (following === undefined || !listItem.test(following)) break;
+        if (following === undefined || !listItem.test(following)) {
+          break;
+        }
         index += 1;
         continue;
       }
@@ -129,21 +155,31 @@ export function renderMarkdown(source: string): string {
         break;
       }
       const indent = item[1].length;
-      if (indent < baseIndent) break;
+      if (indent < baseIndent) {
+        break;
+      }
       if (indent > baseIndent) {
         const nested = takeList(lines, index);
-        if (nested === undefined || items.length === 0) break;
+        if (nested === undefined || items.length === 0) {
+          break;
+        }
         const last = items[items.length - 1];
-        if (last === undefined) break;
+        if (last === undefined) {
+          break;
+        }
         last.nested += nested.html;
         index = nested.next;
         continue;
       }
-      if (/^\d+\./.test(item[2]) !== ordered) break;
+      if (/^\d+\./.test(item[2]) !== ordered) {
+        break;
+      }
       items.push({ text: item[3], nested: '' });
       index += 1;
     }
-    if (items.length === 0) return undefined;
+    if (items.length === 0) {
+      return undefined;
+    }
     const tag = ordered ? 'ol' : 'ul';
     const inner = items.map((item) => `<li>${renderInline(item.text)}${item.nested}</li>`).join('');
     return { html: `<${tag}>${inner}</${tag}>`, next: index };
@@ -219,7 +255,9 @@ export function renderMarkdown(source: string): string {
     const paragraph: string[] = [];
     while (index < lines.length) {
       const current = lines[index] ?? '';
-      if (isBlockStart(current, lines[index + 1])) break;
+      if (isBlockStart(current, lines[index + 1])) {
+        break;
+      }
       paragraph.push(current);
       index += 1;
     }

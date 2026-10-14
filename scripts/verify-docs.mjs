@@ -8,7 +8,9 @@ const required = [
   new URL('../docs/architecture.md', import.meta.url),
 ];
 
-for (const path of required) await access(path);
+for (const path of required) {
+  await access(path);
+}
 
 const decisions = await readdir(new URL('../docs/decisions/', import.meta.url));
 if (!decisions.some((name) => /^\d{4}-.+\.md$/.test(name))) {
@@ -18,7 +20,9 @@ if (!decisions.some((name) => /^\d{4}-.+\.md$/.test(name))) {
 for (const name of decisions.filter((name) => name.endsWith('.md'))) {
   const text = await readFile(new URL(`../docs/decisions/${name}`, import.meta.url), 'utf8');
   for (const heading of ['## 背景', '## 决策', '## 后果', '## 放弃的方案']) {
-    if (!text.includes(heading)) throw new Error(`${name}: missing ${heading}`);
+    if (!text.includes(heading)) {
+      throw new Error(`${name}: missing ${heading}`);
+    }
   }
 }
 
@@ -42,7 +46,9 @@ const packageEntries = await readdir(new URL('../packages/', import.meta.url), {
   withFileTypes: true,
 });
 for (const entry of packageEntries) {
-  if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+  if (!entry.isFile() || !entry.name.endsWith('.ts')) {
+    continue;
+  }
   const path = new URL(
     `../packages/${entry.parentPath.replaceAll('\\', '/').replace(/^.*\/packages\/?/, '')}/${entry.name}`,
     import.meta.url,

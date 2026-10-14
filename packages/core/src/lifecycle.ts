@@ -70,7 +70,9 @@ export function buildTerminalEvents(options: {
       }
       if (settlement.status === 'completed') {
         for (const call of settlement.message.toolCalls) {
-          if (attempt.persistedToolResults.has(call.id)) continue;
+          if (attempt.persistedToolResults.has(call.id)) {
+            continue;
+          }
           events.push({
             type: 'tool.completed',
             turnId,

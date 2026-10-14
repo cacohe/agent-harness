@@ -54,7 +54,9 @@ class FakeSessions implements WebSessionController {
   }
 
   async close(): Promise<void> {
-    for (const events of this.#events.values()) events.close();
+    for (const events of this.#events.values()) {
+      events.close();
+    }
   }
 }
 

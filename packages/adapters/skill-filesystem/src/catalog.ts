@@ -54,14 +54,17 @@ export class FilesystemSkillCatalog implements SkillCatalog {
       options.maxSkillBytes ?? DEFAULT_MAX_SKILL_BYTES,
       'maxSkillBytes',
     );
-    if (!Array.isArray(options.enabled)) throw new TypeError('enabled 必须是数组');
+    if (!Array.isArray(options.enabled)) {
+      throw new TypeError('enabled 必须是数组');
+    }
     const root = await realpath(options.root);
     signal.throwIfAborted();
     const skills = new Map<string, LoadedSkill>();
     for (const id of options.enabled) {
       signal.throwIfAborted();
-      if (typeof id !== 'string' || !SKILL_ID.test(id) || skills.has(id))
+      if (typeof id !== 'string' || !SKILL_ID.test(id) || skills.has(id)) {
         throw new TypeError('Skill 标识符无效或重复');
+      }
       const loaded = await withValidatedSkill(root, id, signal, async (file, path) => ({
         descriptor: Object.freeze({ id, ...(await readSkillMetadata(file, signal)) }),
         path,
@@ -79,10 +82,13 @@ export class FilesystemSkillCatalog implements SkillCatalog {
   async read(skillId: string, signal: AbortSignal): Promise<string> {
     signal.throwIfAborted();
     const skill = this.#skills.get(skillId);
-    if (skill === undefined) throw new FilesystemSkillError(`Skill 未启用：${skillId}`);
+    if (skill === undefined) {
+      throw new FilesystemSkillError(`Skill 未启用：${skillId}`);
+    }
     return withValidatedSkill(this.#root, skillId, signal, async (file, path) => {
-      if (path !== skill.path)
+      if (path !== skill.path) {
         throw new FilesystemSkillError(`Skill ${skillId} 路径在加载后发生变化`);
+      }
       return (await readSkillDocument(file, this.#maxSkillBytes, signal)).body;
     });
   }
@@ -103,11 +109,15 @@ async function withValidatedSkill<T>(
     signal.throwIfAborted();
     const fileStat = await file.stat();
     signal.throwIfAborted();
-    if (!fileStat.isFile()) throw new FilesystemSkillError(`Skill ${id} 必须是普通文件`);
+    if (!fileStat.isFile()) {
+      throw new FilesystemSkillError(`Skill ${id} 必须是普通文件`);
+    }
     // 校验已打开对象而非先校验路径，避免祖先目录替换造成的检查与使用竞态。
     const actualPath = await realpath(`/proc/self/fd/${file.fd}`);
     signal.throwIfAborted();
-    if (!isWithin(root, actualPath)) throw new FilesystemSkillError(`Skill ${id} 路径逃逸根目录`);
+    if (!isWithin(root, actualPath)) {
+      throw new FilesystemSkillError(`Skill ${id} 路径逃逸根目录`);
+    }
     return await use(file, actualPath);
   } finally {
     await file.close();
@@ -135,10 +145,14 @@ async function readFrontmatter(file: FileHandle, signal: AbortSignal): Promise<U
     );
     const result = await file.read(chunk, 0, chunk.byteLength, bytes.byteLength);
     signal.throwIfAborted();
-    if (result.bytesRead === 0) break;
+    if (result.bytesRead === 0) {
+      break;
+    }
     bytes = Buffer.concat([bytes, chunk.subarray(0, result.bytesRead)]);
     const end = frontmatterEnd(bytes);
-    if (end !== undefined) return bytes.subarray(0, end);
+    if (end !== undefined) {
+      return bytes.subarray(0, end);
+    }
   }
   throw new FilesystemSkillError(`Skill frontmatter 未在 ${MAX_FRONTMATTER_BYTES} 字节内结束`);
 }
@@ -175,7 +189,9 @@ async function readBounded(
     const chunk = Buffer.alloc(Math.min(READ_CHUNK_BYTES, maxBytes + 1 - offset));
     const result = await file.read(chunk, 0, chunk.byteLength, offset);
     signal.throwIfAborted();
-    if (result.bytesRead === 0) return Buffer.concat(chunks, offset);
+    if (result.bytesRead === 0) {
+      return Buffer.concat(chunks, offset);
+    }
     chunks.push(chunk.subarray(0, result.bytesRead));
     offset += result.bytesRead;
   }
@@ -192,8 +208,9 @@ function decodeUtf8(bytes: Uint8Array): string {
 
 function parseSkill(text: string): SkillDocument {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text);
-  if (match?.[1] === undefined || match[2] === undefined)
+  if (match?.[1] === undefined || match[2] === undefined) {
     throw new FilesystemSkillError('Skill 缺少 frontmatter');
+  }
   return {
     metadata: parseMetadata(match[0].slice(0, match[0].length - match[2].length)),
     body: match[2],
@@ -202,22 +219,28 @@ function parseSkill(text: string): SkillDocument {
 
 function parseMetadata(frontmatter: string): SkillDocument['metadata'] {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n$/.exec(frontmatter);
-  if (match?.[1] === undefined) throw new FilesystemSkillError('Skill 缺少 frontmatter');
+  if (match?.[1] === undefined) {
+    throw new FilesystemSkillError('Skill 缺少 frontmatter');
+  }
   const fields = new Map<string, string>();
   for (const line of match[1].split(/\r?\n/)) {
     const field = /^(name|description):\s*(.+)$/.exec(line);
-    if (field?.[1] === undefined || field[2] === undefined || fields.has(field[1]))
+    if (field?.[1] === undefined || field[2] === undefined || fields.has(field[1])) {
       throw new FilesystemSkillError('Skill frontmatter 只能包含唯一的 name 与 description');
+    }
     fields.set(field[1], field[2]);
   }
   const name = fields.get('name');
   const description = fields.get('description');
-  if (fields.size !== 2 || name === undefined || description === undefined)
+  if (fields.size !== 2 || name === undefined || description === undefined) {
     throw new FilesystemSkillError('Skill frontmatter 必须包含 name 与 description');
+  }
   return { name, description };
 }
 
 function positiveInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 1) throw new TypeError(`${name} 必须是正整数`);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new TypeError(`${name} 必须是正整数`);
+  }
   return value;
 }

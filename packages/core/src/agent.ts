@@ -129,9 +129,13 @@ export class Agent {
   async whenIdle(): Promise<void> {
     for (;;) {
       const draining = this.#draining;
-      if (draining === undefined) return;
+      if (draining === undefined) {
+        return;
+      }
       await draining;
-      if (this.#draining === undefined) return;
+      if (this.#draining === undefined) {
+        return;
+      }
     }
   }
 
@@ -143,7 +147,9 @@ export class Agent {
     message: UserMessage,
     options: AbortSignal | AgentRunOptions = {},
   ): Promise<AssistantMessage> {
-    if (!this.#accepting) return Promise.reject(new AgentClosedError('Agent 已停止接纳新的 run'));
+    if (!this.#accepting) {
+      return Promise.reject(new AgentClosedError('Agent 已停止接纳新的 run'));
+    }
 
     return new Promise<AssistantMessage>((resolve, reject) => {
       const externalSignal = isAbortSignal(options)
@@ -151,7 +157,9 @@ export class Agent {
         : (options.signal ?? new AbortController().signal);
       let queued: QueuedRun;
       const onAbort = (): void => {
-        if (!this.#inbox.remove(queued)) return;
+        if (!this.#inbox.remove(queued)) {
+          return;
+        }
         queued.clearAbortListener();
         reject(externalSignal.reason);
       };
@@ -178,10 +186,14 @@ export class Agent {
 
   /** 确保只有一个 FIFO drain；单个输入失败不会阻断后续输入。 */
   #ensureInboxDraining(): void {
-    if (this.#draining !== undefined) return;
+    if (this.#draining !== undefined) {
+      return;
+    }
     this.#draining = this.#drainInbox().finally(() => {
       this.#draining = undefined;
-      if (this.#inbox.hasPending) this.#ensureInboxDraining();
+      if (this.#inbox.hasPending) {
+        this.#ensureInboxDraining();
+      }
     });
   }
 
@@ -189,7 +201,9 @@ export class Agent {
   async #drainInbox(): Promise<void> {
     for (;;) {
       const queued = this.#inbox.claim();
-      if (queued === undefined) return;
+      if (queued === undefined) {
+        return;
+      }
       queued.clearAbortListener();
       try {
         queued.resolve(await this.#runTurn(queued.message, queued.options));
@@ -340,7 +354,7 @@ export class Agent {
     let outputTokens = 0;
     let usageSequence = 0;
     const modelStartedAt = this.#now();
-    if (modelStartedAt !== undefined)
+    if (modelStartedAt !== undefined) {
       this.#notifyExecution({
         type: 'model.started',
         sessionId: this.#session.sessionId,
@@ -350,6 +364,7 @@ export class Agent {
         ...executionEvent,
         startedAt: modelStartedAt,
       });
+    }
 
     try {
       // 循环获取模型流式生成时的中间输出
@@ -394,7 +409,7 @@ export class Agent {
             assertNever(event);
         }
       }
-      if (modelStartedAt !== undefined)
+      if (modelStartedAt !== undefined) {
         this.#notifyExecution({
           type: 'model.completed',
           sessionId: this.#session.sessionId,
@@ -404,8 +419,9 @@ export class Agent {
           ...executionEvent,
           ...this.#withDuration(modelStartedAt),
         });
+      }
     } catch (error) {
-      if (modelStartedAt !== undefined)
+      if (modelStartedAt !== undefined) {
         this.#notifyExecution({
           type: modelSignal.aborted || isAbortError(error) ? 'model.cancelled' : 'model.failed',
           sessionId: this.#session.sessionId,
@@ -416,6 +432,7 @@ export class Agent {
           ...this.#withDuration(modelStartedAt),
           ...(error instanceof Error ? { errorName: error.name } : {}),
         });
+      }
       throw error;
     }
     throwIfAborted(signal);
@@ -453,7 +470,7 @@ export class Agent {
     for (const call of attempt.observedToolCalls) {
       const toolSignal = this.#deadlineSignal(signal, this.#toolTimeoutMs);
       const toolStartedAt = this.#now();
-      if (toolStartedAt !== undefined)
+      if (toolStartedAt !== undefined) {
         this.#notifyExecution({
           type: 'tool.started',
           sessionId: this.#session.sessionId,
@@ -465,6 +482,7 @@ export class Agent {
           toolName: call.name,
           startedAt: toolStartedAt,
         });
+      }
       let result: ToolResult;
       try {
         result = await this.#tools.execute(call, {
@@ -479,7 +497,7 @@ export class Agent {
             reason: `工具调用超过 toolTimeoutMs (${this.#toolTimeoutMs})`,
           };
         } else {
-          if (toolStartedAt !== undefined)
+          if (toolStartedAt !== undefined) {
             this.#notifyExecution({
               type: toolSignal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
               sessionId: this.#session.sessionId,
@@ -492,12 +510,13 @@ export class Agent {
               ...this.#withDuration(toolStartedAt),
               ...(error instanceof Error ? { errorName: error.name } : {}),
             });
+          }
           throw error;
         }
       }
       result = this.#boundToolResult(result);
       attempt.toolResults.set(call.id, result);
-      if (toolStartedAt !== undefined)
+      if (toolStartedAt !== undefined) {
         this.#notifyExecution({
           type: 'tool.completed',
           sessionId: this.#session.sessionId,
@@ -510,6 +529,7 @@ export class Agent {
           ...this.#withDuration(toolStartedAt),
           status: result.status,
         });
+      }
       // 提交工具调用完成事件
       await this.#append([{ type: 'tool.completed', turnId, stepId, result }], signal);
       attempt.persistedToolResults.add(call.id);
@@ -536,7 +556,9 @@ export class Agent {
   /** 限制工具返回的可变载荷，避免其无限写入会话与后续 prompt。 */
   #boundToolResult(result: ToolResult): ToolResult {
     const bytes = utf8ByteLength(JSON.stringify(this.#toolResultPayload(result)));
-    if (bytes <= this.#maxToolResultBytes) return result;
+    if (bytes <= this.#maxToolResultBytes) {
+      return result;
+    }
     return {
       status: 'failure',
       callId: result.callId,
@@ -569,10 +591,14 @@ export class Agent {
   }
 
   #now(): Date | undefined {
-    if (this.#clock === undefined) return undefined;
+    if (this.#clock === undefined) {
+      return undefined;
+    }
     try {
       const value = this.#clock.now();
-      if (!(value instanceof Date) || Number.isNaN(value.getTime())) return undefined;
+      if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+        return undefined;
+      }
       return value;
     } catch {
       // 时钟仅服务于瞬态观测，不能影响 Agent 的执行或结算。
@@ -582,7 +608,9 @@ export class Agent {
 
   #withDuration(startedAt: Date): { readonly durationMs?: number } {
     const finishedAt = this.#now();
-    if (finishedAt === undefined) return {};
+    if (finishedAt === undefined) {
+      return {};
+    }
     return { durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()) };
   }
 

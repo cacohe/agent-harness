@@ -49,7 +49,9 @@ export class AgentIdReservations {
     values: Set<string>,
     value: T,
   ): T {
-    if (values.has(value)) throw new AgentIdCollisionError(kind, value);
+    if (values.has(value)) {
+      throw new AgentIdCollisionError(kind, value);
+    }
     values.add(value);
     return value;
   }

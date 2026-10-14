@@ -29,7 +29,9 @@ export async function runChatLoop(options: {
 }): Promise<void> {
   options.stderr.write('进入多轮交互；输入 /exit 或 /quit 结束，空行跳过。\n');
   const pending: string[] = [];
-  if (options.firstMessage !== undefined) pending.push(options.firstMessage);
+  if (options.firstMessage !== undefined) {
+    pending.push(options.firstMessage);
+  }
 
   const iterator = options.lines[Symbol.asyncIterator]();
   try {
@@ -42,14 +44,24 @@ export async function runChatLoop(options: {
       } else {
         options.stderr.write('你: ');
         const next = await readLineOrAbort(iterator, options.processSignal);
-        if (next.done === true || options.processSignal.aborted) break;
+        if (next.done === true || options.processSignal.aborted) {
+          break;
+        }
         content = next.value;
       }
-      if (options.processSignal.aborted || content === undefined) break;
+      if (options.processSignal.aborted || content === undefined) {
+        break;
+      }
       const trimmed = content.trim();
-      if (trimmed.length === 0) continue;
-      if (trimmed === '/exit' || trimmed === '/quit') break;
-      if (echoUser) options.stderr.write(`你: ${trimmed}\n`);
+      if (trimmed.length === 0) {
+        continue;
+      }
+      if (trimmed === '/exit' || trimmed === '/quit') {
+        break;
+      }
+      if (echoUser) {
+        options.stderr.write(`你: ${trimmed}\n`);
+      }
 
       const turn = options.beginTurn();
       try {
@@ -61,12 +73,16 @@ export async function runChatLoop(options: {
           },
           turn.signal,
         );
-        if (options.processSignal.aborted) break;
+        if (options.processSignal.aborted) {
+          break;
+        }
         options.stderr.write(`\n助手:\n${message.content}\n\n`);
       } catch (error) {
         if (turn.signal.aborted || isAbortError(error)) {
           options.stderr.write('当前回合已取消；可继续输入，或再次中断以退出。\n');
-          if (options.processSignal.aborted) break;
+          if (options.processSignal.aborted) {
+            break;
+          }
           continue;
         }
         throw error;
@@ -90,7 +106,9 @@ export function createStdinLines(signal: AbortSignal): AsyncIterable<string> {
     async *[Symbol.asyncIterator]() {
       try {
         for await (const line of readline) {
-          if (signal.aborted) break;
+          if (signal.aborted) {
+            break;
+          }
           yield line;
         }
       } finally {
@@ -110,7 +128,9 @@ function readLineOrAbort(
     await iterator.return?.().catch(() => undefined);
     return { done: true, value: undefined };
   };
-  if (signal.aborted) return finish();
+  if (signal.aborted) {
+    return finish();
+  }
   return new Promise((resolve, reject) => {
     const onAbort = (): void => {
       void finish().then(resolve);

@@ -47,7 +47,9 @@ export class InProcessSessionWriteLeaseProvider implements SessionWriteLeaseProv
     let released = false;
     return {
       release() {
-        if (released) return;
+        if (released) {
+          return;
+        }
         released = true;
         activeWriterPaths.delete(key);
       },
@@ -222,7 +224,9 @@ export class JsonlSessionRepositoryImplementation implements SessionRepository {
     try {
       await runIo(signal, () => this.#io.stat(directory));
     } catch (error) {
-      if (errorCode(error) === 'ENOENT') return;
+      if (errorCode(error) === 'ENOENT') {
+        return;
+      }
       throw error;
     }
     throw new SessionAlreadyExistsError(`会话已存在：${sessionId}`);
@@ -251,13 +255,17 @@ class JsonlSessionReader implements SessionReader {
   }
 
   async close(options: SessionOperationOptions): Promise<void> {
-    if (this.#closed) return;
+    if (this.#closed) {
+      return;
+    }
     options.signal.throwIfAborted();
     this.#closed = true;
   }
 
   #assertOpen(): void {
-    if (this.#closed) throw new SessionClosedError('会话 reader 已关闭');
+    if (this.#closed) {
+      throw new SessionClosedError('会话 reader 已关闭');
+    }
   }
 }
 
@@ -350,7 +358,9 @@ class JsonlSessionWriter implements SessionLog {
   }
 
   async close(options: SessionOperationOptions): Promise<void> {
-    if (this.#closed) return;
+    if (this.#closed) {
+      return;
+    }
     if (this.#closePromise === undefined) {
       this.#closing = true;
       this.#closePromise = this.#close();
@@ -362,7 +372,9 @@ class JsonlSessionWriter implements SessionLog {
     let failure: unknown;
     try {
       await this.#queue;
-      if (this.#poisonReason === undefined) await this.#file.datasync();
+      if (this.#poisonReason === undefined) {
+        await this.#file.datasync();
+      }
     } catch (error) {
       failure = error;
     }
@@ -374,7 +386,9 @@ class JsonlSessionWriter implements SessionLog {
       this.#closed = true;
       this.#lease.release();
     }
-    if (failure !== undefined) throw failure;
+    if (failure !== undefined) {
+      throw failure;
+    }
   }
 
   async #append(
@@ -383,7 +397,9 @@ class JsonlSessionWriter implements SessionLog {
   ): Promise<readonly EventEnvelope[]> {
     this.#assertUsable();
     options.signal.throwIfAborted();
-    if (events.length === 0) return [];
+    if (events.length === 0) {
+      return [];
+    }
     const currentSequence = this.#events.length;
     const expectedSequence = options.expectedSequence ?? currentSequence;
     if (expectedSequence !== currentSequence) {
@@ -404,7 +420,9 @@ class JsonlSessionWriter implements SessionLog {
         event,
       }),
     );
-    for (const envelope of envelopes) assertJsonValue(envelope);
+    for (const envelope of envelopes) {
+      assertJsonValue(envelope);
+    }
     const line = `${JSON.stringify({
       type: 'session.batch',
       batchId,
@@ -438,7 +456,9 @@ class JsonlSessionWriter implements SessionLog {
     if (this.#poisonReason !== undefined) {
       throw new SessionPoisonedError(this.#poisonReason);
     }
-    if (this.#closed) throw new SessionClosedError('会话 writer 已关闭');
+    if (this.#closed) {
+      throw new SessionClosedError('会话 writer 已关闭');
+    }
   }
 
   #assertAcceptingOperations(): void {
@@ -561,7 +581,9 @@ function validateSessionEvent(value: unknown): SessionEvent {
         value.type,
       );
       assertId(value.turnId, 'turnId');
-      if (value.execution !== undefined) parseExecutionMetadata(value.execution);
+      if (value.execution !== undefined) {
+        parseExecutionMetadata(value.execution);
+      }
       return value as unknown as SessionEvent;
     case 'user.message':
       assertExactObject(value, ['type', 'message'], value.type);
@@ -600,7 +622,9 @@ function validateSessionEvent(value: unknown): SessionEvent {
       );
       assertId(value.turnId, 'turnId');
       assertOutcome(value.outcome);
-      if (value.error !== undefined) parseSerializedError(value.error);
+      if (value.error !== undefined) {
+        parseSerializedError(value.error);
+      }
       return value as unknown as SessionEvent;
     default:
       throw new SessionCorruptionError('未知 session event type');
@@ -641,7 +665,9 @@ function assertPartialAttempt(value: Record<string, unknown>): void {
   if (typeof value.partialText !== 'string' || !Array.isArray(value.observedToolCalls)) {
     throw new SessionCorruptionError('assistant 部分结果字段无效');
   }
-  for (const call of value.observedToolCalls) parseToolCall(call);
+  for (const call of value.observedToolCalls) {
+    parseToolCall(call);
+  }
 }
 
 function parseMessage(value: unknown, role: 'user' | 'assistant'): void {
@@ -658,7 +684,9 @@ function parseMessage(value: unknown, role: 'user' | 'assistant'): void {
     if (!Array.isArray(value.toolCalls)) {
       throw new SessionCorruptionError('toolCalls 必须是数组');
     }
-    for (const call of value.toolCalls) parseToolCall(call);
+    for (const call of value.toolCalls) {
+      parseToolCall(call);
+    }
   }
 }
 
@@ -781,7 +809,9 @@ async function syncDirectory(io: JsonlIo, path: string, signal: AbortSignal): Pr
     await runIo(signal, () => directory.sync());
   } catch (error) {
     // Windows 常对目录 fd 拒绝 fsync；目录项持久化不保证，文件仍走 datasync。
-    if (!isIgnorableDirectorySyncError(error)) throw error;
+    if (!isIgnorableDirectorySyncError(error)) {
+      throw error;
+    }
   } finally {
     await directory.close();
   }
@@ -792,7 +822,9 @@ async function syncDirectoryWithoutSignal(io: JsonlIo, path: string): Promise<vo
   try {
     await directory.sync();
   } catch (error) {
-    if (!isIgnorableDirectorySyncError(error)) throw error;
+    if (!isIgnorableDirectorySyncError(error)) {
+      throw error;
+    }
   } finally {
     await directory.close();
   }
@@ -825,10 +857,14 @@ async function ensureDurableDirectory(
       }
       break;
     } catch (error) {
-      if (errorCode(error) !== 'ENOENT') throw error;
+      if (errorCode(error) !== 'ENOENT') {
+        throw error;
+      }
       missing.push(existing);
       const parent = dirname(existing);
-      if (parent === existing) throw error;
+      if (parent === existing) {
+        throw error;
+      }
       existing = parent;
     }
   }
@@ -848,7 +884,9 @@ async function createDirectoryDurably(
   try {
     await io.mkdir(directory);
   } catch (error) {
-    if (errorCode(error) !== 'EEXIST') throw error;
+    if (errorCode(error) !== 'EEXIST') {
+      throw error;
+    }
     const metadata = await io.stat(directory);
     if (!metadata.isDirectory) {
       throw new TypeError(`路径不是目录：${directory}`);
@@ -881,7 +919,9 @@ async function writeFully(
     const result = await runIo(signal, () =>
       file.write(bytes, written, bytes.length - written, position + written),
     );
-    if (result.bytesWritten === 0) throw new Error('会话文件写入未取得进展');
+    if (result.bytesWritten === 0) {
+      throw new Error('会话文件写入未取得进展');
+    }
     written += result.bytesWritten;
   }
 }
@@ -920,7 +960,9 @@ function waitFor<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
     let settled = false;
     const cleanup = (): void => signal.removeEventListener('abort', onAbort);
     const onAbort = (): void => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       cleanup();
       try {
@@ -930,16 +972,22 @@ function waitFor<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
       }
     };
     signal.addEventListener('abort', onAbort, { once: true });
-    if (signal.aborted) onAbort();
+    if (signal.aborted) {
+      onAbort();
+    }
     operation.then(
       (value) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         cleanup();
         resolvePromise(value);
       },
       (error) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         cleanup();
         rejectPromise(error);
@@ -962,7 +1010,9 @@ function waitForQueued<T>(
     let settled = false;
     const cleanup = (): void => signal.removeEventListener('abort', onAbort);
     const onAbort = (): void => {
-      if (settled || hasStarted()) return;
+      if (settled || hasStarted()) {
+        return;
+      }
       settled = true;
       cleanup();
       try {
@@ -972,16 +1022,22 @@ function waitForQueued<T>(
       }
     };
     signal.addEventListener('abort', onAbort, { once: true });
-    if (signal.aborted) onAbort();
+    if (signal.aborted) {
+      onAbort();
+    }
     operation.then(
       (value) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         cleanup();
         resolvePromise(value);
       },
       (error) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         cleanup();
         rejectPromise(error);
@@ -1005,7 +1061,9 @@ function immutableSnapshot<T>(value: T): T {
 }
 
 function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
-  if (typeof value !== 'object' || value === null || seen.has(value)) return value;
+  if (typeof value !== 'object' || value === null || seen.has(value)) {
+    return value;
+  }
   seen.add(value);
   for (const key of Reflect.ownKeys(value)) {
     deepFreeze(Reflect.get(value, key), seen);

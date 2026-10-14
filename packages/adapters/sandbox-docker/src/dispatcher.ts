@@ -111,7 +111,9 @@ function runDocker(
     let settled = false;
     let terminalError: unknown;
     const finish = (error?: unknown): void => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);
@@ -126,7 +128,9 @@ function runDocker(
       }
     };
     const stop = (error: unknown): void => {
-      if (terminalError !== undefined || settled) return;
+      if (terminalError !== undefined || settled) {
+        return;
+      }
       terminalError = error;
       kill(child);
       void removeContainer(command, name).then(
@@ -143,17 +147,20 @@ function runDocker(
     signal.addEventListener('abort', abort, { once: true });
     child.stdout?.on('data', (chunk) => {
       stdout = Buffer.concat([stdout, chunk]);
-      if (stdout.length > maxOutputBytes) stop(new DockerSandboxError('Sandbox 输出超过限制'));
+      if (stdout.length > maxOutputBytes) {
+        stop(new DockerSandboxError('Sandbox 输出超过限制'));
+      }
     });
     child.stderr?.on('data', (chunk) => {
       stderr = Buffer.concat([stderr, chunk]).subarray(0, maxOutputBytes);
     });
     child.once('error', (error) => {
-      if (terminalError === undefined)
+      if (terminalError === undefined) {
         finish(new DockerSandboxError(`无法启动 Docker：${error.message}`));
+      }
     });
     child.once('close', (code) => {
-      if (terminalError === undefined)
+      if (terminalError === undefined) {
         finish(
           code === 0
             ? undefined
@@ -161,13 +168,17 @@ function runDocker(
                 `Docker Sandbox 退出码 ${code ?? '未知'}：${stderr.toString('utf8')}`,
               ),
         );
+      }
     });
     child.stdin?.once('error', (error) => {
-      if (terminalError === undefined)
+      if (terminalError === undefined) {
         finish(new DockerSandboxError(`Sandbox 输入失败：${error.message}`));
+      }
     });
     child.stdin?.end(input);
-    if (signal.aborted) abort();
+    if (signal.aborted) {
+      abort();
+    }
   });
 }
 function parseOutput(text: string): JsonValue {
@@ -184,7 +195,9 @@ function kill(child: ChildProcess): void {
     try {
       process.kill(-child.pid, 'SIGKILL');
     } catch {}
-  } else child.kill('SIGKILL');
+  } else {
+    child.kill('SIGKILL');
+  }
 }
 async function removeContainer(command: string, name: string): Promise<void> {
   let lastError: unknown;

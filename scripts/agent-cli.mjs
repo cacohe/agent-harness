@@ -31,9 +31,13 @@ async function ensureLocalConfig() {
 }
 
 function injectDefaultConfig(argv) {
-  if (argv.includes('--config')) return [...argv];
+  if (argv.includes('--config')) {
+    return [...argv];
+  }
   const mode = argv[0];
-  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat' && mode !== 'import') return [...argv];
+  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat' && mode !== 'import') {
+    return [...argv];
+  }
   return [mode, '--config', configPath, ...argv.slice(1)];
 }
 

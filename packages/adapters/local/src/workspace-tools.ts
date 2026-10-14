@@ -48,7 +48,9 @@ export function createWorkspaceTools(workspace: string): readonly ToolDefinition
       parseInput: (input) => readRequiredPath(input, 'read_file'),
       async execute(input) {
         const relative = pathField(input);
-        if (relative === undefined) throw new TypeError('read_file.path 必须是非空字符串');
+        if (relative === undefined) {
+          throw new TypeError('read_file.path 必须是非空字符串');
+        }
         const target = await resolveInsideWorkspace(workspace, relative);
         const bytes = await readFile(target);
         if (bytes.byteLength > MAX_FILE_BYTES) {
@@ -87,7 +89,9 @@ export function createWorkspaceTools(workspace: string): readonly ToolDefinition
 
 function readOptionalPath(input: JsonValue, name: string): JsonValue {
   const record = objectInput(input, name);
-  if (record.path === undefined) return input;
+  if (record.path === undefined) {
+    return input;
+  }
   if (typeof record.path !== 'string' || record.path.trim().length === 0) {
     throw new TypeError(`${name}.path 必须是非空字符串`);
   }
@@ -107,7 +111,9 @@ function readWriteInput(input: JsonValue): JsonValue {
   if (typeof record.path !== 'string' || record.path.trim().length === 0) {
     throw new TypeError('write_file.path 必须是非空字符串');
   }
-  if (typeof record.content !== 'string') throw new TypeError('write_file.content 必须是字符串');
+  if (typeof record.content !== 'string') {
+    throw new TypeError('write_file.content 必须是字符串');
+  }
   return input;
 }
 

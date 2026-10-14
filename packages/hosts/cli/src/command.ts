@@ -26,11 +26,15 @@ export type CliCommand =
 
 export function parseArgv(argv: readonly string[]): CliCommand {
   const [mode, ...rest] = argv;
-  if (mode === 'import') return parseImportCommand(rest);
+  if (mode === 'import') {
+    return parseImportCommand(rest);
+  }
   if (mode === 'document-status' || mode === 'document-delete') {
     return parseDocumentCommand(mode, rest);
   }
-  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') throw usageError();
+  if (mode !== 'run' && mode !== 'resume' && mode !== 'chat') {
+    throw usageError();
+  }
   const values = parseOptionPairs(rest, ['--config', '--session', '--message', '--message-id']);
   const configPath = absoluteOption(values, '--config');
   const session = requiredOption(values, '--session');
@@ -77,7 +81,9 @@ function parseOptionPairs(
   rest: readonly string[],
   allowed: readonly string[],
 ): Map<string, string> {
-  if (rest.length % 2 !== 0) throw new CliUsageError('命令参数必须成对出现');
+  if (rest.length % 2 !== 0) {
+    throw new CliUsageError('命令参数必须成对出现');
+  }
   const values = new Map<string, string>();
   for (let index = 0; index < rest.length; index += 2) {
     const key = rest[index];
@@ -85,7 +91,9 @@ function parseOptionPairs(
     if (key === undefined || value === undefined || values.has(key)) {
       throw new CliUsageError('命令参数无效');
     }
-    if (!allowed.includes(key)) throw new CliUsageError(`未知参数 ${key}`);
+    if (!allowed.includes(key)) {
+      throw new CliUsageError(`未知参数 ${key}`);
+    }
     values.set(key, value);
   }
   return values;
@@ -93,14 +101,17 @@ function parseOptionPairs(
 
 function absoluteOption(values: ReadonlyMap<string, string>, name: string): string {
   const value = requiredOption(values, name);
-  if (!isAbsolute(value)) throw new CliUsageError(`${name} 必须是绝对路径`);
+  if (!isAbsolute(value)) {
+    throw new CliUsageError(`${name} 必须是绝对路径`);
+  }
   return value;
 }
 
 function requiredOption(values: ReadonlyMap<string, string>, name: string): string {
   const value = values.get(name);
-  if (value === undefined || value.length === 0)
+  if (value === undefined || value.length === 0) {
     throw new CliUsageError(`${name} 必须是非空字符串`);
+  }
   return value;
 }
 

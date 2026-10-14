@@ -67,12 +67,18 @@ export class BoundedPromptAssembler implements PromptAssembler {
     context: readonly ModelMessage[],
   ): number {
     let bytes = utf8ByteLength(JSON.stringify(context)) + utf8ByteLength(JSON.stringify(tools));
-    if (bytes > this.#maxInputBytes) throw new Error('上下文与工具定义超过 maxInputBytes');
+    if (bytes > this.#maxInputBytes) {
+      throw new Error('上下文与工具定义超过 maxInputBytes');
+    }
     let start = messages.length;
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       bytes += utf8ByteLength(JSON.stringify(messages[index]));
-      if (bytes > this.#maxInputBytes) break;
-      if (messages[index]?.role === 'user') start = index;
+      if (bytes > this.#maxInputBytes) {
+        break;
+      }
+      if (messages[index]?.role === 'user') {
+        start = index;
+      }
     }
     if (start === messages.length && messages.length > 0) {
       throw new Error('最新完整用户 turn 超过 maxInputBytes');

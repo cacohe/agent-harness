@@ -4,7 +4,9 @@ import type { ExecutionMetadata } from '@agent-harness/kernel';
 export function freezeExecutionMetadata(
   execution: ExecutionMetadata | undefined,
 ): ExecutionMetadata | undefined {
-  if (execution === undefined) return undefined;
+  if (execution === undefined) {
+    return undefined;
+  }
   if (typeof execution !== 'object' || execution === null || Array.isArray(execution)) {
     throw new TypeError('execution 必须是对象');
   }

@@ -108,13 +108,19 @@ export function documentFileName(value: unknown): string {
 
 function mediaTypeValue(value: unknown): string {
   const mediaType = boundedText(value, MAX_MEDIA_TYPE_BYTES, 'document.mediaType');
-  if (!MEDIA_TYPE.test(mediaType)) throw new TypeError('document.mediaType 必须是规范 MIME type');
+  if (!MEDIA_TYPE.test(mediaType)) {
+    throw new TypeError('document.mediaType 必须是规范 MIME type');
+  }
   return mediaType.toLowerCase();
 }
 
 function documentBytes(value: unknown, maxBytes: number): Uint8Array {
-  if (!(value instanceof Uint8Array)) throw new TypeError('document.bytes 必须是 Uint8Array');
-  if (value.byteLength === 0) throw new TypeError('document.bytes 不能为空');
+  if (!(value instanceof Uint8Array)) {
+    throw new TypeError('document.bytes 必须是 Uint8Array');
+  }
+  if (value.byteLength === 0) {
+    throw new TypeError('document.bytes 不能为空');
+  }
   if (value.byteLength > maxBytes) {
     throw new RangeError(`document.bytes 不能超过 ${maxBytes} 字节`);
   }
@@ -155,7 +161,9 @@ function isDocumentClient(value: unknown): value is MemoryGatewayDocumentClient 
 function containsPathOrControlChars(value: string): boolean {
   for (const char of value) {
     const code = char.charCodeAt(0);
-    if (char === '/' || char === '\\' || code < 32 || code === 127) return true;
+    if (char === '/' || char === '\\' || code < 32 || code === 127) {
+      return true;
+    }
   }
   return false;
 }

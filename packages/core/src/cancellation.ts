@@ -2,7 +2,9 @@ import type { AgentRunOptions } from '@agent-harness/kernel';
 
 /** 如果信号被中止，抛出取消错误。 */
 export function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) throw cancellationError(signal);
+  if (signal.aborted) {
+    throw cancellationError(signal);
+  }
 }
 
 /** 让不遵守 signal 的外部 capability 也不能阻塞 Agent 的取消与结算路径。 */
