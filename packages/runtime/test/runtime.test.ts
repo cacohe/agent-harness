@@ -477,7 +477,9 @@ class LifecycleSessionLog implements SessionLog {
     events: readonly SessionEvent[],
     options: SessionAppendOptions,
   ): Promise<readonly EventEnvelope[]> {
-    if (this.appendError !== undefined) return Promise.reject(this.appendError);
+    if (this.appendError !== undefined) {
+      return Promise.reject(this.appendError);
+    }
     return this.#delegate.append(events, options);
   }
 
@@ -493,7 +495,9 @@ class LifecycleSessionLog implements SessionLog {
   async close(_options: SessionOperationOptions): Promise<void> {
     this.closeCalls += 1;
     await this.closeGate;
-    if (this.closeError !== undefined) throw this.closeError;
+    if (this.closeError !== undefined) {
+      throw this.closeError;
+    }
   }
 }
 
@@ -542,7 +546,9 @@ function deferred(): {
 }
 
 function rejectWhenAborted(abortSignal: AbortSignal): Promise<never> {
-  if (abortSignal.aborted) return Promise.reject(abortSignal.reason);
+  if (abortSignal.aborted) {
+    return Promise.reject(abortSignal.reason);
+  }
   return new Promise<never>((_resolve, reject) => {
     abortSignal.addEventListener('abort', () => reject(abortSignal.reason), {
       once: true,

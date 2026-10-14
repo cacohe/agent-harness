@@ -28,7 +28,9 @@ export function createMcpAdapter(
   environment: Readonly<Record<string, string | undefined>>,
   createClient: ((options: StdioMcpClientOptions) => McpClient) | undefined,
 ): McpToolAdapter {
-  if (config.mcp === undefined) throw new Error('MCP 配置缺失');
+  if (config.mcp === undefined) {
+    throw new Error('MCP 配置缺失');
+  }
   const childEnvironment: Record<string, string> = {};
   for (const [target, source] of Object.entries(config.mcp.environment)) {
     childEnvironment[target] = requiredEnvironment(environment, source);
@@ -142,12 +144,16 @@ function requiredEnvironment(
   name: string,
 ): string {
   const value = environment[name];
-  if (value === undefined || value.length === 0) throw new CliUsageError(`环境变量 ${name} 未设置`);
+  if (value === undefined || value.length === 0) {
+    throw new CliUsageError(`环境变量 ${name} 未设置`);
+  }
   return value;
 }
 
 function buildTools(config: CliConfig): readonly ToolDefinition[] {
-  if (!config.shell.enabled) return [];
+  if (!config.shell.enabled) {
+    return [];
+  }
   return [
     createShellTool({
       cwd: config.shell.cwd,

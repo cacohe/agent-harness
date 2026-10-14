@@ -55,7 +55,9 @@ export async function runDemo(): Promise<DemoRun> {
     observers: [
       {
         onExecution: (event) => {
-          if (event.type !== 'session.event') executionEvents.push(event.type);
+          if (event.type !== 'session.event') {
+            executionEvents.push(event.type);
+          }
         },
       },
     ],

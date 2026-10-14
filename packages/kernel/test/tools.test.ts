@@ -311,8 +311,12 @@ describe('ToolRegistry', () => {
       const tools = new PolicyControlledTools(new ToolRegistry([]), {
         authorize: async () => {
           await authorized;
-          if (outcome === 'error') throw new Error('Platform 响应无效');
-          if (outcome === 'denied') return { status: 'denied', reason: '需要审批' };
+          if (outcome === 'error') {
+            throw new Error('Platform 响应无效');
+          }
+          if (outcome === 'denied') {
+            return { status: 'denied', reason: '需要审批' };
+          }
           return { status: 'allowed' };
         },
       });
@@ -327,7 +331,9 @@ describe('ToolRegistry', () => {
       });
 
       (mutableCall as { id: ToolCallId }).id = brandId<'ToolCallId'>('tampered') as ToolCallId;
-      if (outcome === 'cancelled') controller.abort('用户取消');
+      if (outcome === 'cancelled') {
+        controller.abort('用户取消');
+      }
       release();
 
       await expect(running).resolves.toMatchObject({
@@ -367,7 +373,9 @@ describe('ToolRegistry', () => {
       },
     });
     expect(result).toMatchObject({ status: 'success', callId: 'call-1' });
-    if (result.status !== 'success') throw new Error('预期工具成功');
+    if (result.status !== 'success') {
+      throw new Error('预期工具成功');
+    }
     const output = result.output as Record<string, unknown>;
     expect(Object.hasOwn(output, '__proto__')).toBe(true);
     expect(output['__proto__']).toEqual({ admin: true });

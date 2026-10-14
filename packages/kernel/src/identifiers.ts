@@ -15,6 +15,8 @@ export type SessionBatchId = BrandedString<'SessionBatchId'>;
 
 /** 为已经校验的标识符字符串赋予品牌类型。 */
 export function brandId<Name extends string>(value: string): BrandedString<Name> {
-  if (value.length === 0) throw new Error('identifier must not be empty');
+  if (value.length === 0) {
+    throw new Error('identifier must not be empty');
+  }
   return value as BrandedString<Name>;
 }

@@ -14,8 +14,9 @@ describe('workspace', () => {
     const tool = createWorkspaceTools(workspace).find((item) => item.name === 'write_file');
     const reader = createWorkspaceTools(workspace).find((item) => item.name === 'read_file');
     const listed = createWorkspaceTools(workspace).find((item) => item.name === 'list_dir');
-    if (tool === undefined || reader === undefined || listed === undefined)
+    if (tool === undefined || reader === undefined || listed === undefined) {
       throw new Error('工具缺失');
+    }
     expect(createWorkspaceTools(workspace).some((item) => item.name === 'run_shell')).toBe(false);
     const signal = new AbortController().signal;
     await tool.execute({ path: 'notes/a.txt', content: '你好' }, { signal });

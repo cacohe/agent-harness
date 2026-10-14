@@ -37,7 +37,9 @@ export class MemoryGatewayRetriever implements MemoryRetriever {
       MEMORY_CONTEXT_LIMITS.maxFieldBytes,
       'memorySpaceId',
     );
-    if (!isMemoryGatewayClient(options.client)) throw new TypeError('client 必须实现 searchMemory');
+    if (!isMemoryGatewayClient(options.client)) {
+      throw new TypeError('client 必须实现 searchMemory');
+    }
     this.#client = options.client;
     this.#limit = positiveInteger(options.limit ?? MEMORY_CONTEXT_LIMITS.maxMatches, 'limit');
     if (this.#limit > MEMORY_CONTEXT_LIMITS.maxMatches) {
@@ -59,9 +61,12 @@ export class MemoryGatewayRetriever implements MemoryRetriever {
 }
 
 function normalizeMatches(value: unknown, limit: number): readonly MemoryMatch[] {
-  if (!Array.isArray(value)) throw new TypeError('Memory Gateway 响应必须是数组');
-  if (value.length > limit)
+  if (!Array.isArray(value)) {
+    throw new TypeError('Memory Gateway 响应必须是数组');
+  }
+  if (value.length > limit) {
     throw new RangeError(`Memory Gateway 结果不能超过请求 limit (${limit})`);
+  }
   const ids = new Set<string>();
   const matches = value.map((candidate, index) => {
     if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
@@ -87,7 +92,9 @@ function normalizeMatches(value: unknown, limit: number): readonly MemoryMatch[]
       MEMORY_CONTEXT_LIMITS.maxFieldBytes,
       `Memory Gateway 结果 ${index}.content`,
     );
-    if (ids.has(id)) throw new TypeError(`Memory Gateway 结果 ID 重复：${id}`);
+    if (ids.has(id)) {
+      throw new TypeError(`Memory Gateway 结果 ID 重复：${id}`);
+    }
     ids.add(id);
     const source = keys.includes('source')
       ? normalizeMemorySource(fields.source, index)

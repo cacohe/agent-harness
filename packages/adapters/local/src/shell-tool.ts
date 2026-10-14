@@ -149,8 +149,11 @@ async function runShellCommand(
       chunks.push(chunk);
       size += chunk.length;
     }
-    if (stream === 'stdout') stdoutBytes = size;
-    else stderrBytes = size;
+    if (stream === 'stdout') {
+      stdoutBytes = size;
+    } else {
+      stderrBytes = size;
+    }
   };
 
   child.stdout.on('data', (chunk: Buffer | string) => {
@@ -164,21 +167,31 @@ async function runShellCommand(
   let rejectWait: ((error: unknown) => void) | undefined;
 
   const settleWait = (code: number | null): void => {
-    if (waitSettled) return;
+    if (waitSettled) {
+      return;
+    }
     waitSettled = true;
-    if (forceTimer !== undefined) clearTimeout(forceTimer);
+    if (forceTimer !== undefined) {
+      clearTimeout(forceTimer);
+    }
     resolveWait?.(code);
   };
 
   const failWait = (error: unknown): void => {
-    if (waitSettled) return;
+    if (waitSettled) {
+      return;
+    }
     waitSettled = true;
-    if (forceTimer !== undefined) clearTimeout(forceTimer);
+    if (forceTimer !== undefined) {
+      clearTimeout(forceTimer);
+    }
     rejectWait?.(error);
   };
 
   const armForceSettle = (): void => {
-    if (forceTimer !== undefined || waitSettled) return;
+    if (forceTimer !== undefined || waitSettled) {
+      return;
+    }
     forceTimer = setTimeout(() => {
       killProcessTree(child, options.platform, 'SIGKILL');
       destroyStream(child.stdout);
@@ -188,7 +201,9 @@ async function runShellCommand(
   };
 
   const killChild = (): void => {
-    if (waitSettled) return;
+    if (waitSettled) {
+      return;
+    }
     killProcessTree(child, options.platform, 'SIGTERM');
     armForceSettle();
   };
@@ -229,7 +244,9 @@ async function runShellCommand(
     throw error;
   } finally {
     clearTimeout(timeout);
-    if (forceTimer !== undefined) clearTimeout(forceTimer);
+    if (forceTimer !== undefined) {
+      clearTimeout(forceTimer);
+    }
     options.signal.removeEventListener('abort', onAbort);
   }
 }
@@ -305,5 +322,7 @@ function killProcessTree(
     }
   }
   child.kill(signal);
-  if (platform === 'win32' && signal === 'SIGTERM') child.kill();
+  if (platform === 'win32' && signal === 'SIGTERM') {
+    child.kill();
+  }
 }

@@ -174,7 +174,9 @@ function canonicalJson(value: JsonValue): string {
   ) {
     return JSON.stringify(value);
   }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
   const record = value as JsonObject;
   return `{${Object.keys(record)
     .sort()

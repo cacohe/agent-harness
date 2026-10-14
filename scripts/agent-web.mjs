@@ -22,7 +22,9 @@ async function exists(path) {
 
 async function ensureLocalConfig() {
   await mkdir(sessionsRoot, { recursive: true });
-  if (await exists(configPath)) return;
+  if (await exists(configPath)) {
+    return;
+  }
   const config = JSON.parse(await readFile(exampleConfigPath, 'utf8'));
   config.sessionRoot = sessionsRoot;
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');

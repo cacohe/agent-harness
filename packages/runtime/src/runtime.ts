@@ -161,7 +161,9 @@ export class AgentRuntime {
         controller.abort(new RuntimeClosedError('Runtime 正在关闭'));
       }
       const closingHandles = [...this.#handles];
-      for (const handle of closingHandles) handle.beginClose();
+      for (const handle of closingHandles) {
+        handle.beginClose();
+      }
       this.#closePromise = this.#closeAll(closingHandles);
     }
     return waitFor(this.#closePromise, options.signal ?? neverAbortedSignal);
@@ -176,7 +178,9 @@ export class AgentRuntime {
     externalSignal: AbortSignal,
     mode: 'create' | 'resume',
   ): Promise<AgentRuntimeHandle> {
-    if (this.#closing) throw new RuntimeClosedError('Runtime 已关闭');
+    if (this.#closing) {
+      throw new RuntimeClosedError('Runtime 已关闭');
+    }
     const controller = new AbortController();
     this.#setupControllers.add(controller);
     const signal = AbortSignal.any([externalSignal, controller.signal]);
@@ -232,7 +236,9 @@ export class AgentRuntime {
     } finally {
       this.#setupControllers.delete(controller);
       if (this.#setupControllers.size === 0) {
-        for (const resolve of this.#setupWaiters) resolve();
+        for (const resolve of this.#setupWaiters) {
+          resolve();
+        }
         this.#setupWaiters.clear();
       }
     }
@@ -246,8 +252,12 @@ export class AgentRuntime {
     const errors = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) throw new AggregateError(errors, '关闭 Runtime 时发生多个错误');
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, '关闭 Runtime 时发生多个错误');
+    }
   }
 }
 
@@ -271,7 +281,9 @@ class OwnedAgentHandle implements AgentRuntimeHandle {
   }
 
   beginClose(): void {
-    if (this.#closePromise !== undefined) return;
+    if (this.#closePromise !== undefined) {
+      return;
+    }
     this.agent.stop(new RuntimeClosedError('Agent handle 正在关闭'));
     this.#closePromise = this.#close();
   }
@@ -303,7 +315,9 @@ async function repairSession(
 }
 
 function freezeAgentProfile(profile: AgentProfile | undefined): AgentProfile | undefined {
-  if (profile === undefined) return undefined;
+  if (profile === undefined) {
+    return undefined;
+  }
   if (typeof profile !== 'object' || profile === null || Array.isArray(profile)) {
     throw new TypeError('agentProfile 必须是对象');
   }

@@ -7,7 +7,9 @@ const manifests = [];
 const sourceEntries = [];
 
 for (const entry of entries) {
-  if (!entry.isFile() || entry.name !== 'package.json') continue;
+  if (!entry.isFile() || entry.name !== 'package.json') {
+    continue;
+  }
   const parentPath = entry.parentPath.replaceAll('\\', '/').replace(/^.*\/packages\/?/, '');
   const path = new URL(`../packages/${parentPath}/${entry.name}`, import.meta.url);
   manifests.push([parentPath, JSON.parse(await readFile(path, 'utf8'))]);
@@ -15,11 +17,15 @@ for (const entry of entries) {
 
 const owners = manifests.map(([owner]) => owner).sort((left, right) => right.length - left.length);
 for (const entry of entries) {
-  if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+  if (!entry.isFile() || !entry.name.endsWith('.ts')) {
+    continue;
+  }
   const parentPath = entry.parentPath.replaceAll('\\', '/').replace(/^.*\/packages\/?/, '');
   const relativePath = `${parentPath}/${entry.name}`;
   const owner = owners.find((candidate) => relativePath.startsWith(`${candidate}/src/`));
-  if (owner === undefined) continue;
+  if (owner === undefined) {
+    continue;
+  }
   const file = relativePath.slice(owner.length + 1);
   const url = new URL(`../packages/${relativePath}`, import.meta.url);
   sourceEntries.push([owner, file, await readFile(url, 'utf8')]);

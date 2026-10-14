@@ -75,7 +75,9 @@ export class SessionRegistry implements WebSessionController {
   }
 
   async createSession(workspacePath: string): Promise<OpenedWebSession> {
-    if (this.#closing) throw new Error('Web Host 正在关闭，不能创建会话');
+    if (this.#closing) {
+      throw new Error('Web Host 正在关闭，不能创建会话');
+    }
     const workspace = await resolveWorkspaceDirectory(workspacePath);
     const sessionId = randomUUID();
     const session = await this.#get(sessionId, workspace, 'create');
@@ -89,7 +91,9 @@ export class SessionRegistry implements WebSessionController {
   }
 
   async openSession(sessionId: string): Promise<OpenedWebSession> {
-    if (this.#closing) throw new Error('Web Host 正在关闭，不能恢复会话');
+    if (this.#closing) {
+      throw new Error('Web Host 正在关闭，不能恢复会话');
+    }
     const workspacePath = await this.#readWorkspace(sessionId);
     if (workspacePath === undefined) {
       throw new WebSessionNotFoundError('会话没有已授权的工作目录');
@@ -130,7 +134,9 @@ export class SessionRegistry implements WebSessionController {
         };
       });
     } catch (error) {
-      if (events.subscriberCount === 0) this.#scheduleIdleClose(sessionId);
+      if (events.subscriberCount === 0) {
+        this.#scheduleIdleClose(sessionId);
+      }
       throw error;
     }
     return () => {
@@ -148,14 +154,20 @@ export class SessionRegistry implements WebSessionController {
   async submit(sessionId: string, message: SubmittedMessage): Promise<SubmissionReceipt> {
     const session = await this.#get(sessionId, undefined, 'resume');
     const pending = this.#pendingReceipt(session, message);
-    if (pending !== undefined) return pending;
+    if (pending !== undefined) {
+      return pending;
+    }
     const persisted = findSessionMessageSubmission(
       await this.#readEvents(sessionId, new AbortController().signal),
       { ...message, role: 'user' },
     );
-    if (persisted !== undefined) return persisted;
+    if (persisted !== undefined) {
+      return persisted;
+    }
     const pendingAfterRead = this.#pendingReceipt(session, message);
-    if (pendingAfterRead !== undefined) return pendingAfterRead;
+    if (pendingAfterRead !== undefined) {
+      return pendingAfterRead;
+    }
     session.pendingSubmissions.set(message.id, message.content);
     void session.handle.agent
       .run({
@@ -178,7 +190,9 @@ export class SessionRegistry implements WebSessionController {
 
   closeSession(sessionId: string): Promise<void> {
     const closing = this.#closingSessions.get(sessionId);
-    if (closing !== undefined) return closing;
+    if (closing !== undefined) {
+      return closing;
+    }
     const created = this.#closeSession(sessionId).finally(() =>
       this.#closingSessions.delete(sessionId),
     );
@@ -189,7 +203,9 @@ export class SessionRegistry implements WebSessionController {
   async close(): Promise<void> {
     if (this.#closePromise === undefined) {
       this.#closing = true;
-      for (const timer of this.#idleTimers.values()) clearTimeout(timer);
+      for (const timer of this.#idleTimers.values()) {
+        clearTimeout(timer);
+      }
       this.#idleTimers.clear();
       this.#closePromise = this.#closeAll();
     }
@@ -202,11 +218,15 @@ export class SessionRegistry implements WebSessionController {
     const opened = await Promise.allSettled(opening);
     const sessions = new Set(this.#sessions.values());
     for (const result of opened) {
-      if (result.status === 'fulfilled') sessions.add(result.value);
+      if (result.status === 'fulfilled') {
+        sessions.add(result.value);
+      }
     }
     this.#sessions.clear();
     this.#opening.clear();
-    for (const events of this.#streams.values()) events.close();
+    for (const events of this.#streams.values()) {
+      events.close();
+    }
     this.#streams.clear();
     const results = await Promise.allSettled(
       [...sessions].flatMap((session) => [session.handle.close(), session.runtime.close()]),
@@ -214,8 +234,12 @@ export class SessionRegistry implements WebSessionController {
     const errors = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) throw new AggregateError(errors, '关闭 Web 会话失败');
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, '关闭 Web 会话失败');
+    }
   }
 
   async #get(
@@ -223,7 +247,9 @@ export class SessionRegistry implements WebSessionController {
     workspace: string | undefined,
     mode: 'create' | 'resume',
   ): Promise<ManagedSession> {
-    if (this.#closing) throw new Error('Web Host 正在关闭，不能接纳新消息');
+    if (this.#closing) {
+      throw new Error('Web Host 正在关闭，不能接纳新消息');
+    }
     const closing = this.#closingSessions.get(sessionId);
     if (closing !== undefined) {
       await closing;
@@ -231,10 +257,16 @@ export class SessionRegistry implements WebSessionController {
     }
     this.#cancelIdleClose(sessionId);
     const opened = this.#sessions.get(sessionId);
-    if (opened !== undefined) return opened;
+    if (opened !== undefined) {
+      return opened;
+    }
     const opening = this.#opening.get(sessionId);
-    if (opening !== undefined) return opening;
-    if (workspace === undefined) throw new WebSessionNotFoundError('会话不存在，请先选择工作目录');
+    if (opening !== undefined) {
+      return opening;
+    }
+    if (workspace === undefined) {
+      throw new WebSessionNotFoundError('会话不存在，请先选择工作目录');
+    }
     const created = this.#open(sessionId, workspace, mode);
     this.#opening.set(sessionId, created);
     try {
@@ -244,7 +276,9 @@ export class SessionRegistry implements WebSessionController {
         throw new Error('Web Host 正在关闭，不能接纳新消息');
       }
       this.#sessions.set(sessionId, session);
-      if (session.events.subscriberCount === 0) this.#scheduleIdleClose(sessionId);
+      if (session.events.subscriberCount === 0) {
+        this.#scheduleIdleClose(sessionId);
+      }
       return session;
     } finally {
       this.#opening.delete(sessionId);
@@ -291,7 +325,9 @@ export class SessionRegistry implements WebSessionController {
     try {
       return await runtime.create(sessionId, { signal });
     } catch (error) {
-      if (!(error instanceof SessionAlreadyExistsError)) throw error;
+      if (!(error instanceof SessionAlreadyExistsError)) {
+        throw error;
+      }
       return await runtime.resume(sessionId, { signal });
     }
   }
@@ -299,19 +335,27 @@ export class SessionRegistry implements WebSessionController {
   async #closeSession(sessionId: string): Promise<void> {
     this.#cancelIdleClose(sessionId);
     const opening = this.#opening.get(sessionId);
-    if (opening !== undefined) await Promise.allSettled([opening]);
+    if (opening !== undefined) {
+      await Promise.allSettled([opening]);
+    }
     const session = this.#sessions.get(sessionId);
     this.#sessions.delete(sessionId);
     const events = this.#streams.get(sessionId);
     this.#streams.delete(sessionId);
     events?.close();
-    if (session === undefined) return;
+    if (session === undefined) {
+      return;
+    }
     const results = await Promise.allSettled([session.handle.close(), session.runtime.close()]);
     const errors = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) throw new AggregateError(errors, '关闭 Web 会话失败');
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, '关闭 Web 会话失败');
+    }
   }
 
   #events(sessionId: string): SessionEventStream {
@@ -328,7 +372,9 @@ export class SessionRegistry implements WebSessionController {
     message: SubmittedMessage,
   ): SubmissionReceipt | undefined {
     const content = session.pendingSubmissions.get(message.id);
-    if (content === undefined) return undefined;
+    if (content === undefined) {
+      return undefined;
+    }
     if (content !== message.content) {
       throw new SessionMessageConflictError('messageId 已用于内容不同的消息');
     }
@@ -347,7 +393,9 @@ export class SessionRegistry implements WebSessionController {
 
   #cancelIdleClose(sessionId: string): void {
     const timer = this.#idleTimers.get(sessionId);
-    if (timer !== undefined) clearTimeout(timer);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
     this.#idleTimers.delete(sessionId);
   }
 }

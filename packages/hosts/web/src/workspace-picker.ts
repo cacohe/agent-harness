@@ -16,7 +16,9 @@ export async function pickWorkspaceDirectory(
   const run = options.run ?? runProcess;
   const invocation = pickerInvocation(platform);
   const result = await run(invocation.file, invocation.args);
-  if (result.exitCode !== 0) return undefined;
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
   const selected = result.stdout.trim().replace(/\/$/, '');
   return selected.length === 0 ? undefined : selected;
 }

@@ -20,7 +20,9 @@ export class EnabledSkillsContext implements ContextContributor {
 
   contribute(_input: ContextContributorInput, _signal: AbortSignal): readonly ModelMessage[] {
     const descriptors = this.#skills.listEnabled();
-    if (!Array.isArray(descriptors)) throw new TypeError('SkillCatalog.listEnabled 必须返回数组');
+    if (!Array.isArray(descriptors)) {
+      throw new TypeError('SkillCatalog.listEnabled 必须返回数组');
+    }
     if (descriptors.length > MAX_ENABLED_SKILLS) {
       throw new RangeError(`已启用 Skills 数量不能超过 ${MAX_ENABLED_SKILLS}`);
     }
@@ -33,8 +35,12 @@ export class EnabledSkillsContext implements ContextContributor {
       assertSkillFieldBytes(skill.id);
       assertSkillFieldBytes(skill.name);
       assertSkillFieldBytes(skill.description);
-      if (ids.has(skill.id)) throw new TypeError(`已启用 Skill ID 重复：${skill.id}`);
-      if (names.has(skill.name)) throw new TypeError(`已启用 Skill 名称重复：${skill.name}`);
+      if (ids.has(skill.id)) {
+        throw new TypeError(`已启用 Skill ID 重复：${skill.id}`);
+      }
+      if (names.has(skill.name)) {
+        throw new TypeError(`已启用 Skill 名称重复：${skill.name}`);
+      }
       ids.add(skill.id);
       names.add(skill.name);
       const line = `- ${skill.name}（id: ${skill.id}）：${skill.description}`;

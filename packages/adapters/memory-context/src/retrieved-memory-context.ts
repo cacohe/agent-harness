@@ -23,12 +23,16 @@ export class RetrievedMemoryContext implements ContextContributor {
     const userEvent = [...input.events]
       .reverse()
       .find((event) => event.event.type === 'user.message');
-    if (userEvent?.event.type !== 'user.message') return [];
+    if (userEvent?.event.type !== 'user.message') {
+      return [];
+    }
     const query = userEvent.event.message.content;
     assertMemoryFieldBytes(query, MEMORY_CONTEXT_LIMITS.maxQueryBytes, '查询');
     const matches = await this.#retriever.search(query, signal);
     signal.throwIfAborted();
-    if (!Array.isArray(matches)) throw new TypeError('MemoryRetriever.search 必须返回数组');
+    if (!Array.isArray(matches)) {
+      throw new TypeError('MemoryRetriever.search 必须返回数组');
+    }
     if (matches.length > MEMORY_CONTEXT_LIMITS.maxMatches) {
       throw new RangeError(`长期记忆结果不能超过 ${MEMORY_CONTEXT_LIMITS.maxMatches} 条`);
     }
@@ -38,11 +42,15 @@ export class RetrievedMemoryContext implements ContextContributor {
       assertMemoryMatch(match);
       assertMemoryFieldBytes(match.id, MEMORY_CONTEXT_LIMITS.maxFieldBytes, '标识符');
       assertMemoryFieldBytes(match.content, MEMORY_CONTEXT_LIMITS.maxFieldBytes, '内容');
-      if (ids.has(match.id)) throw new TypeError(`长期记忆标识符重复：${match.id}`);
+      if (ids.has(match.id)) {
+        throw new TypeError(`长期记忆标识符重复：${match.id}`);
+      }
       ids.add(match.id);
       entries.push(copyMemoryMatch(match));
     }
-    if (entries.length === 0) return [];
+    if (entries.length === 0) {
+      return [];
+    }
     const data = JSON.stringify(entries).replaceAll('<', '\\u003c');
     if (utf8ByteLength(data) > MEMORY_CONTEXT_LIMITS.maxSummaryBytes) {
       throw new RangeError(
@@ -81,7 +89,9 @@ function assertMemoryMatch(value: unknown): asserts value is MemoryMatch {
   ) {
     throw new TypeError('长期记忆结果的 id 与 content 必须是非空字符串');
   }
-  if (keys.includes('source')) assertMemorySource(record.source);
+  if (keys.includes('source')) {
+    assertMemorySource(record.source);
+  }
 }
 
 function assertMemorySource(value: unknown): asserts value is MemorySource {
@@ -90,7 +100,9 @@ function assertMemorySource(value: unknown): asserts value is MemorySource {
   }
   const record = value as Record<string, unknown>;
   if (record.type === 'statement') {
-    if (Object.keys(record).length !== 1) throw new TypeError('statement source 只能包含 type');
+    if (Object.keys(record).length !== 1) {
+      throw new TypeError('statement source 只能包含 type');
+    }
     return;
   }
   if (record.type !== 'document') {
@@ -153,7 +165,9 @@ function utf8ByteLength(value: string): number {
 function containsPathOrControlChars(value: string): boolean {
   for (const char of value) {
     const code = char.charCodeAt(0);
-    if (char === '/' || char === '\\' || code < 32 || code === 127) return true;
+    if (char === '/' || char === '\\' || code < 32 || code === 127) {
+      return true;
+    }
   }
   return false;
 }

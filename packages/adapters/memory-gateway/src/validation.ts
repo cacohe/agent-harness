@@ -1,7 +1,8 @@
 /** 在 Gateway 边界校验非空 UTF-8 文本。 */
 export function boundedText(value: unknown, maxBytes: number, name: string): string {
-  if (typeof value !== 'string' || value.length === 0)
+  if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError(`${name} 必须是非空字符串`);
+  }
   if (value.length > maxBytes || utf8ByteLength(value) > maxBytes) {
     throw new RangeError(`${name} 不能超过 ${maxBytes} UTF-8 字节`);
   }

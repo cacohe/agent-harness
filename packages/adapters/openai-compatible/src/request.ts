@@ -26,7 +26,9 @@ export function resolveEndpoint(baseUrl: string): URL {
       'base URL 必须是 API 根路径，不能是完整 chat/completions endpoint',
     );
   }
-  if (!base.pathname.endsWith('/')) base.pathname = `${base.pathname}/`;
+  if (!base.pathname.endsWith('/')) {
+    base.pathname = `${base.pathname}/`;
+  }
   return new URL('chat/completions', base);
 }
 
@@ -130,7 +132,9 @@ function stableJsonValue(value: JsonValue): string {
   ) {
     return JSON.stringify(value);
   }
-  if (Array.isArray(value)) return `[${value.map(stableJsonValue).join(',')}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJsonValue).join(',')}]`;
+  }
   const record = value as JsonObject;
   return `{${Object.keys(record)
     .sort()

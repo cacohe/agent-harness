@@ -46,6 +46,7 @@
       "style": {
         "noDescendingSpecificity": "off",
         "noNonNullAssertion": "off",
+        "useBlockStatements": "error",
         "useImportType": "error",
         "useNodejsImportProtocol": "error"
       },

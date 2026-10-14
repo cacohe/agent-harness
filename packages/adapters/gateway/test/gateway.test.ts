@@ -192,7 +192,9 @@ describe('LlmGatewayModelProvider', () => {
 
   it('在递归复制前限制工具输入嵌套深度', async () => {
     let input: unknown = 'leaf';
-    for (let index = 0; index < 128; index += 1) input = [input];
+    for (let index = 0; index < 128; index += 1) {
+      input = [input];
+    }
     const model = provider(
       {
         prepare: async () => ({

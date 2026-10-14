@@ -15,13 +15,21 @@ export function assertJsonValue(value: unknown): asserts value is JsonValue {
 }
 
 function assertJsonValueAt(value: unknown, path: string, ancestors: Set<object>): void {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new TypeError(`${path} 必须是有限数字`);
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
     return;
   }
-  if (typeof value !== 'object') throw new TypeError(`${path} 不是合法 JSON 值`);
-  if (ancestors.has(value)) throw new TypeError(`${path} 包含循环引用`);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(`${path} 必须是有限数字`);
+    }
+    return;
+  }
+  if (typeof value !== 'object') {
+    throw new TypeError(`${path} 不是合法 JSON 值`);
+  }
+  if (ancestors.has(value)) {
+    throw new TypeError(`${path} 包含循环引用`);
+  }
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
@@ -32,7 +40,9 @@ function assertJsonValueAt(value: unknown, path: string, ancestors: Set<object>)
         assertJsonValueAt(value[index], `${path}[${index}]`, ancestors);
       }
       for (const key of Reflect.ownKeys(value)) {
-        if (key === 'length') continue;
+        if (key === 'length') {
+          continue;
+        }
         if (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key)) {
           throw new TypeError(`${path} 包含 JSON 不会保存的数组属性`);
         }
@@ -66,7 +76,9 @@ export interface SerializedError {
 
 /** 将未知的抛出值转换为可持久化的错误数据。 */
 export function serializeError(error: unknown): SerializedError {
-  if (error instanceof Error) return { name: error.name, message: error.message };
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
   return { name: 'Error', message: String(error) };
 }
 

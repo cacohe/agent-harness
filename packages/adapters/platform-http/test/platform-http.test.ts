@@ -18,8 +18,11 @@ function response(
     new ReadableStream<Uint8Array>({
       pull(controller) {
         const part = parts[index++];
-        if (part === undefined) controller.close();
-        else controller.enqueue(encoder.encode(part));
+        if (part === undefined) {
+          controller.close();
+        } else {
+          controller.enqueue(encoder.encode(part));
+        }
       },
     }),
     {

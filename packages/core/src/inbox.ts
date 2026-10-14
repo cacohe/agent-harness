@@ -26,7 +26,9 @@ export class AgentInbox {
   /** 移除一条尚未开始的输入。 */
   remove(run: QueuedRun): boolean {
     const index = this.#runs.indexOf(run);
-    if (index < 0) return false;
+    if (index < 0) {
+      return false;
+    }
     this.#runs.splice(index, 1);
     return true;
   }

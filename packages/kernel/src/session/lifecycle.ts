@@ -31,7 +31,9 @@ export function analyzeSessionLifecycle(
   for (let index = 0; index < envelopes.length; index += 1) {
     const envelope = envelopes[index]!;
     const expectedSequence = index + 1;
-    if (envelope.version !== 1) corrupt('event envelope version 无效', envelope.sequence);
+    if (envelope.version !== 1) {
+      corrupt('event envelope version 无效', envelope.sequence);
+    }
     if (envelope.sequence !== expectedSequence) {
       corrupt(`event sequence 应为 ${expectedSequence}`, envelope.sequence);
     }
@@ -83,7 +85,9 @@ function applyLifecycleEvent(state: LifecycleAnalysisState, envelope: EventEnvel
   const sequence = envelope.sequence;
   switch (event.type) {
     case 'turn.started': {
-      if (state.turn !== undefined) corrupt('前一个 turn 尚未闭合', sequence);
+      if (state.turn !== undefined) {
+        corrupt('前一个 turn 尚未闭合', sequence);
+      }
       uniqueId(state.usedTurnIds, event.turnId, 'turnId 重复', sequence);
       state.turn = {
         turnId: event.turnId,
@@ -99,15 +103,21 @@ function applyLifecycleEvent(state: LifecycleAnalysisState, envelope: EventEnvel
       if (turn.stepCount > 0 || turn.step !== undefined) {
         corrupt('user.message 必须出现在第一个 step 之前', sequence);
       }
-      if (turn.userMessageSeen) corrupt('一个 turn 只能接纳一条 user.message', sequence);
+      if (turn.userMessageSeen) {
+        corrupt('一个 turn 只能接纳一条 user.message', sequence);
+      }
       uniqueId(state.usedMessageIds, event.message.id, 'messageId 重复', sequence);
       turn.userMessageSeen = true;
       return;
     }
     case 'step.started': {
       const turn = requireMatchingTurn(state, event.turnId, sequence);
-      if (turn.step !== undefined) corrupt('前一个 step 尚未闭合', sequence);
-      if (!turn.userMessageSeen) corrupt('step.started 之前缺少 user.message', sequence);
+      if (turn.step !== undefined) {
+        corrupt('前一个 step 尚未闭合', sequence);
+      }
+      if (!turn.userMessageSeen) {
+        corrupt('step.started 之前缺少 user.message', sequence);
+      }
       if (
         turn.stepCount > 0 &&
         (turn.lastClosedStep?.outcome !== 'completed' ||
@@ -128,8 +138,9 @@ function applyLifecycleEvent(state: LifecycleAnalysisState, envelope: EventEnvel
     }
     case 'assistant.settled': {
       const step = requireMatchingStep(state, event.turnId, event.stepId, sequence);
-      if (step.settlement !== undefined)
+      if (step.settlement !== undefined) {
         corrupt('一个 step 只能有一次 assistant settlement', sequence);
+      }
       uniqueId(state.usedAttemptIds, event.settlement.attemptId, 'attemptId 重复', sequence);
       if (event.settlement.status === 'completed') {
         uniqueId(state.usedMessageIds, event.settlement.message.id, 'messageId 重复', sequence);
@@ -180,7 +191,9 @@ function applyLifecycleEvent(state: LifecycleAnalysisState, envelope: EventEnvel
     }
     case 'turn.ended': {
       const turn = requireMatchingTurn(state, event.turnId, sequence);
-      if (turn.step !== undefined) corrupt('turn.ended 之前 step 尚未闭合', sequence);
+      if (turn.step !== undefined) {
+        corrupt('turn.ended 之前 step 尚未闭合', sequence);
+      }
       if (
         event.outcome === 'completed' &&
         (turn.lastClosedStep?.outcome !== 'completed' ||
@@ -198,13 +211,17 @@ function applyLifecycleEvent(state: LifecycleAnalysisState, envelope: EventEnvel
 }
 
 function buildRecoveryEvents(turn: OpenTurn | undefined): readonly SessionEvent[] {
-  if (turn === undefined) return [];
+  if (turn === undefined) {
+    return [];
+  }
   const events: SessionEvent[] = [];
   const step = turn.step;
   if (step !== undefined) {
     if (step.settlement?.status === 'completed') {
       for (const callId of step.toolCallIds) {
-        if (step.resultIds.has(callId)) continue;
+        if (step.resultIds.has(callId)) {
+          continue;
+        }
         events.push({
           type: 'tool.completed',
           turnId: turn.turnId,
@@ -233,7 +250,9 @@ function buildRecoveryEvents(turn: OpenTurn | undefined): readonly SessionEvent[
 }
 
 function requireTurn(state: LifecycleAnalysisState, sequence: number): OpenTurn {
-  if (state.turn === undefined) corrupt('事件不属于活动 turn', sequence);
+  if (state.turn === undefined) {
+    corrupt('事件不属于活动 turn', sequence);
+  }
   return state.turn;
 }
 
@@ -243,7 +262,9 @@ function requireMatchingTurn(
   sequence: number,
 ): OpenTurn {
   const turn = requireTurn(state, sequence);
-  if (turn.turnId !== turnId) corrupt('turnId 与活动 turn 不一致', sequence);
+  if (turn.turnId !== turnId) {
+    corrupt('turnId 与活动 turn 不一致', sequence);
+  }
   return turn;
 }
 
@@ -254,13 +275,19 @@ function requireMatchingStep(
   sequence: number,
 ): OpenStep {
   const turn = requireMatchingTurn(state, turnId, sequence);
-  if (turn.step === undefined) corrupt('事件不属于活动 step', sequence);
-  if (turn.step.stepId !== stepId) corrupt('stepId 与活动 step 不一致', sequence);
+  if (turn.step === undefined) {
+    corrupt('事件不属于活动 step', sequence);
+  }
+  if (turn.step.stepId !== stepId) {
+    corrupt('stepId 与活动 step 不一致', sequence);
+  }
   return turn.step;
 }
 
 function uniqueId<T>(values: Set<T>, value: T, message: string, sequence: number): void {
-  if (values.has(value)) corrupt(message, sequence);
+  if (values.has(value)) {
+    corrupt(message, sequence);
+  }
   values.add(value);
 }
 

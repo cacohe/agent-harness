@@ -14,13 +14,19 @@ export async function flushAndClose(session: SessionLog, timeoutMs: number): Pro
   } catch (error) {
     errors.push(error);
   }
-  if (errors.length === 1) throw errors[0];
-  if (errors.length > 1) throw new AggregateError(errors, '刷新和关闭会话时发生多个错误');
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, '刷新和关闭会话时发生多个错误');
+  }
 }
 
 /** 取消调用方等待，不取消已经开始的后台生命周期操作。 */
 export function waitFor<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => reject(signal.reason);
     signal.addEventListener('abort', onAbort, { once: true });

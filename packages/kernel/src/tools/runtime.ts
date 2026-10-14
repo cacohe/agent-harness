@@ -29,18 +29,25 @@ export class ToolRegistry implements ToolCapability {
 
   async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
     const { signal } = context;
-    if (signal.aborted) return cancelledResult(call, signal.reason);
+    if (signal.aborted) {
+      return cancelledResult(call, signal.reason);
+    }
     const definition = this.#definitions.get(call.name);
-    if (definition === undefined) return unknownToolResult(call);
+    if (definition === undefined) {
+      return unknownToolResult(call);
+    }
     try {
       const input = definition.parseInput(call.input);
       const output = await definition.execute(input, context);
-      if (signal.aborted) return cancelledResult(call, signal.reason);
+      if (signal.aborted) {
+        return cancelledResult(call, signal.reason);
+      }
       assertJsonValue(output);
       return { status: 'success', callId: call.id, output };
     } catch (error) {
-      if (signal.aborted || isAbortError(error))
+      if (signal.aborted || isAbortError(error)) {
         return cancelledResult(call, signal.reason ?? error);
+      }
       return { status: 'failure', callId: call.id, error: serializeError(error) };
     }
   }
@@ -70,10 +77,16 @@ export class SandboxToolRegistry implements ToolCapability {
   }
 
   async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    if (context.signal.aborted) return cancelledResult(call, context.signal.reason);
-    if (!hasExecution(context)) return authorizationFailure(call, '缺少冻结执行上下文');
+    if (context.signal.aborted) {
+      return cancelledResult(call, context.signal.reason);
+    }
+    if (!hasExecution(context)) {
+      return authorizationFailure(call, '缺少冻结执行上下文');
+    }
     const definition = this.#definitions.get(call.name);
-    if (definition === undefined) return unknownToolResult(call);
+    if (definition === undefined) {
+      return unknownToolResult(call);
+    }
     try {
       const input = definition.parseInput(call.input);
       assertJsonValue(input);
@@ -83,7 +96,9 @@ export class SandboxToolRegistry implements ToolCapability {
         ...(this.#limits === undefined ? {} : { limits: this.#limits }),
       });
       const output = await this.#dispatcher.dispatch(task, context);
-      if (context.signal.aborted) return cancelledResult(call, context.signal.reason);
+      if (context.signal.aborted) {
+        return cancelledResult(call, context.signal.reason);
+      }
       assertJsonValue(output);
       return { status: 'success', callId: call.id, output };
     } catch (error) {
@@ -110,16 +125,24 @@ export class PolicyControlledTools implements ToolCapability {
   }
 
   async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    if (context.signal.aborted) return cancelledResult(call, context.signal.reason);
-    if (!hasExecution(context)) return authorizationFailure(call, '缺少冻结执行上下文');
+    if (context.signal.aborted) {
+      return cancelledResult(call, context.signal.reason);
+    }
+    if (!hasExecution(context)) {
+      return authorizationFailure(call, '缺少冻结执行上下文');
+    }
     let settlementCall = call;
     try {
       const authorizedCall = freezeToolCall(call);
       settlementCall = authorizedCall;
       const authorizedContext = freezeExecutionContext(context);
       const decision = await this.#policy.authorize(authorizedCall, authorizedContext);
-      if (context.signal.aborted) return cancelledResult(authorizedCall, context.signal.reason);
-      if (!isAllowed(decision)) return authorizationFailure(authorizedCall, denialReason(decision));
+      if (context.signal.aborted) {
+        return cancelledResult(authorizedCall, context.signal.reason);
+      }
+      if (!isAllowed(decision)) {
+        return authorizationFailure(authorizedCall, denialReason(decision));
+      }
       return this.#delegate.execute(authorizedCall, authorizedContext);
     } catch (error) {
       if (context.signal.aborted || isAbortError(error)) {
@@ -149,7 +172,9 @@ export class CompositeToolCapability implements ToolCapability {
     const routes = new Map<string, ToolCapability>();
     for (const capability of capabilities) {
       for (const definition of capability.list()) {
-        if (routes.has(definition.name)) throw new DuplicateToolNameError(definition.name);
+        if (routes.has(definition.name)) {
+          throw new DuplicateToolNameError(definition.name);
+        }
         assertJsonValue(definition.inputSchema);
         routes.set(definition.name, capability);
         definitions.push(
@@ -172,10 +197,13 @@ export class CompositeToolCapability implements ToolCapability {
   }
 
   execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    if (context.signal.aborted)
+    if (context.signal.aborted) {
       return Promise.resolve(cancelledResult(call, context.signal.reason));
+    }
     const capability = this.#routes.get(call.name);
-    if (capability === undefined) return Promise.resolve(unknownToolResult(call));
+    if (capability === undefined) {
+      return Promise.resolve(unknownToolResult(call));
+    }
     return capability.execute(call, context);
   }
 }
@@ -185,8 +213,9 @@ function indexToolDefinitions<T extends ToolSpecification>(
 ): ReadonlyMap<string, T> {
   const entries = new Map<string, T>();
   for (const definition of definitions) {
-    if (entries.has(definition.name))
+    if (entries.has(definition.name)) {
       throw new Error(`duplicate tool registration: ${definition.name}`);
+    }
     entries.set(definition.name, definition);
   }
   return entries;
@@ -223,8 +252,12 @@ function unknownToolResult(call: ToolCall): ToolResult {
 }
 
 function freezeJson(value: JsonValue): JsonValue {
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return Object.freeze(value.map(freezeJson));
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(freezeJson));
+  }
   const copy: Record<string, JsonValue> = {};
   for (const [key, child] of Object.entries(value)) {
     Object.defineProperty(copy, key, {
@@ -298,7 +331,9 @@ function normalizeSandboxOptions(options: SandboxToolRegistryOptions): {
   ) {
     throw new TypeError('sandbox workspace 若提供则必须是非空字符串');
   }
-  if (options.limits === undefined) return { workspace: options.workspace, limits: undefined };
+  if (options.limits === undefined) {
+    return { workspace: options.workspace, limits: undefined };
+  }
   if (
     typeof options.limits !== 'object' ||
     options.limits === null ||

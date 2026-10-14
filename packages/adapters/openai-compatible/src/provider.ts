@@ -132,17 +132,23 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
 
     const processLine = (line: string): string | undefined => {
       if (line.length === 0) {
-        if (dataLines.length === 0) return undefined;
+        if (dataLines.length === 0) {
+          return undefined;
+        }
         const payload = dataLines.join('\n');
         dataLines = [];
         dataBytes = 0;
         return payload;
       }
-      if (line.startsWith(':')) return undefined;
+      if (line.startsWith(':')) {
+        return undefined;
+      }
       const separator = line.indexOf(':');
       const field = separator === -1 ? line : line.slice(0, separator);
       let value = separator === -1 ? '' : line.slice(separator + 1);
-      if (value.startsWith(' ')) value = value.slice(1);
+      if (value.startsWith(' ')) {
+        value = value.slice(1);
+      }
       if (field === 'data') {
         dataBytes += Buffer.byteLength(value, 'utf8') + 1;
         if (dataBytes > this.#maxSseBufferBytes) {
@@ -168,7 +174,9 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
     try {
       while (true) {
         const read = await readWithAbort(reader, signal);
-        if (read.done) break;
+        if (read.done) {
+          break;
+        }
         let decoded: string;
         try {
           decoded = decoder.decode(read.value, { stream: true });
@@ -192,7 +200,9 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
           lineBuffer = lineBuffer.slice(newline + 1);
           const payload = processLine(rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine);
           if (payload !== undefined) {
-            for (const event of processPayload(payload)) yield event;
+            for (const event of processPayload(payload)) {
+              yield event;
+            }
           }
         }
       }
@@ -209,11 +219,15 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
           lineBuffer.endsWith('\r') ? lineBuffer.slice(0, -1) : lineBuffer,
         );
         if (payload !== undefined) {
-          for (const event of processPayload(payload)) yield event;
+          for (const event of processPayload(payload)) {
+            yield event;
+          }
         }
       }
       if (dataLines.length > 0) {
-        for (const event of processPayload(dataLines.join('\n'))) yield event;
+        for (const event of processPayload(dataLines.join('\n'))) {
+          yield event;
+        }
       }
       if (!receivedDone) {
         throw new OpenAiCompatibleProtocolError('SSE 在 [DONE] 前结束');
@@ -223,7 +237,9 @@ class OpenAiCompatiblePreparedCall implements PreparedModelCall {
       }
       streamFinished = true;
     } finally {
-      if (!streamFinished) void reader.cancel().catch(() => undefined);
+      if (!streamFinished) {
+        void reader.cancel().catch(() => undefined);
+      }
       reader.releaseLock();
     }
   }
@@ -245,7 +261,9 @@ function decodeChunk(
   usageTotals: CumulativeUsage,
 ): ModelStreamEvent[] {
   const choices = chunk.choices;
-  if (!Array.isArray(choices)) throw new OpenAiCompatibleProtocolError('chunk.choices 必须是数组');
+  if (!Array.isArray(choices)) {
+    throw new OpenAiCompatibleProtocolError('chunk.choices 必须是数组');
+  }
   if (choices.length > 1) {
     throw new OpenAiCompatibleProtocolError('非空 chunk.choices 必须只包含单一回复');
   }
@@ -284,7 +302,9 @@ function decodeChunk(
       if (!Array.isArray(delta.tool_calls)) {
         throw new OpenAiCompatibleProtocolError('chunk.choices[].delta.tool_calls 必须是数组');
       }
-      for (const call of delta.tool_calls) fragments.append(requireObject(call, 'tool call'));
+      for (const call of delta.tool_calls) {
+        fragments.append(requireObject(call, 'tool call'));
+      }
     }
   }
   return events;
@@ -346,11 +366,15 @@ class ToolCallFragment {
   }
 
   append(chunk: JsonObject): void {
-    if (chunk.id !== undefined) this.#id = mergeRequiredString(this.#id, chunk.id, 'tool call id');
+    if (chunk.id !== undefined) {
+      this.#id = mergeRequiredString(this.#id, chunk.id, 'tool call id');
+    }
     if (chunk.type !== undefined && chunk.type !== 'function') {
       throw new OpenAiCompatibleProtocolError('tool call type 必须是 function');
     }
-    if (chunk.function === undefined) return;
+    if (chunk.function === undefined) {
+      return;
+    }
     const functionValue = requireObject(chunk.function, 'tool call function');
     if (functionValue.name !== undefined) {
       this.#name = mergeRequiredString(this.#name, functionValue.name, 'tool call name');
@@ -433,7 +457,9 @@ async function readWithAbort(
   try {
     return await Promise.race([reader.read(), aborted]);
   } finally {
-    if (onAbort !== undefined) signal.removeEventListener('abort', onAbort);
+    if (onAbort !== undefined) {
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 }
 

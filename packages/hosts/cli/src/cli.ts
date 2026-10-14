@@ -91,14 +91,18 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
       );
       writeJson(dependencies.stdout, { type: 'document.imported', ...result });
     } else if (command.mode === 'document-status') {
-      if (memory === undefined) throw new CliUsageError('document-status 命令要求 memory 配置');
+      if (memory === undefined) {
+        throw new CliUsageError('document-status 命令要求 memory 配置');
+      }
       const result = await memory.documentStatuses.get(
         command.documentId,
         processController.signal,
       );
       writeJson(dependencies.stdout, { type: 'document.status', ...result });
     } else if (command.mode === 'document-delete') {
-      if (memory === undefined) throw new CliUsageError('document-delete 命令要求 memory 配置');
+      if (memory === undefined) {
+        throw new CliUsageError('document-delete 命令要求 memory 配置');
+      }
       const result = await memory.documentDeleter.delete(
         command.documentId,
         processController.signal,
@@ -197,8 +201,12 @@ export async function runCli(dependencies: CliDependencies): Promise<number> {
     failure = error;
   } finally {
     const resources: { close(): Promise<void> }[] = [];
-    if (handle !== undefined) resources.push(handle);
-    if (runtime !== undefined) resources.push(runtime);
+    if (handle !== undefined) {
+      resources.push(handle);
+    }
+    if (runtime !== undefined) {
+      resources.push(runtime);
+    }
     if (mcp !== undefined) {
       const adapter = mcp;
       resources.push({ close: () => adapter.close(new AbortController().signal) });

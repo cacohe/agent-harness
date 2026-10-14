@@ -23,15 +23,21 @@ export function findSessionMessageSubmission(
         activeTurn = envelope.event.turnId;
         break;
       case 'user.message':
-        if (envelope.event.message.id !== message.id) break;
+        if (envelope.event.message.id !== message.id) {
+          break;
+        }
         if (envelope.event.message.content !== message.content) {
           throw new SessionMessageConflictError('messageId 已用于内容不同的消息');
         }
         matchedTurn = activeTurn;
         break;
       case 'turn.ended':
-        if (envelope.event.turnId === matchedTurn) return { status: envelope.event.outcome };
-        if (envelope.event.turnId === activeTurn) activeTurn = undefined;
+        if (envelope.event.turnId === matchedTurn) {
+          return { status: envelope.event.outcome };
+        }
+        if (envelope.event.turnId === activeTurn) {
+          activeTurn = undefined;
+        }
         break;
       default:
         break;

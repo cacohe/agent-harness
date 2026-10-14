@@ -349,7 +349,9 @@ export class PlatformHttpClient {
       await cancelResponseBody(response);
       throw new PlatformHttpError(endpoint, response.status, response.statusText);
     }
-    if (response.body === null) throw new PlatformHttpProtocolError('Platform 成功响应缺少 body');
+    if (response.body === null) {
+      throw new PlatformHttpProtocolError('Platform 成功响应缺少 body');
+    }
     return response;
   }
 
@@ -377,7 +379,9 @@ function parseBaseUrl(value: string): URL {
   if (base.protocol !== 'https:') {
     throw new PlatformHttpConfigurationError('baseUrl 必须使用 https');
   }
-  if (!base.pathname.endsWith('/')) base.pathname += '/';
+  if (!base.pathname.endsWith('/')) {
+    base.pathname += '/';
+  }
   return base;
 }
 
@@ -394,8 +398,9 @@ function nonEmptyString<T extends Error>(
   name: string,
   ErrorType: new (message: string) => T,
 ): string {
-  if (typeof value !== 'string' || value.length === 0)
+  if (typeof value !== 'string' || value.length === 0) {
     throw new ErrorType(`${name}必须是非空字符串`);
+  }
   return value;
 }
 
@@ -633,7 +638,9 @@ function headerValue<T extends Error>(
   ErrorType: new (message: string) => T,
 ): string {
   const header = nonEmptyString(value, name, ErrorType);
-  if (/\r|\n/.test(header)) throw new ErrorType(`${name}不能包含换行符`);
+  if (/\r|\n/.test(header)) {
+    throw new ErrorType(`${name}不能包含换行符`);
+  }
   return header;
 }
 
@@ -657,16 +664,20 @@ async function readUtf8Body(
         return text + decoder.decode();
       }
       bytes += chunk.value.byteLength;
-      if (bytes > maxBytes)
+      if (bytes > maxBytes) {
         throw new PlatformHttpProtocolError(`Platform 响应超过 maxResponseBytes (${maxBytes})`);
+      }
       text += decoder.decode(chunk.value, { stream: true });
     }
   } catch (error) {
-    if (error instanceof TypeError)
+    if (error instanceof TypeError) {
       throw new PlatformHttpProtocolError(`Platform 响应不是有效 UTF-8：${error.message}`);
+    }
     throw error;
   } finally {
-    if (!complete) await reader.cancel().catch(() => undefined);
+    if (!complete) {
+      await reader.cancel().catch(() => undefined);
+    }
     reader.releaseLock();
   }
 }
@@ -686,10 +697,13 @@ async function* readNdjson(
       signal.throwIfAborted();
       const chunk = await reader.read();
       signal.throwIfAborted();
-      if (chunk.done) break;
+      if (chunk.done) {
+        break;
+      }
       bytes += chunk.value.byteLength;
-      if (bytes > maxBytes)
+      if (bytes > maxBytes) {
         throw new PlatformHttpProtocolError(`Platform 响应超过 maxResponseBytes (${maxBytes})`);
+      }
       buffer += decoder.decode(chunk.value, { stream: true });
       yield* parseCompleteLines(buffer, (line) => {
         buffer = line;
@@ -699,14 +713,19 @@ async function* readNdjson(
     yield* parseCompleteLines(buffer, (line) => {
       buffer = line;
     });
-    if (buffer.length > 0) throw new PlatformHttpProtocolError('Platform NDJSON 响应末尾缺少换行');
+    if (buffer.length > 0) {
+      throw new PlatformHttpProtocolError('Platform NDJSON 响应末尾缺少换行');
+    }
     complete = true;
   } catch (error) {
-    if (error instanceof TypeError)
+    if (error instanceof TypeError) {
       throw new PlatformHttpProtocolError(`Platform 响应不是有效 UTF-8：${error.message}`);
+    }
     throw error;
   } finally {
-    if (!complete) await reader.cancel().catch(() => undefined);
+    if (!complete) {
+      await reader.cancel().catch(() => undefined);
+    }
     reader.releaseLock();
   }
 }
@@ -724,7 +743,9 @@ function* parseCompleteLines(
     }
     const line = input.slice(start, end).replace(/\r$/, '');
     start = end + 1;
-    if (line.length > 0) yield parseJson(line, 'Platform NDJSON 事件');
+    if (line.length > 0) {
+      yield parseJson(line, 'Platform NDJSON 事件');
+    }
   }
 }
 

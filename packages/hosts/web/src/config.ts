@@ -57,7 +57,9 @@ export async function readWebConfig(
   const model = object(root.model, 'model 配置');
   exact(model, ['id', 'baseUrl', 'model', 'apiKeyEnv'], []);
   const sessionRoot = text(root.sessionRoot, 'sessionRoot');
-  if (!isAbsolute(sessionRoot)) throw new WebUsageError('sessionRoot 必须是绝对路径');
+  if (!isAbsolute(sessionRoot)) {
+    throw new WebUsageError('sessionRoot 必须是绝对路径');
+  }
   return {
     sessionRoot,
     maxSteps: positive(root.maxSteps, 'maxSteps'),
@@ -116,16 +118,21 @@ function exact(
 ): void {
   const allowed = new Set([...required, ...optional]);
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) throw new WebUsageError(`配置包含未知字段 ${key}`);
+    if (!allowed.has(key)) {
+      throw new WebUsageError(`配置包含未知字段 ${key}`);
+    }
   }
   for (const key of required) {
-    if (!(key in value)) throw new WebUsageError(`配置缺少字段 ${key}`);
+    if (!(key in value)) {
+      throw new WebUsageError(`配置缺少字段 ${key}`);
+    }
   }
 }
 
 function text(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value.length === 0)
+  if (typeof value !== 'string' || value.length === 0) {
     throw new WebUsageError(`${name} 必须是非空字符串`);
+  }
   return value;
 }
 
@@ -142,6 +149,8 @@ function optionalPositive(value: unknown, name: string, fallback: number): numbe
 
 function environmentName(value: unknown, name: string): string {
   const result = text(value, name);
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result)) throw new WebUsageError(`${name} 必须是环境变量名`);
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result)) {
+    throw new WebUsageError(`${name} 必须是环境变量名`);
+  }
   return result;
 }

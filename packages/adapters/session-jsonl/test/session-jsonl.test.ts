@@ -75,7 +75,9 @@ describe('JsonlSessionRepository', () => {
       ...baseIo,
       async open(path, flags) {
         const file = await baseIo.open(path, flags);
-        if (flags !== 'r') return file;
+        if (flags !== 'r') {
+          return file;
+        }
         return wrapJsonlFile(file, {
           async sync() {
             syncedDirectories.push(path);
@@ -111,7 +113,9 @@ describe('JsonlSessionRepository', () => {
       },
       async open(path, flags) {
         const file = await baseIo.open(path, flags);
-        if (flags !== 'r') return file;
+        if (flags !== 'r') {
+          return file;
+        }
         return wrapJsonlFile(file, {
           async sync() {
             syncedDirectories.push(path);
@@ -384,7 +388,9 @@ describe('JsonlSessionRepository', () => {
     const io = decorateFiles(createNodeJsonlIoForTesting(), (file) =>
       wrapJsonlFile(file, {
         async write(buffer, offset, length, position) {
-          if (!inject) return file.write(buffer, offset, length, position);
+          if (!inject) {
+            return file.write(buffer, offset, length, position);
+          }
           injectedWrites += 1;
           if (injectedWrites === 1) {
             const partialLength = Math.max(1, Math.floor(length / 2));
@@ -498,12 +504,16 @@ describe('JsonlSessionRepository', () => {
     const io = decorateFiles(createNodeJsonlIoForTesting(), (file) =>
       wrapJsonlFile(file, {
         async write(buffer, offset, length, position) {
-          if (!inject) return file.write(buffer, offset, length, position);
+          if (!inject) {
+            return file.write(buffer, offset, length, position);
+          }
           injectedWrites += 1;
           throw new Error('注入 write 失败');
         },
         async truncate() {
-          if (inject) throw new Error('注入 truncate 回滚失败');
+          if (inject) {
+            throw new Error('注入 truncate 回滚失败');
+          }
           await file.truncate(0);
         },
       }),

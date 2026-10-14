@@ -21,11 +21,15 @@ export async function readBoundedDocumentFile(
   try {
     const stat = await handle.stat();
     signal.throwIfAborted();
-    if (!stat.isFile()) throw new TypeError('导入路径必须是普通文件');
+    if (!stat.isFile()) {
+      throw new TypeError('导入路径必须是普通文件');
+    }
     if (!Number.isSafeInteger(stat.size) || stat.size < 1) {
       throw new TypeError('导入文件必须非空且大小可表示');
     }
-    if (stat.size > maxBytes) throw new RangeError(`导入文件不能超过 ${maxBytes} 字节`);
+    if (stat.size > maxBytes) {
+      throw new RangeError(`导入文件不能超过 ${maxBytes} 字节`);
+    }
 
     const bytes = new Uint8Array(stat.size);
     let offset = 0;
@@ -33,12 +37,16 @@ export async function readBoundedDocumentFile(
       signal.throwIfAborted();
       const length = Math.min(READ_CHUNK_BYTES, bytes.byteLength - offset);
       const read = await handle.read(bytes, offset, length, offset);
-      if (read.bytesRead === 0) throw new DocumentFileChangedError('导入文件在读取期间缩短');
+      if (read.bytesRead === 0) {
+        throw new DocumentFileChangedError('导入文件在读取期间缩短');
+      }
       offset += read.bytesRead;
     }
     const probe = new Uint8Array(1);
     const trailing = await handle.read(probe, 0, 1, bytes.byteLength);
-    if (trailing.bytesRead !== 0) throw new DocumentFileChangedError('导入文件在读取期间增长');
+    if (trailing.bytesRead !== 0) {
+      throw new DocumentFileChangedError('导入文件在读取期间增长');
+    }
     signal.throwIfAborted();
     result = Object.freeze({ fileName: basename(path), bytes });
   } catch (error) {
@@ -53,7 +61,11 @@ export async function readBoundedDocumentFile(
     }
     throw closeError;
   }
-  if (failure !== undefined) throw failure;
-  if (result === undefined) throw new TypeError('导入文件读取未产生结果');
+  if (failure !== undefined) {
+    throw failure;
+  }
+  if (result === undefined) {
+    throw new TypeError('导入文件读取未产生结果');
+  }
   return result;
 }

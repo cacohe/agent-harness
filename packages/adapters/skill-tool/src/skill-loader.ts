@@ -33,10 +33,14 @@ export function createSkillLoaderTool(
     },
     async execute(input, context): Promise<JsonValue> {
       const id = readSkillId(input);
-      if (!enabledIds.has(id)) throw new SkillNotEnabledError(id);
+      if (!enabledIds.has(id)) {
+        throw new SkillNotEnabledError(id);
+      }
       const content = await skills.read(id, context.signal);
       context.signal.throwIfAborted();
-      if (typeof content !== 'string') throw new TypeError('SkillCatalog.read 必须返回字符串');
+      if (typeof content !== 'string') {
+        throw new TypeError('SkillCatalog.read 必须返回字符串');
+      }
       if (utf8ByteLength(content) > maxContentBytes) {
         throw new RangeError(`Skill 正文不能超过 ${maxContentBytes} UTF-8 字节`);
       }
@@ -55,7 +59,9 @@ class SkillNotEnabledError extends Error {
 
 function snapshotEnabledIds(skills: SkillCatalog): ReadonlySet<string> {
   const descriptors = skills.listEnabled();
-  if (!Array.isArray(descriptors)) throw new TypeError('SkillCatalog.listEnabled 必须返回数组');
+  if (!Array.isArray(descriptors)) {
+    throw new TypeError('SkillCatalog.listEnabled 必须返回数组');
+  }
   const ids = new Set<string>();
   for (const descriptor of descriptors) {
     if (typeof descriptor !== 'object' || descriptor === null || Array.isArray(descriptor)) {
@@ -63,7 +69,9 @@ function snapshotEnabledIds(skills: SkillCatalog): ReadonlySet<string> {
     }
     const id = Reflect.get(descriptor, 'id');
     assertSkillId(id, 'SkillCatalog.listEnabled id');
-    if (ids.has(id)) throw new TypeError(`已启用 Skill ID 重复：${id}`);
+    if (ids.has(id)) {
+      throw new TypeError(`已启用 Skill ID 重复：${id}`);
+    }
     ids.add(id);
   }
   return ids;
@@ -92,7 +100,9 @@ function assertSkillId(value: unknown, field: string): asserts value is string {
 }
 
 function positiveInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 1) throw new TypeError(`${name} 必须是正整数`);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new TypeError(`${name} 必须是正整数`);
+  }
   return value;
 }
 

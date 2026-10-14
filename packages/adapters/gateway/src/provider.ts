@@ -213,8 +213,9 @@ function nonEmptyString<T extends Error>(
   name: string,
   ErrorType: new (message: string) => T,
 ): string {
-  if (typeof value !== 'string' || value.length === 0)
+  if (typeof value !== 'string' || value.length === 0) {
     throw new ErrorType(`${name}必须是非空字符串`);
+  }
   return value;
 }
 
@@ -280,8 +281,9 @@ function copyToolInput(value: unknown, limits: ToolInputLimits): JsonValue {
       continue;
     }
     if (typeof current === 'number') {
-      if (!Number.isFinite(current))
+      if (!Number.isFinite(current)) {
         throw new LlmGatewayProtocolError('Gateway tool.call.input 必须是有限数字');
+      }
       addBytes(JSON.stringify(current).length);
       job.assign(current);
       continue;
@@ -299,8 +301,9 @@ function copyToolInput(value: unknown, limits: ToolInputLimits): JsonValue {
         `Gateway tool.call.input 超过 maxToolInputDepth (${limits.maxDepth})`,
       );
     }
-    if (ancestors.has(current))
+    if (ancestors.has(current)) {
       throw new LlmGatewayProtocolError('Gateway tool.call.input 包含循环引用');
+    }
     ancestors.add(current);
 
     if (Array.isArray(current)) {
@@ -315,7 +318,9 @@ function copyToolInput(value: unknown, limits: ToolInputLimits): JsonValue {
         throw new LlmGatewayProtocolError('Gateway tool.call.input 不能是稀疏数组或包含额外属性');
       }
       for (const key of keys) {
-        if (key === 'length') continue;
+        if (key === 'length') {
+          continue;
+        }
         if (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key)) {
           throw new LlmGatewayProtocolError('Gateway tool.call.input 包含 JSON 不会保存的数组属性');
         }
@@ -348,8 +353,9 @@ function copyToolInput(value: unknown, limits: ToolInputLimits): JsonValue {
     const keys = Reflect.ownKeys(current);
     const entries: { readonly key: string; readonly value: unknown }[] = [];
     for (const key of keys) {
-      if (typeof key !== 'string')
+      if (typeof key !== 'string') {
         throw new LlmGatewayProtocolError('Gateway tool.call.input 包含 symbol 属性');
+      }
       const descriptor = Object.getOwnPropertyDescriptor(current, key);
       if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) {
         throw new LlmGatewayProtocolError('Gateway tool.call.input 属性必须是可枚举数据属性');
@@ -378,7 +384,9 @@ function copyToolInput(value: unknown, limits: ToolInputLimits): JsonValue {
       });
     }
   }
-  if (root === undefined) throw new LlmGatewayProtocolError('Gateway tool.call.input 无法复制');
+  if (root === undefined) {
+    throw new LlmGatewayProtocolError('Gateway tool.call.input 无法复制');
+  }
   return root;
 }
 

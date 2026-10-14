@@ -46,8 +46,11 @@ function response(parts: readonly (string | Uint8Array)[], status = 200): Respon
     new ReadableStream<Uint8Array>({
       pull(controller) {
         const part = parts[position++];
-        if (part === undefined) controller.close();
-        else controller.enqueue(typeof part === 'string' ? encoder.encode(part) : part);
+        if (part === undefined) {
+          controller.close();
+        } else {
+          controller.enqueue(typeof part === 'string' ? encoder.encode(part) : part);
+        }
       },
     }),
     { status, statusText: status === 200 ? 'OK' : 'Bad Gateway' },

@@ -54,13 +54,17 @@ export class StdioMcpClient implements McpClient {
   }
 
   async close(signal: AbortSignal): Promise<void> {
-    if (this.#closed) return;
+    if (this.#closed) {
+      return;
+    }
     this.#closed = true;
     await this.#transport?.close().catch(() => undefined);
     const connecting = this.#connecting;
     if (connecting !== undefined) {
       const client = await connecting.catch(() => undefined);
-      if (client === undefined) return;
+      if (client === undefined) {
+        return;
+      }
       signal.throwIfAborted();
       await client.close();
       return;
@@ -73,8 +77,12 @@ export class StdioMcpClient implements McpClient {
 
   async #connect(signal: AbortSignal): Promise<Client> {
     signal.throwIfAborted();
-    if (this.#closed) throw new Error('MCP stdio client 已关闭');
-    if (this.#client !== undefined) return this.#client;
+    if (this.#closed) {
+      throw new Error('MCP stdio client 已关闭');
+    }
+    if (this.#client !== undefined) {
+      return this.#client;
+    }
     if (this.#connecting === undefined) {
       this.#connecting = this.#open();
     }
