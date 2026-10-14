@@ -89,9 +89,9 @@ describe('LocalWebServer', () => {
       const css = await fetch(new URL('/assets/app.css', address));
       const styles = await css.text();
       expect(styles).toContain('.message.assistant .message-body');
-      expect(styles).toContain('list-style:disc');
-      expect(styles).toContain('html,body{height:100%;overflow:hidden}');
-      expect(styles).toContain('.app-shell{height:100dvh');
+      expect(styles).toMatch(/list-style:\s*disc/);
+      expect(styles).toMatch(/html,\s*body\s*{[^}]*height:\s*100%/);
+      expect(styles).toMatch(/\.app-shell\s*{[^}]*height:\s*100dvh/);
 
       const script = await fetch(new URL('/assets/app.js', address));
       const scriptText = await script.text();

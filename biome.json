@@ -35,10 +35,19 @@
       "preset": "recommended",
       "complexity": {
         "noBannedTypes": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 70
+          }
+        },
         "useLiteralKeys": "off"
       },
       "style": {
-        "noNonNullAssertion": "off"
+        "noDescendingSpecificity": "off",
+        "noNonNullAssertion": "off",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error"
       },
       "suspicious": {
         "noProto": "off"

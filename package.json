@@ -11,18 +11,24 @@
     "agent": "node scripts/agent-cli.mjs",
     "demo": "pnpm run build && node scripts/demo.mjs",
     "web": "node scripts/agent-web.mjs",
-    "build": "tsc -b",
-    "check": "pnpm run lint && pnpm run gate:architecture && pnpm run gate:docs && pnpm run typecheck && pnpm run test",
-    "format": "biome check --write .",
+    "build": "tsc -b && pnpm run build:web-assets",
+    "build:web-assets": "node scripts/copy-web-assets.mjs",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run gate:architecture && pnpm run gate:docs && pnpm run typecheck && pnpm run test",
+    "format": "biome check --write . && pnpm run format:styles",
+    "format:check": "biome format .",
+    "format:styles": "stylelint --fix \"packages/**/*.css\"",
     "gate:architecture": "node scripts/verify-architecture.mjs",
     "gate:docs": "node scripts/verify-docs.mjs",
-    "lint": "biome check .",
+    "lint": "biome lint . && pnpm run lint:styles",
+    "lint:styles": "stylelint \"packages/**/*.css\"",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@types/node": "^24.0.0",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^38.0.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.11"
   }
