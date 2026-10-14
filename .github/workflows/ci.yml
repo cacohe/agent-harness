@@ -34,5 +34,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run quality gates
-        run: pnpm run check
+      - name: Check formatting
+        run: pnpm run format:check
+
+      - name: Lint source and styles
+        run: pnpm run lint
+
+      - name: Check architecture and documentation
+        run: pnpm run gate:architecture && pnpm run gate:docs
+
+      - name: Check types and tests
+        run: pnpm run typecheck && pnpm run test
+
+      - name: Build distributable assets
+        run: pnpm run build

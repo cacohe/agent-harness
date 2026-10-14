@@ -92,7 +92,7 @@ pnpm web
 pnpm run check
 ```
 
-该命令执行 Biome、架构与文档 gate、类型检查和测试。新增特性必须通过独立 feature branch 与 Pull Request 提交；CI 通过且满足适用审查要求后可合并。
+该命令依次检查 Biome 格式（包括 LF 行尾）、Biome 代码规则与认知复杂度、Stylelint CSS 规则、架构与文档 gate、类型和测试。`pnpm run format` 可写入 Biome 的安全格式修复。CI 分别展示每个 gate，并在任一项失败时阻断 Pull Request。新增特性必须通过独立 feature branch 与 Pull Request 提交；CI 通过且满足适用审查要求后可合并。
 
 | 文档 | 内容 |
 | --- | --- |
