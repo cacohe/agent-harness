@@ -27,9 +27,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@types/node": "^24.0.0",
-    "stylelint": "^16.26.1",
-    "stylelint-config-standard": "^38.0.0",
-    "typescript": "^5.9.0",
-    "vitest": "^4.1.11"
+    "stylelint": "^17.16.0",
+    "stylelint-config-standard": "^40.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }
