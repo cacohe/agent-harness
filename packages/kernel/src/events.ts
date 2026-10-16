@@ -58,7 +58,6 @@ export type AgentRuntimeEvent =
   | TurnCancelledEvent
   | TurnInterruptedEvent;
 
-
 /** 用户输入已进入 inbox，等待 FIFO 领取。 */
 export interface InboxEnqueuedEvent {
   readonly type: 'inbox.enqueued';
