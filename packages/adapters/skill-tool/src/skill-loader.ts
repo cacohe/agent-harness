@@ -1,4 +1,4 @@
-import type { JsonValue, SkillCatalog, ToolDefinition } from '@agent-harness/kernel';
+import type { ExecutableTool, JsonValue, SkillCatalog } from '@agent-harness/kernel';
 
 const DEFAULT_MAX_CONTENT_BYTES = 256 * 1024;
 const MAX_SKILL_ID_BYTES = 2_048;
@@ -11,7 +11,7 @@ export interface SkillLoaderToolOptions {
 export function createSkillLoaderTool(
   skills: SkillCatalog,
   options: SkillLoaderToolOptions = {},
-): ToolDefinition {
+): ExecutableTool {
   const maxContentBytes = positiveInteger(
     options.maxContentBytes ?? DEFAULT_MAX_CONTENT_BYTES,
     'maxContentBytes',

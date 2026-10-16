@@ -8,4 +8,4 @@ export {
   type ControlledSessionOperation,
   TestSettlementSignals,
 } from './session.js';
-export { fakeTool, ScriptedToolCapability } from './tools.js';
+export { fakeTool, ScriptedToolSet } from './tools.js';

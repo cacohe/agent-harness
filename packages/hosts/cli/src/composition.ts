@@ -14,9 +14,9 @@ import { PlatformHttpClient } from '@agent-harness/adapters/platform-http';
 import type { FilesystemSkillCatalog } from '@agent-harness/adapters/skill-filesystem';
 import { createSkillLoaderTool } from '@agent-harness/adapters/skill-tool';
 import {
-  CompositeToolCapability,
+  CompositeToolSet,
   DuplicateToolNameError,
-  type ToolDefinition,
+  type ExecutableTool,
   ToolRegistry,
 } from '@agent-harness/kernel';
 import { type CliConfig, type CliModelConfig, CliUsageError } from './config.js';
@@ -48,10 +48,10 @@ export function composeTools(
   config: CliConfig,
   mcp: McpToolAdapter | undefined,
   skills: FilesystemSkillCatalog | undefined,
-  memoryWriter: ToolDefinition | undefined,
-): CompositeToolCapability {
+  memoryWriter: ExecutableTool | undefined,
+): CompositeToolSet {
   try {
-    return new CompositeToolCapability([
+    return new CompositeToolSet([
       new ToolRegistry([
         ...buildTools(config),
         ...(skills === undefined || config.skills === undefined
@@ -104,7 +104,7 @@ export function createMemoryCapabilities(
   readonly importer: MemoryGatewayDocumentImporter;
   readonly documentDeleter: MemoryGatewayDocumentDeleter;
   readonly documentStatuses: MemoryGatewayDocumentStatusReader;
-  readonly writerTool?: ToolDefinition;
+  readonly writerTool?: ExecutableTool;
 } {
   const authorization = requiredEnvironment(dependencies.env, config.authorizationEnv);
   const client = new PlatformHttpClient({
@@ -150,7 +150,7 @@ function requiredEnvironment(
   return value;
 }
 
-function buildTools(config: CliConfig): readonly ToolDefinition[] {
+function buildTools(config: CliConfig): readonly ExecutableTool[] {
   if (!config.shell.enabled) {
     return [];
   }

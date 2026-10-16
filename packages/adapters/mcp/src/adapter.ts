@@ -1,10 +1,6 @@
 /** 将 MCP client 映射为 Agent 的工具 capability。 */
 
-import type {
-  ModelToolDefinition,
-  ToolCapability,
-  ToolExecutionContext,
-} from '@agent-harness/kernel';
+import type { ModelToolDefinition, ToolSet, ToolExecutionContext } from '@agent-harness/kernel';
 import {
   assertJsonValue,
   isAbortError,
@@ -34,7 +30,7 @@ export class McpToolsNotStartedError extends Error {
 }
 
 /** 已启动的 MCP 工具表；同一实例由组合方显式拥有 start 与 close 生命周期。 */
-export class McpToolAdapter implements ToolCapability {
+export class McpToolAdapter implements ToolSet {
   readonly #client: McpClient;
   #tools: ReadonlyMap<string, McpToolDescriptor> | undefined;
   #startPromise: Promise<void> | undefined;

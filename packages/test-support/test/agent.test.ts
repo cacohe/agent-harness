@@ -24,7 +24,7 @@ import {
   ControlledSessionLog,
   fakeTool,
   ScriptedModelProvider,
-  ScriptedToolCapability,
+  ScriptedToolSet,
   SequentialAgentIds,
   TestSettlementSignals,
 } from '@agent-harness/test-support';
@@ -851,7 +851,7 @@ describe('Agent', () => {
       { events: [{ type: 'text.delta', text: 'custom complete' }] },
     ]);
     const executed: string[] = [];
-    const tools = new ScriptedToolCapability(
+    const tools = new ScriptedToolSet(
       [{ name: 'custom', description: '自定义工具', inputSchema: {} }],
       async (call) => {
         executed.push(call.name);
@@ -1156,7 +1156,7 @@ describe('Agent', () => {
       },
       { events: [{ type: 'text.delta', text: '继续执行' }] },
     ]);
-    const tools = new ScriptedToolCapability(
+    const tools = new ScriptedToolSet(
       [{ name: 'wait', description: '等待', inputSchema: {} }],
       async (_call, context) =>
         new Promise<never>((_resolve, reject) => {
@@ -1469,17 +1469,14 @@ describe('Agent', () => {
 
   it('工具抛错或取消时报告对应终态，终态 ToolResult 仍报告完成', async () => {
     const callId = brandId<'ToolCallId'>('call-1') as ToolCallId;
-    const createAgent = (
-      execute: ScriptedToolCapability['execute'],
-      observed: AgentExecutionEvent[],
-    ) =>
+    const createAgent = (execute: ScriptedToolSet['execute'], observed: AgentExecutionEvent[]) =>
       new Agent({
         model: new ScriptedModelProvider([
           { events: [{ type: 'tool.call', call: { id: callId, name: 'lookup', input: {} } }] },
           { events: [{ type: 'text.delta', text: 'done' }] },
         ]),
         session: new InMemorySessionLog(sessionId),
-        tools: new ScriptedToolCapability(
+        tools: new ScriptedToolSet(
           [{ name: 'lookup', description: '查询', inputSchema: {} }],
           execute,
         ),

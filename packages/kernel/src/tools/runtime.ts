@@ -1,26 +1,27 @@
 import type { ExecutionMetadata } from '../agent.js';
 import type { JsonValue } from '../serialization.js';
 import { assertJsonValue, isAbortError, serializeError } from '../serialization.js';
+import { toModelToolDefinition } from './protocol.js';
 import type {
   ModelToolDefinition,
   SandboxDispatcher,
   SandboxResourceLimits,
-  SandboxToolRegistryOptions,
+  SandboxToolSetOptions,
   ToolCall,
-  ToolCapability,
-  ToolDefinition,
+  ExecutableTool,
   ToolExecutionContext,
   ToolExecutionPolicy,
   ToolResult,
-  ToolSpecification,
+  ToolContract,
+  ToolSet,
 } from './protocol.js';
 
-/** 不可变的本地工具注册表，也是顺序工具执行器。 */
-export class ToolRegistry implements ToolCapability {
-  readonly #definitions: ReadonlyMap<string, ToolDefinition>;
+/** 不可变的直接执行工具注册表，也是顺序工具执行器。 */
+export class ToolRegistry implements ToolSet {
+  readonly #definitions: ReadonlyMap<string, ExecutableTool>;
 
-  constructor(definitions: readonly ToolDefinition[]) {
-    this.#definitions = indexToolDefinitions(definitions);
+  constructor(definitions: readonly ExecutableTool[]) {
+    this.#definitions = indexTools(definitions);
   }
 
   list(): readonly ModelToolDefinition[] {
@@ -53,19 +54,19 @@ export class ToolRegistry implements ToolCapability {
   }
 }
 
-/** 将已定义工具的执行委派给 Sandbox，并在 Host 侧先校验模型输入。 */
-export class SandboxToolRegistry implements ToolCapability {
-  readonly #definitions: ReadonlyMap<string, ToolSpecification>;
+/** 将工具契约的执行委派给 Sandbox，并在 Host 侧先校验模型输入。 */
+export class SandboxToolSet implements ToolSet {
+  readonly #definitions: ReadonlyMap<string, ToolContract>;
   readonly #dispatcher: SandboxDispatcher;
   readonly #workspace: string | undefined;
   readonly #limits: SandboxResourceLimits | undefined;
 
   constructor(
-    definitions: readonly ToolSpecification[],
+    definitions: readonly ToolContract[],
     dispatcher: SandboxDispatcher,
-    options: SandboxToolRegistryOptions = {},
+    options: SandboxToolSetOptions = {},
   ) {
-    this.#definitions = indexToolDefinitions(definitions);
+    this.#definitions = indexTools(definitions);
     const normalized = normalizeSandboxOptions(options);
     this.#dispatcher = dispatcher;
     this.#workspace = normalized.workspace;
@@ -111,11 +112,11 @@ export class SandboxToolRegistry implements ToolCapability {
 }
 
 /** 在真实工具前强制执行策略，并把拒绝作为普通工具失败持久化。 */
-export class PolicyControlledTools implements ToolCapability {
-  readonly #delegate: ToolCapability;
+export class PolicyControlledToolSet implements ToolSet {
+  readonly #delegate: ToolSet;
   readonly #policy: ToolExecutionPolicy;
 
-  constructor(delegate: ToolCapability, policy: ToolExecutionPolicy) {
+  constructor(delegate: ToolSet, policy: ToolExecutionPolicy) {
     this.#delegate = delegate;
     this.#policy = policy;
   }
@@ -163,20 +164,20 @@ export class DuplicateToolNameError extends Error {
 }
 
 /** 将多个已就绪的工具来源合并为单一目录，并按工具名路由执行。 */
-export class CompositeToolCapability implements ToolCapability {
+export class CompositeToolSet implements ToolSet {
   readonly #definitions: readonly ModelToolDefinition[];
-  readonly #routes: ReadonlyMap<string, ToolCapability>;
+  readonly #routes: ReadonlyMap<string, ToolSet>;
 
-  constructor(capabilities: readonly ToolCapability[]) {
+  constructor(toolSets: readonly ToolSet[]) {
     const definitions: ModelToolDefinition[] = [];
-    const routes = new Map<string, ToolCapability>();
-    for (const capability of capabilities) {
-      for (const definition of capability.list()) {
+    const routes = new Map<string, ToolSet>();
+    for (const toolSet of toolSets) {
+      for (const definition of toolSet.list()) {
         if (routes.has(definition.name)) {
           throw new DuplicateToolNameError(definition.name);
         }
         assertJsonValue(definition.inputSchema);
-        routes.set(definition.name, capability);
+        routes.set(definition.name, toolSet);
         definitions.push(
           Object.freeze({
             name: definition.name,
@@ -208,9 +209,7 @@ export class CompositeToolCapability implements ToolCapability {
   }
 }
 
-function indexToolDefinitions<T extends ToolSpecification>(
-  definitions: readonly T[],
-): ReadonlyMap<string, T> {
+function indexTools<T extends ToolContract>(definitions: readonly T[]): ReadonlyMap<string, T> {
   const entries = new Map<string, T>();
   for (const definition of definitions) {
     if (entries.has(definition.name)) {
@@ -222,13 +221,9 @@ function indexToolDefinitions<T extends ToolSpecification>(
 }
 
 function toModelToolDefinitions(
-  definitions: ReadonlyMap<string, ToolSpecification>,
+  definitions: ReadonlyMap<string, ToolContract>,
 ): readonly ModelToolDefinition[] {
-  return [...definitions.values()].map((definition) => ({
-    name: definition.name,
-    description: definition.description,
-    inputSchema: definition.inputSchema,
-  }));
+  return [...definitions.values()].map(toModelToolDefinition);
 }
 
 function authorizationFailure(call: ToolCall, message: string): ToolResult {
@@ -317,7 +312,7 @@ function denialReason(decision: unknown): string {
   return '执行策略返回无效授权决定';
 }
 
-function normalizeSandboxOptions(options: SandboxToolRegistryOptions): {
+function normalizeSandboxOptions(options: SandboxToolSetOptions): {
   readonly workspace: string | undefined;
   readonly limits: SandboxResourceLimits | undefined;
 } {

@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { isAbsolute } from 'node:path';
-import type { JsonValue, ToolDefinition } from '@agent-harness/kernel';
+import type { ExecutableTool, JsonValue } from '@agent-harness/kernel';
 
 /** kill 后等待 close 的宽限；超时则强制结束等待。 */
 const DEFAULT_KILL_GRACE_MS = 1000;
@@ -29,7 +29,7 @@ export interface ShellToolOptions {
 }
 
 /** 创建在固定 cwd 下执行 shell 命令的 Host 侧工具。 */
-export function createShellTool(options: ShellToolOptions): ToolDefinition {
+export function createShellTool(options: ShellToolOptions): ExecutableTool {
   if (!isAbsolute(options.cwd)) {
     throw new TypeError('shell cwd 必须是绝对路径');
   }

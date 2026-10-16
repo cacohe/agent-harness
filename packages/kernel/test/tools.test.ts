@@ -1,9 +1,15 @@
-import { brandId, type ExecutionId, type ToolCallId } from '@agent-harness/kernel';
+import {
+  brandId,
+  type ExecutionId,
+  toModelToolDefinition,
+  type ToolCallId,
+  type ToolContract,
+} from '@agent-harness/kernel';
 import { describe, expect, it } from 'vitest';
 import {
-  CompositeToolCapability,
-  PolicyControlledTools,
-  SandboxToolRegistry,
+  CompositeToolSet,
+  PolicyControlledToolSet,
+  SandboxToolSet,
   ToolRegistry,
 } from '../src/index.ts';
 
@@ -14,6 +20,23 @@ function call(name: string, input: unknown = {}) {
     input,
   };
 }
+
+describe('toModelToolDefinition', () => {
+  it('仅投影工具契约中模型可见的字段', () => {
+    const tool: ToolContract = {
+      name: 'lookup',
+      description: '查询',
+      inputSchema: { type: 'object' },
+      parseInput: (input) => input,
+    };
+
+    expect(toModelToolDefinition(tool)).toEqual({
+      name: 'lookup',
+      description: '查询',
+      inputSchema: { type: 'object' },
+    });
+  });
+});
 
 describe('ToolRegistry', () => {
   it('拒绝重复工具注册', () => {
@@ -171,7 +194,7 @@ describe('ToolRegistry', () => {
 
   it('策略拒绝时不执行工具，并把拒绝持久化为失败结果', async () => {
     let executed = false;
-    const tools = new PolicyControlledTools(
+    const tools = new PolicyControlledToolSet(
       new ToolRegistry([
         {
           name: 'write',
@@ -208,7 +231,7 @@ describe('ToolRegistry', () => {
 
   it('策略收到冻结上下文后才委派工具', async () => {
     const observed: string[] = [];
-    const tools = new PolicyControlledTools(
+    const tools = new PolicyControlledToolSet(
       new ToolRegistry([
         {
           name: 'write',
@@ -247,7 +270,7 @@ describe('ToolRegistry', () => {
       release = resolve;
     });
     const observed: unknown[] = [];
-    const tools = new PolicyControlledTools(
+    const tools = new PolicyControlledToolSet(
       new ToolRegistry([
         {
           name: 'write',
@@ -308,7 +331,7 @@ describe('ToolRegistry', () => {
         release = resolve;
       });
       const controller = new AbortController();
-      const tools = new PolicyControlledTools(new ToolRegistry([]), {
+      const tools = new PolicyControlledToolSet(new ToolRegistry([]), {
         authorize: async () => {
           await authorized;
           if (outcome === 'error') {
@@ -346,7 +369,7 @@ describe('ToolRegistry', () => {
   it('冻结 JSON 时保留 __proto__ 自有字段且不修改对象原型', async () => {
     const input = JSON.parse('{"__proto__":{"admin":true},"value":1}') as Record<string, unknown>;
     let observedInput: unknown;
-    const tools = new PolicyControlledTools(
+    const tools = new PolicyControlledToolSet(
       new ToolRegistry([
         {
           name: 'inspect',
@@ -386,7 +409,7 @@ describe('ToolRegistry', () => {
 
   it('无效策略结果 fail closed，且不执行工具', async () => {
     let executed = false;
-    const tools = new PolicyControlledTools(
+    const tools = new PolicyControlledToolSet(
       new ToolRegistry([
         {
           name: 'write',
@@ -423,7 +446,7 @@ describe('ToolRegistry', () => {
   it('Sandbox 在派发前校验输入，并传递任务边界', async () => {
     const tasks: unknown[] = [];
     const executions: unknown[] = [];
-    const tools = new SandboxToolRegistry(
+    const tools = new SandboxToolSet(
       [
         {
           name: 'write',
@@ -478,7 +501,7 @@ describe('ToolRegistry', () => {
 
   it('Sandbox 输入校验失败时不派发任务', async () => {
     let dispatched = false;
-    const tools = new SandboxToolRegistry(
+    const tools = new SandboxToolSet(
       [
         {
           name: 'write',
@@ -524,14 +547,14 @@ describe('ToolRegistry', () => {
 
     expect(
       () =>
-        new SandboxToolRegistry([definition, definition], {
+        new SandboxToolSet([definition, definition], {
           dispatch: async () => ({ ok: true }),
         }),
     ).toThrow('duplicate tool registration: write');
   });
 
   it('Sandbox list 只暴露模型可见 schema', () => {
-    const tools = new SandboxToolRegistry(
+    const tools = new SandboxToolSet(
       [
         {
           name: 'write',
@@ -554,7 +577,7 @@ describe('ToolRegistry', () => {
 
   it('Sandbox 缺少冻结执行上下文时拒绝派发', async () => {
     let dispatched = false;
-    const tools = new SandboxToolRegistry(
+    const tools = new SandboxToolSet(
       [
         {
           name: 'write',
@@ -583,7 +606,7 @@ describe('ToolRegistry', () => {
   it('Sandbox 复制冻结资源限制，并拒绝不完整限制', async () => {
     const limits = { timeoutMs: 1_000, maxOutputBytes: 4_096 };
     const observed: unknown[] = [];
-    const tools = new SandboxToolRegistry(
+    const tools = new SandboxToolSet(
       [
         {
           name: 'write',
@@ -613,7 +636,7 @@ describe('ToolRegistry', () => {
     expect(observed).toEqual([{ timeoutMs: 1_000, maxOutputBytes: 4_096 }]);
     expect(
       () =>
-        new SandboxToolRegistry(
+        new SandboxToolSet(
           [],
           { dispatch: async () => ({}) },
           {
@@ -625,7 +648,7 @@ describe('ToolRegistry', () => {
 
   it('Sandbox 在跨边界前拒绝 parser 返回的非 JSON', async () => {
     let dispatched = false;
-    const tools = new SandboxToolRegistry(
+    const tools = new SandboxToolSet(
       [
         {
           name: 'write',
@@ -656,7 +679,7 @@ describe('ToolRegistry', () => {
   });
 });
 
-describe('CompositeToolCapability', () => {
+describe('CompositeToolSet', () => {
   const registry = (name: string) =>
     new ToolRegistry([
       {
@@ -669,7 +692,7 @@ describe('CompositeToolCapability', () => {
     ]);
 
   it('合并目录并按名称路由执行', async () => {
-    const tools = new CompositeToolCapability([registry('local'), registry('remote')]);
+    const tools = new CompositeToolSet([registry('local'), registry('remote')]);
     expect(tools.list().map((tool) => tool.name)).toEqual(['local', 'remote']);
     await expect(
       tools.execute(call('remote', { q: 'x' }), { signal: new AbortController().signal }),
@@ -680,7 +703,7 @@ describe('CompositeToolCapability', () => {
   });
 
   it('在组合时拒绝跨来源重复工具名', () => {
-    expect(() => new CompositeToolCapability([registry('same'), registry('same')])).toThrow(
+    expect(() => new CompositeToolSet([registry('same'), registry('same')])).toThrow(
       'duplicate tool registration: same',
     );
   });
@@ -692,7 +715,7 @@ describe('CompositeToolCapability', () => {
       list: () => [{ name: 'stable', description: 'stable', inputSchema }],
       execute: source.execute.bind(source),
     };
-    const tools = new CompositeToolCapability([mutableSource]);
+    const tools = new CompositeToolSet([mutableSource]);
     inputSchema.type = 'array';
     expect(tools.list()).toEqual([
       {
@@ -712,7 +735,7 @@ describe('CompositeToolCapability', () => {
         return { status: 'success', callId: toolCall.id, output: { ok: true } };
       },
     };
-    const tools = new CompositeToolCapability([aware]);
+    const tools = new CompositeToolSet([aware]);
     await expect(
       tools.execute(call('write'), {
         signal: new AbortController().signal,
@@ -727,7 +750,7 @@ describe('CompositeToolCapability', () => {
   });
 
   it('对未知工具和已取消调用返回稳定结果', async () => {
-    const tools = new CompositeToolCapability([]);
+    const tools = new CompositeToolSet([]);
     await expect(
       tools.execute(call('missing'), { signal: new AbortController().signal }),
     ).resolves.toMatchObject({

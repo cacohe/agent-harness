@@ -49,7 +49,7 @@ Kernel 以 context、skills、memory、模型、会话和工具等能力域定�
 
 `AgentObserver` 接收持久 `session.event`、模型 usage 及模型/工具的开始、完成、失败观测事件。Runtime 注入的 Clock 使这些事件包含稳定关联 ID 与耗时；传入执行上下文时，所有模型和工具事件还直接携带冻结后的 `executionId`。投递是最佳努力，可靠 trace 与审计由 Host 或 Platform adapter 的 outbox 实现。
 
-工具领域只位于 `kernel/tools/protocol.ts` 与 `kernel/tools/runtime.ts`。`PolicyControlledTools` 在副作用前调用策略；Sandbox、Platform 许可与 MCP 通过 adapters 接入。Kernel 和 Core 不依赖外部网络协议、账户模型、SDK、文件系统或进程。
+工具领域只位于 `kernel/tools/protocol.ts` 与 `kernel/tools/runtime.ts`。`ToolContract` 定义工具调用契约，`ExecutableTool` 附带直接执行器，`ToolSet` 提供一次运行固定的模型目录与调用路由；模型只接收 `ModelToolDefinition` 投影。`PolicyControlledToolSet` 在副作用前调用策略；Sandbox、Platform 许可与 MCP 通过 adapters 接入。Kernel 和 Core 不依赖外部网络协议、账户模型、SDK、文件系统或进程。
 
 ## 生命周期
 

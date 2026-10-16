@@ -1,4 +1,4 @@
-import { type JsonValue, MEMORY_CONTEXT_LIMITS, type ToolDefinition } from '@agent-harness/kernel';
+import { type ExecutableTool, type JsonValue, MEMORY_CONTEXT_LIMITS } from '@agent-harness/kernel';
 import { boundedText } from './validation.js';
 
 const MAX_MEMORY_STATEMENT_BYTES = 4_096;
@@ -20,7 +20,7 @@ export interface MemoryGatewayWriterToolOptions {
 }
 
 /** 创建只能保存用户显式长期陈述的 Platform Memory function tool。 */
-export function createMemoryWriterTool(options: MemoryGatewayWriterToolOptions): ToolDefinition {
+export function createMemoryWriterTool(options: MemoryGatewayWriterToolOptions): ExecutableTool {
   const memorySpaceId = boundedText(
     options.memorySpaceId,
     MEMORY_CONTEXT_LIMITS.maxFieldBytes,
