@@ -53,11 +53,11 @@ export class Agent {
   readonly #model: ModelProvider;
   readonly #session: SessionLog;
   readonly #tools: ToolSet;
-  readonly #ids: AgentIdGenerator;
+  readonly #idGenerator: AgentIdGenerator;
   readonly #maxSteps: number;
-  readonly #settlementSignals: SettlementSignalFactory;
+  readonly #settlementSignalFactory: SettlementSignalFactory;
   readonly #clock: Clock | undefined;
-  readonly #prompts: PromptAssembler;
+  readonly #promptAssembler: PromptAssembler;
   readonly #runTimeoutMs: number | undefined;
   readonly #modelAttemptTimeoutMs: number;
   readonly #toolTimeoutMs: number;
@@ -65,12 +65,12 @@ export class Agent {
   readonly #maxToolResultBytes: number;
   readonly #maxQueuedRuns: number;
   readonly #observers: readonly AgentObserver[];
-  readonly #reservations: AgentIdReservations; // 标识符预留池，保证同一个 Agent 里，turn / step / attempt / message / toolCall 的 ID 不重复
+  readonly #idReservations: AgentIdReservations;
   readonly #inbox = new AgentInbox();
   #phase: AgentPhase = { kind: 'idle' };
-  #controller: AbortController | undefined;
+  #activeRunAbortController: AbortController | undefined;
   #accepting = true;
-  #draining: Promise<void> | undefined; // 正在 draining 的 promise，用于保证只有一个 drain 在执行
+  #inboxDrain: Promise<void> | undefined;
 
   constructor(options: AgentOptions) {
     // 参数校验
@@ -94,11 +94,11 @@ export class Agent {
     this.#model = options.model;
     this.#session = options.session;
     this.#tools = options.tools;
-    this.#ids = options.ids;
+    this.#idGenerator = options.ids;
     this.#maxSteps = options.maxSteps;
-    this.#settlementSignals = options.settlementSignals;
+    this.#settlementSignalFactory = options.settlementSignals;
     this.#clock = options.clock;
-    this.#prompts = options.prompts;
+    this.#promptAssembler = options.prompts;
     this.#runTimeoutMs = options.runTimeoutMs;
     this.#modelAttemptTimeoutMs = options.modelAttemptTimeoutMs ?? DEFAULT_MODEL_ATTEMPT_TIMEOUT_MS;
     this.#toolTimeoutMs = options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
@@ -106,7 +106,7 @@ export class Agent {
     this.#maxToolResultBytes = options.maxToolResultBytes ?? DEFAULT_MAX_TOOL_RESULT_BYTES;
     this.#maxQueuedRuns = options.maxQueuedRuns ?? DEFAULT_MAX_QUEUED_RUNS;
     this.#observers = options.observers ?? [];
-    this.#reservations = new AgentIdReservations(options.reservedIds);
+    this.#idReservations = new AgentIdReservations(options.reservedIds);
   }
 
   get phase(): AgentPhase {
@@ -115,7 +115,7 @@ export class Agent {
 
   /** 取消当前活动 run；不影响是否继续接纳新的 run。 */
   cancel(reason: unknown = new Error('agent run cancelled')): void {
-    this.#controller?.abort(reason);
+    this.#activeRunAbortController?.abort(reason);
   }
 
   /** 永久停止接纳新 run，并取消当前活动。重复调用安全。 */
@@ -128,12 +128,12 @@ export class Agent {
   /** 等待当前 drain 完成，其中包含活动 turn 与已接纳的排队输入。 */
   async whenIdle(): Promise<void> {
     for (;;) {
-      const draining = this.#draining;
-      if (draining === undefined) {
+      const inboxDrain = this.#inboxDrain;
+      if (inboxDrain === undefined) {
         return;
       }
-      await draining;
-      if (this.#draining === undefined) {
+      await inboxDrain;
+      if (this.#inboxDrain === undefined) {
         return;
       }
     }
@@ -186,11 +186,11 @@ export class Agent {
 
   /** 确保只有一个 FIFO drain；单个输入失败不会阻断后续输入。 */
   #ensureInboxDraining(): void {
-    if (this.#draining !== undefined) {
+    if (this.#inboxDrain !== undefined) {
       return;
     }
-    this.#draining = this.#drainInbox().finally(() => {
-      this.#draining = undefined;
+    this.#inboxDrain = this.#drainInbox().finally(() => {
+      this.#inboxDrain = undefined;
       if (this.#inbox.hasPending) {
         this.#ensureInboxDraining();
       }
@@ -200,7 +200,7 @@ export class Agent {
   /** 串行领取已接纳输入，并仅结算各自调用，不让单项失败中断后续领取。 */
   async #drainInbox(): Promise<void> {
     for (;;) {
-      const queued = this.#inbox.claim();
+      const queued = this.#inbox.claim(); // 领取最早尚未执行的输入
       if (queued === undefined) {
         return;
       }
@@ -225,12 +225,12 @@ export class Agent {
       isAbortSignal(options) ? undefined : options.execution,
     );
     const turn: ActiveTurn = {
-      turnId: this.#reservations.turn(this.#ids.turn()),
+      turnId: this.#idReservations.turn(this.#idGenerator.turn()),
       started: false,
       ended: false,
     };
     const controller = new AbortController();
-    this.#controller = controller;
+    this.#activeRunAbortController = controller;
     const timeoutSignal =
       this.#runTimeoutMs === undefined ? undefined : AbortSignal.timeout(this.#runTimeoutMs);
     const signal = AbortSignal.any([
@@ -255,7 +255,7 @@ export class Agent {
       turn.started = true;
 
       // 提交用户消息事件
-      this.#reservations.message(message.id);
+      this.#idReservations.message(message.id);
       await this.#append([{ type: 'user.message', message }], signal);
 
       // 循环执行 step，直至无工具调用或触及步数上限
@@ -263,7 +263,7 @@ export class Agent {
         throwIfAborted(signal);
 
         // 创建 step 生命周期
-        const stepId = this.#reservations.step(this.#ids.step());
+        const stepId = this.#idReservations.step(this.#idGenerator.step());
         const step = createStep(stepId);
         turn.activeStep = step;
         this.#phase = { kind: 'running', turnId: turn.turnId, stepId };
@@ -300,7 +300,7 @@ export class Agent {
       // 如果 terminal settlement 事件不为空，则提交结算事件
       if (terminalEvents.length > 0) {
         try {
-          const settlementSignal = this.#settlementSignals.create();
+          const settlementSignal = this.#settlementSignalFactory.create();
           await this.#append(terminalEvents, settlementSignal);
         } catch (persistenceError) {
           throw new SettlementPersistenceError(error, persistenceError, outcome);
@@ -308,7 +308,7 @@ export class Agent {
       }
       throw error;
     } finally {
-      this.#controller = undefined;
+      this.#activeRunAbortController = undefined;
       this.#phase = { kind: 'idle' };
     }
   }
@@ -332,7 +332,11 @@ export class Agent {
 
     // 组装请求
     const request = await waitForSignal(
-      this.#prompts.assemble(await this.#session.read({ signal }), this.#tools.list(), signal),
+      this.#promptAssembler.assemble(
+        await this.#session.read({ signal }),
+        this.#tools.list(),
+        signal,
+      ),
       signal,
     );
 
@@ -341,7 +345,7 @@ export class Agent {
     const prepared = await this.#model.prepare(modelSignal);
     throwIfAborted(modelSignal);
     const attempt: Attempt = {
-      attemptId: this.#reservations.attempt(this.#ids.attempt()),
+      attemptId: this.#idReservations.attempt(this.#idGenerator.attempt()),
       partialText: '',
       observedToolCalls: [],
       settlementPersisted: false,
@@ -354,6 +358,8 @@ export class Agent {
     let outputTokens = 0;
     let usageSequence = 0;
     const modelStartedAt = this.#now();
+
+    // 提交模型开始事件
     if (modelStartedAt !== undefined) {
       this.#notifyExecution({
         type: 'model.started',
@@ -383,7 +389,7 @@ export class Agent {
           case 'tool.call':
             outputBytes += utf8ByteLength(JSON.stringify(event.call));
             this.#assertOutputBudget(outputBytes);
-            this.#reservations.toolCall(event.call.id);
+            this.#idReservations.toolCall(event.call.id);
             attempt.observedToolCalls.push(event.call);
             break;
 
@@ -439,7 +445,7 @@ export class Agent {
 
     // 构建 assistant 消息
     const assistantMessage: AssistantMessage = {
-      id: this.#reservations.message(this.#ids.message()),
+      id: this.#idReservations.message(this.#idGenerator.message()),
       role: 'assistant',
       content: attempt.partialText,
       toolCalls: attempt.observedToolCalls,

@@ -13,7 +13,7 @@ import {
 
 type RuntimeFailureOutcome = Extract<TurnOutcome, 'failed' | 'cancelled'>;
 
-/** 跟踪单次模型 attempt 的流式累积、结算与工具结果，供失败路径补写事件。 */
+/** 一次 LLM 调用 */
 export interface Attempt {
   readonly attemptId: AttemptId;
   partialText: string; // 模型生成时的中间输出
