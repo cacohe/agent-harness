@@ -4,8 +4,8 @@ import type { AgentRunOptions, AssistantMessage, UserMessage } from '@agent-harn
 export interface QueuedRun {
   readonly message: UserMessage;
   readonly options: AbortSignal | AgentRunOptions;
-  readonly resolve: (message: AssistantMessage) => void;
-  readonly reject: (error: unknown) => void;
+  readonly resolve: (message: AssistantMessage) => void; // 执行成功时，调用 resolve 通知调用者
+  readonly reject: (error: unknown) => void; // 执行失败时，调用 reject 通知调用者
   readonly clearAbortListener: () => void;
 }
 
