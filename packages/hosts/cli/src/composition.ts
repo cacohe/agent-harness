@@ -15,9 +15,9 @@ import type { FilesystemSkillCatalog } from '@agent-harness/adapters/skill-files
 import { createSkillLoaderTool } from '@agent-harness/adapters/skill-tool';
 import {
   CompositeToolSet,
+  DirectToolSet,
   DuplicateToolNameError,
   type ExecutableTool,
-  ToolRegistry,
 } from '@agent-harness/kernel';
 import { type CliConfig, type CliModelConfig, CliUsageError } from './config.js';
 import type { CliDependencies } from './contracts.js';
@@ -52,7 +52,7 @@ export function composeTools(
 ): CompositeToolSet {
   try {
     return new CompositeToolSet([
-      new ToolRegistry([
+      new DirectToolSet([
         ...buildTools(config),
         ...(skills === undefined || config.skills === undefined
           ? []

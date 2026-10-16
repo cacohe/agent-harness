@@ -10,6 +10,7 @@ import {
   type AttemptId,
   analyzeSessionLifecycle,
   brandId,
+  DirectToolSet,
   type EventEnvelope,
   type MessageId,
   type SessionAppendOptions,
@@ -22,7 +23,6 @@ import {
   type SessionRepository,
   type StepId,
   type ToolCallId,
-  ToolRegistry,
   type TurnId,
   type UserMessage,
 } from '@agent-harness/kernel';
@@ -62,7 +62,7 @@ function runtime(
   return new AgentRuntime({
     sessions,
     model,
-    tools: new ToolRegistry([]),
+    tools: new DirectToolSet([]),
     maxSteps: 4,
     settlementTimeoutMs: 1_000,
     ...extra,

@@ -1,4 +1,4 @@
-import { brandId, type ToolCallId, ToolRegistry } from '@agent-harness/kernel';
+import { brandId, DirectToolSet, type ToolCallId } from '@agent-harness/kernel';
 import { describe, expect, it } from 'vitest';
 import { createMemoryWriterTool, MemoryGatewayRetriever } from '../src/index.ts';
 
@@ -209,7 +209,7 @@ describe('MemoryGatewayRetriever', () => {
 describe('createMemoryWriterTool', () => {
   it('保存冻结的显式陈述并只返回权威记录 ID', async () => {
     let observed: unknown;
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createMemoryWriterTool({
         memorySpaceId: 'space-1',
         client: {
@@ -240,7 +240,7 @@ describe('createMemoryWriterTool', () => {
 
   it('在网络调用前拒绝未知字段、空陈述和超长陈述', async () => {
     let writes = 0;
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createMemoryWriterTool({
         memorySpaceId: 'space-1',
         client: {
@@ -269,7 +269,7 @@ describe('createMemoryWriterTool', () => {
     ['未知字段', { id: 'memory-1', extra: true }, '只能包含 id'],
     ['空 ID', { id: '' }, '必须是非空字符串'],
   ])('拒绝%s写入响应', async (_name, response, message) => {
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createMemoryWriterTool({
         memorySpaceId: 'space-1',
         client: { writeMemory: async () => response },
@@ -293,7 +293,7 @@ describe('createMemoryWriterTool', () => {
   it('透传取消并将写入后的取消结算为 cancelled', async () => {
     const controller = new AbortController();
     let observedSignal: AbortSignal | undefined;
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createMemoryWriterTool({
         memorySpaceId: 'space-1',
         client: {

@@ -1,4 +1,4 @@
-import { brandId, type ToolCallId, ToolRegistry } from '@agent-harness/kernel';
+import { brandId, DirectToolSet, type ToolCallId } from '@agent-harness/kernel';
 import { describe, expect, it } from 'vitest';
 import { createSkillLoaderTool } from '../src/index.ts';
 
@@ -7,7 +7,7 @@ const callId = brandId<'ToolCallId'>('call-1') as ToolCallId;
 describe('createSkillLoaderTool', () => {
   it('读取已启用 Skill 并返回带 ID 的正文', async () => {
     const reads: string[] = [];
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createSkillLoaderTool({
         listEnabled: () => [{ id: 'review', name: '审查', description: '审查代码' }],
         async read(id) {
@@ -31,7 +31,7 @@ describe('createSkillLoaderTool', () => {
 
   it('在读取前拒绝无效输入，并限制返回正文大小', async () => {
     let reads = 0;
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createSkillLoaderTool(
         {
           listEnabled: () => [{ id: 'x', name: 'x', description: 'x' }],
@@ -58,7 +58,7 @@ describe('createSkillLoaderTool', () => {
 
   it('在读取前拒绝未启用 ID', async () => {
     let reads = 0;
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createSkillLoaderTool({
         listEnabled: () => [{ id: 'enabled', name: 'enabled', description: 'enabled' }],
         async read() {
@@ -79,7 +79,7 @@ describe('createSkillLoaderTool', () => {
   it('把取消信号传给 catalog，并将取消结算为 cancelled', async () => {
     const controller = new AbortController();
     let observedSignal: AbortSignal | undefined;
-    const tools = new ToolRegistry([
+    const tools = new DirectToolSet([
       createSkillLoaderTool({
         listEnabled: () => [{ id: 'x', name: 'x', description: 'x' }],
         async read(_id, signal): Promise<string> {
