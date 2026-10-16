@@ -1,7 +1,7 @@
 import { BoundedPromptAssembler } from '@agent-harness/adapters/context';
 import { InMemorySessionLog } from '@agent-harness/adapters/session-memory';
 import { Agent } from '@agent-harness/core';
-import { brandId, ToolRegistry } from '@agent-harness/kernel';
+import { brandId, DirectToolSet } from '@agent-harness/kernel';
 import { SequentialAgentIds } from './agent-ids.js';
 import { ScriptedModelProvider } from './model-provider.js';
 import { TestSettlementSignals } from './session.js';
@@ -46,7 +46,7 @@ export async function runDemo(): Promise<DemoRun> {
   const agent = new Agent({
     model,
     session,
-    tools: new ToolRegistry([lookupRelease]),
+    tools: new DirectToolSet([lookupRelease]),
     ids: new SequentialAgentIds(),
     maxSteps: 4,
     settlementSignals: new TestSettlementSignals(),

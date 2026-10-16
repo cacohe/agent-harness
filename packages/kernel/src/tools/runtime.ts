@@ -1,23 +1,23 @@
 import type { ExecutionMetadata } from '../agent.js';
 import type { JsonValue } from '../serialization.js';
 import { assertJsonValue, isAbortError, serializeError } from '../serialization.js';
-import { toModelToolDefinition } from './protocol.js';
 import type {
+  ExecutableTool,
   ModelToolDefinition,
   SandboxDispatcher,
   SandboxResourceLimits,
   SandboxToolSetOptions,
   ToolCall,
-  ExecutableTool,
+  ToolContract,
   ToolExecutionContext,
   ToolExecutionPolicy,
   ToolResult,
-  ToolContract,
   ToolSet,
 } from './protocol.js';
+import { toModelToolDefinition } from './protocol.js';
 
-/** 不可变的直接执行工具注册表，也是顺序工具执行器。 */
-export class ToolRegistry implements ToolSet {
+/** 不可变的直接执行工具集，也是顺序工具执行器。 */
+export class DirectToolSet implements ToolSet {
   readonly #definitions: ReadonlyMap<string, ExecutableTool>;
 
   constructor(definitions: readonly ExecutableTool[]) {
@@ -28,29 +28,10 @@ export class ToolRegistry implements ToolSet {
     return toModelToolDefinitions(this.#definitions);
   }
 
-  async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
-    const { signal } = context;
-    if (signal.aborted) {
-      return cancelledResult(call, signal.reason);
-    }
-    const definition = this.#definitions.get(call.name);
-    if (definition === undefined) {
-      return unknownToolResult(call);
-    }
-    try {
-      const input = definition.parseInput(call.input);
-      const output = await definition.execute(input, context);
-      if (signal.aborted) {
-        return cancelledResult(call, signal.reason);
-      }
-      assertJsonValue(output);
-      return { status: 'success', callId: call.id, output };
-    } catch (error) {
-      if (signal.aborted || isAbortError(error)) {
-        return cancelledResult(call, signal.reason ?? error);
-      }
-      return { status: 'failure', callId: call.id, error: serializeError(error) };
-    }
+  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult> {
+    return settleRegisteredCall(call, context, this.#definitions, (tool, input) =>
+      tool.execute(input, context),
+    );
   }
 }
 
@@ -84,34 +65,19 @@ export class SandboxToolSet implements ToolSet {
     if (!hasExecution(context)) {
       return authorizationFailure(call, '缺少冻结执行上下文');
     }
-    const definition = this.#definitions.get(call.name);
-    if (definition === undefined) {
-      return unknownToolResult(call);
-    }
-    try {
-      const input = definition.parseInput(call.input);
+    return settleRegisteredCall(call, context, this.#definitions, (_tool, input) => {
       assertJsonValue(input);
       const task = Object.freeze({
         call: Object.freeze({ ...call, input: freezeJson(input) }),
         ...(this.#workspace === undefined ? {} : { workspace: this.#workspace }),
         ...(this.#limits === undefined ? {} : { limits: this.#limits }),
       });
-      const output = await this.#dispatcher.dispatch(task, context);
-      if (context.signal.aborted) {
-        return cancelledResult(call, context.signal.reason);
-      }
-      assertJsonValue(output);
-      return { status: 'success', callId: call.id, output };
-    } catch (error) {
-      if (context.signal.aborted || isAbortError(error)) {
-        return cancelledResult(call, context.signal.reason ?? error);
-      }
-      return { status: 'failure', callId: call.id, error: serializeError(error) };
-    }
+      return this.#dispatcher.dispatch(task, context);
+    });
   }
 }
 
-/** 在真实工具前强制执行策略，并把拒绝作为普通工具失败持久化。 */
+/** 在执行工具前强制执行策略，并把拒绝作为普通工具失败持久化。 */
 export class PolicyControlledToolSet implements ToolSet {
   readonly #delegate: ToolSet;
   readonly #policy: ToolExecutionPolicy;
@@ -151,15 +117,6 @@ export class PolicyControlledToolSet implements ToolSet {
       }
       return authorizationFailure(settlementCall, serializeError(error).message);
     }
-  }
-}
-
-/** 工具来源在组合时暴露了重复名称。 */
-export class DuplicateToolNameError extends Error {
-  override readonly name = 'DuplicateToolNameError';
-
-  constructor(readonly toolName: string) {
-    super(`duplicate tool registration: ${toolName}`);
   }
 }
 
@@ -209,25 +166,44 @@ export class CompositeToolSet implements ToolSet {
   }
 }
 
-function indexTools<T extends ToolContract>(definitions: readonly T[]): ReadonlyMap<string, T> {
-  const entries = new Map<string, T>();
-  for (const definition of definitions) {
-    if (entries.has(definition.name)) {
-      throw new Error(`duplicate tool registration: ${definition.name}`);
-    }
-    entries.set(definition.name, definition);
+/** 工具来源在组合时暴露了重复名称。 */
+export class DuplicateToolNameError extends Error {
+  override readonly name = 'DuplicateToolNameError';
+
+  constructor(readonly toolName: string) {
+    super(`duplicate tool registration: ${toolName}`);
   }
-  return entries;
 }
 
-function toModelToolDefinitions(
-  definitions: ReadonlyMap<string, ToolContract>,
-): readonly ModelToolDefinition[] {
-  return [...definitions.values()].map(toModelToolDefinition);
-}
-
-function authorizationFailure(call: ToolCall, message: string): ToolResult {
-  return { status: 'failure', callId: call.id, error: { name: 'ToolAuthorizationError', message } };
+/** 结算一次已登记工具调用：查找、解析输入、执行，并把输出或异常收成终态。 */
+async function settleRegisteredCall<T extends ToolContract>(
+  call: ToolCall,
+  context: ToolExecutionContext,
+  definitions: ReadonlyMap<string, T>,
+  run: (tool: T, input: JsonValue) => Promise<JsonValue>,
+): Promise<ToolResult> {
+  const { signal } = context;
+  if (signal.aborted) {
+    return cancelledResult(call, signal.reason);
+  }
+  const tool = definitions.get(call.name);
+  if (tool === undefined) {
+    return unknownToolResult(call);
+  }
+  try {
+    const input = tool.parseInput(call.input);
+    const output = await run(tool, input);
+    if (signal.aborted) {
+      return cancelledResult(call, signal.reason);
+    }
+    assertJsonValue(output);
+    return { status: 'success', callId: call.id, output };
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) {
+      return cancelledResult(call, signal.reason ?? error);
+    }
+    return { status: 'failure', callId: call.id, error: serializeError(error) };
+  }
 }
 
 function cancelledResult(call: ToolCall, reason: unknown): ToolResult {
@@ -246,70 +222,27 @@ function unknownToolResult(call: ToolCall): ToolResult {
   };
 }
 
-function freezeJson(value: JsonValue): JsonValue {
-  if (value === null || typeof value !== 'object') {
-    return value;
+function authorizationFailure(call: ToolCall, message: string): ToolResult {
+  return { status: 'failure', callId: call.id, error: { name: 'ToolAuthorizationError', message } };
+}
+
+/** 将工具列表构建工具名称到工具的映射列表，用于按名称路由工具。 */
+function indexTools<T extends ToolContract>(definitions: readonly T[]): ReadonlyMap<string, T> {
+  const entries = new Map<string, T>();
+  for (const definition of definitions) {
+    if (entries.has(definition.name)) {
+      throw new Error(`duplicate tool registration: ${definition.name}`);
+    }
+    entries.set(definition.name, definition);
   }
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map(freezeJson));
-  }
-  const copy: Record<string, JsonValue> = {};
-  for (const [key, child] of Object.entries(value)) {
-    Object.defineProperty(copy, key, {
-      value: freezeJson(child),
-      enumerable: true,
-      writable: false,
-      configurable: false,
-    });
-  }
-  return Object.freeze(copy);
+  return entries;
 }
 
-function freezeToolCall(call: ToolCall): ToolCall {
-  assertJsonValue(call.input);
-  return Object.freeze({ id: call.id, name: call.name, input: freezeJson(call.input) });
-}
-
-function freezeExecutionContext(
-  context: ToolExecutionContext & { readonly execution: ExecutionMetadata },
-): ToolExecutionContext & { readonly execution: ExecutionMetadata } {
-  return Object.freeze({
-    signal: context.signal,
-    execution: Object.freeze({
-      id: context.execution.id,
-      subject: context.execution.subject,
-      authorizationVersion: context.execution.authorizationVersion,
-    }),
-  });
-}
-
-function hasExecution(
-  context: ToolExecutionContext,
-): context is ToolExecutionContext & { readonly execution: ExecutionMetadata } {
-  return context.execution !== undefined;
-}
-
-function isAllowed(decision: unknown): decision is { readonly status: 'allowed' } {
-  return (
-    typeof decision === 'object' &&
-    decision !== null &&
-    Object.keys(decision).length === 1 &&
-    (decision as { status?: unknown }).status === 'allowed'
-  );
-}
-
-function denialReason(decision: unknown): string {
-  if (
-    typeof decision === 'object' &&
-    decision !== null &&
-    Object.keys(decision).length === 2 &&
-    (decision as { status?: unknown }).status === 'denied' &&
-    typeof (decision as { reason?: unknown }).reason === 'string' &&
-    (decision as { reason: string }).reason.length > 0
-  ) {
-    return (decision as { reason: string }).reason;
-  }
-  return '执行策略返回无效授权决定';
+/** 将工具契约转换为模型可见的只读定义。 */
+function toModelToolDefinitions(
+  definitions: ReadonlyMap<string, ToolContract>,
+): readonly ModelToolDefinition[] {
+  return [...definitions.values()].map(toModelToolDefinition);
 }
 
 function normalizeSandboxOptions(options: SandboxToolSetOptions): {
@@ -352,4 +285,70 @@ function normalizeSandboxOptions(options: SandboxToolSetOptions): {
     workspace: options.workspace,
     limits: Object.freeze({ timeoutMs, maxOutputBytes }),
   };
+}
+
+function hasExecution(
+  context: ToolExecutionContext,
+): context is ToolExecutionContext & { readonly execution: ExecutionMetadata } {
+  return context.execution !== undefined;
+}
+
+function isAllowed(decision: unknown): decision is { readonly status: 'allowed' } {
+  return (
+    typeof decision === 'object' &&
+    decision !== null &&
+    Object.keys(decision).length === 1 &&
+    (decision as { status?: unknown }).status === 'allowed'
+  );
+}
+
+function denialReason(decision: unknown): string {
+  if (
+    typeof decision === 'object' &&
+    decision !== null &&
+    Object.keys(decision).length === 2 &&
+    (decision as { status?: unknown }).status === 'denied' &&
+    typeof (decision as { reason?: unknown }).reason === 'string' &&
+    (decision as { reason: string }).reason.length > 0
+  ) {
+    return (decision as { reason: string }).reason;
+  }
+  return '执行策略返回无效授权决定';
+}
+
+function freezeToolCall(call: ToolCall): ToolCall {
+  assertJsonValue(call.input);
+  return Object.freeze({ id: call.id, name: call.name, input: freezeJson(call.input) });
+}
+
+function freezeExecutionContext(
+  context: ToolExecutionContext & { readonly execution: ExecutionMetadata },
+): ToolExecutionContext & { readonly execution: ExecutionMetadata } {
+  return Object.freeze({
+    signal: context.signal,
+    execution: Object.freeze({
+      id: context.execution.id,
+      subject: context.execution.subject,
+      authorizationVersion: context.execution.authorizationVersion,
+    }),
+  });
+}
+
+function freezeJson(value: JsonValue): JsonValue {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(freezeJson));
+  }
+  const copy: Record<string, JsonValue> = {};
+  for (const [key, child] of Object.entries(value)) {
+    Object.defineProperty(copy, key, {
+      value: freezeJson(child),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+  }
+  return Object.freeze(copy);
 }

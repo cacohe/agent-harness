@@ -4,7 +4,7 @@ import {
   createLocalOpenAiModel,
   createLocalSessionRepository,
 } from '@agent-harness/adapters/local-runtime';
-import { type AgentObserver, brandId, type SessionId, ToolRegistry } from '@agent-harness/kernel';
+import { type AgentObserver, brandId, DirectToolSet, type SessionId } from '@agent-harness/kernel';
 import { AgentRuntime } from '@agent-harness/runtime';
 import type { WebHostConfig } from './config.js';
 import { WebUsageError } from './config.js';
@@ -39,7 +39,7 @@ export function createSessionRegistry(
       return new AgentRuntime({
         sessions,
         model,
-        tools: new ToolRegistry(createWorkspaceTools(workspace)),
+        tools: new DirectToolSet(createWorkspaceTools(workspace)),
         maxSteps: config.maxSteps,
         settlementTimeoutMs: config.settlementTimeoutMs,
         runTimeoutMs: config.runTimeoutMs,

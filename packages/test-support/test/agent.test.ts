@@ -10,6 +10,7 @@ import {
   AgentIdCollisionError,
   analyzeSessionLifecycle,
   brandId,
+  DirectToolSet,
   type EventEnvelope,
   type ExecutionId,
   type MessageId,
@@ -17,7 +18,6 @@ import {
   type SessionLog,
   SettlementPersistenceError,
   type ToolCallId,
-  ToolRegistry,
   type UserMessage,
 } from '@agent-harness/kernel';
 import {
@@ -85,7 +85,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -135,7 +135,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       maxQueuedRuns: 1,
@@ -185,7 +185,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -233,7 +233,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -279,7 +279,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -308,7 +308,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -428,7 +428,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model: new ScriptedModelProvider([]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -460,7 +460,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -532,7 +532,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -569,7 +569,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 2,
       settlementSignals: new TestSettlementSignals(),
@@ -671,7 +671,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'too large' }] }]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       maxModelOutputBytes: 1,
@@ -704,7 +704,7 @@ describe('Agent', () => {
         },
       ]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       modelAttemptTimeoutMs: 20,
@@ -732,7 +732,7 @@ describe('Agent', () => {
         { events: [{ type: 'text.delta', text: '已处理' }] },
       ]),
       session,
-      tools: new ToolRegistry([fakeTool('large', async () => ({ value: 'x'.repeat(128) }))]),
+      tools: new DirectToolSet([fakeTool('large', async () => ({ value: 'x'.repeat(128) }))]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       maxToolResultBytes: 32,
@@ -760,7 +760,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -803,7 +803,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([tool]),
+      tools: new DirectToolSet([tool]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -836,7 +836,7 @@ describe('Agent', () => {
     expectClosed(events);
   });
 
-  it('通过最小工具 capability 使用非 ToolRegistry 实现', async () => {
+  it('通过最小工具 capability 使用非 DirectToolSet 实现', async () => {
     const callId = brandId<'ToolCallId'>('call-capability') as ToolCallId;
     const session = new InMemorySessionLog(sessionId);
     const model = new ScriptedModelProvider([
@@ -884,7 +884,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -928,7 +928,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -976,7 +976,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1015,7 +1015,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids,
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1061,7 +1061,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids,
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1116,7 +1116,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([tool]),
+      tools: new DirectToolSet([tool]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1211,7 +1211,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model: new ScriptedModelProvider([]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals,
@@ -1265,7 +1265,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model: new ScriptedModelProvider([]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals,
@@ -1309,7 +1309,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([fakeTool('lookup', async () => ({ ok: true }))]),
+      tools: new DirectToolSet([fakeTool('lookup', async () => ({ ok: true }))]),
       ids: new SequentialAgentIds(),
       maxSteps: 1,
       settlementSignals: new TestSettlementSignals(),
@@ -1346,7 +1346,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model,
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1387,7 +1387,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
       session: new InMemorySessionLog(sessionId),
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1412,7 +1412,7 @@ describe('Agent', () => {
     const failedAgent = new Agent({
       model: new ScriptedModelProvider([{ events: [], error: new Error('model failed') }]),
       session: new InMemorySessionLog(sessionId),
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1447,7 +1447,7 @@ describe('Agent', () => {
         },
       },
       session: new InMemorySessionLog(sessionId),
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1538,7 +1538,7 @@ describe('Agent', () => {
     const agent = new Agent({
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1568,7 +1568,7 @@ describe('Agent', () => {
         },
       ]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1645,7 +1645,7 @@ describe('Agent', () => {
         { events: [{ type: 'text.delta', text: '完成' }] },
       ]),
       session: new InMemorySessionLog(sessionId),
-      tools: new ToolRegistry([fakeTool('lookup', async () => ({ ok: true }))]),
+      tools: new DirectToolSet([fakeTool('lookup', async () => ({ ok: true }))]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
@@ -1680,7 +1680,7 @@ describe('Agent', () => {
           },
         ]),
         session: new InMemorySessionLog(id),
-        tools: new ToolRegistry([]),
+        tools: new DirectToolSet([]),
         ids: new SequentialAgentIds(),
         maxSteps: 4,
         settlementSignals: new TestSettlementSignals(),
@@ -1734,7 +1734,7 @@ describe('Agent', () => {
         },
       ]),
       session,
-      tools: new ToolRegistry([]),
+      tools: new DirectToolSet([]),
       ids: new SequentialAgentIds(),
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),

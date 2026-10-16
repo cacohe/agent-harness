@@ -14,8 +14,8 @@ export * from './skills/protocol.js';
 export * from './tools/protocol.js';
 export {
   CompositeToolSet,
+  DirectToolSet,
   DuplicateToolNameError,
   PolicyControlledToolSet,
   SandboxToolSet,
-  ToolRegistry,
 } from './tools/runtime.js';

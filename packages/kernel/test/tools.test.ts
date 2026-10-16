@@ -1,16 +1,16 @@
 import {
   brandId,
   type ExecutionId,
-  toModelToolDefinition,
   type ToolCallId,
   type ToolContract,
+  toModelToolDefinition,
 } from '@agent-harness/kernel';
 import { describe, expect, it } from 'vitest';
 import {
   CompositeToolSet,
+  DirectToolSet,
   PolicyControlledToolSet,
   SandboxToolSet,
-  ToolRegistry,
 } from '../src/index.ts';
 
 function call(name: string, input: unknown = {}) {
@@ -38,7 +38,7 @@ describe('toModelToolDefinition', () => {
   });
 });
 
-describe('ToolRegistry', () => {
+describe('DirectToolSet', () => {
   it('拒绝重复工具注册', () => {
     const definition = {
       name: 'lookup',
@@ -47,13 +47,13 @@ describe('ToolRegistry', () => {
       parseInput: (input) => input,
       execute: async () => ({ ok: true }),
     };
-    expect(() => new ToolRegistry([definition, definition])).toThrow(
+    expect(() => new DirectToolSet([definition, definition])).toThrow(
       'duplicate tool registration: lookup',
     );
   });
 
   it('list 暴露模型可见 schema 且不含执行函数', () => {
-    const registry = new ToolRegistry([
+    const registry = new DirectToolSet([
       {
         name: 'lookup',
         description: '查询',
@@ -73,7 +73,7 @@ describe('ToolRegistry', () => {
   });
 
   it('成功执行并校验输出为 JSON', async () => {
-    const registry = new ToolRegistry([
+    const registry = new DirectToolSet([
       {
         name: 'lookup',
         description: '查询',
@@ -93,7 +93,7 @@ describe('ToolRegistry', () => {
   });
 
   it('未知工具与执行抛错都返回 failure', async () => {
-    const registry = new ToolRegistry([
+    const registry = new DirectToolSet([
       {
         name: 'lookup',
         description: '查询',
@@ -119,7 +119,7 @@ describe('ToolRegistry', () => {
 
   it('在执行副作用前拒绝未通过输入解析的模型 JSON', async () => {
     let executed = false;
-    const registry = new ToolRegistry([
+    const registry = new DirectToolSet([
       {
         name: 'lookup',
         description: '查询',
@@ -144,7 +144,7 @@ describe('ToolRegistry', () => {
   });
 
   it('拒绝非 JSON 输出', async () => {
-    const registry = new ToolRegistry([
+    const registry = new DirectToolSet([
       {
         name: 'lookup',
         description: '查询',
@@ -164,7 +164,7 @@ describe('ToolRegistry', () => {
 
   it('已中止或执行中取消时返回 cancelled', async () => {
     const controller = new AbortController();
-    const registry = new ToolRegistry([
+    const registry = new DirectToolSet([
       {
         name: 'lookup',
         description: '查询',
@@ -195,7 +195,7 @@ describe('ToolRegistry', () => {
   it('策略拒绝时不执行工具，并把拒绝持久化为失败结果', async () => {
     let executed = false;
     const tools = new PolicyControlledToolSet(
-      new ToolRegistry([
+      new DirectToolSet([
         {
           name: 'write',
           description: '写入',
@@ -232,7 +232,7 @@ describe('ToolRegistry', () => {
   it('策略收到冻结上下文后才委派工具', async () => {
     const observed: string[] = [];
     const tools = new PolicyControlledToolSet(
-      new ToolRegistry([
+      new DirectToolSet([
         {
           name: 'write',
           description: '写入',
@@ -271,7 +271,7 @@ describe('ToolRegistry', () => {
     });
     const observed: unknown[] = [];
     const tools = new PolicyControlledToolSet(
-      new ToolRegistry([
+      new DirectToolSet([
         {
           name: 'write',
           description: '写入',
@@ -331,7 +331,7 @@ describe('ToolRegistry', () => {
         release = resolve;
       });
       const controller = new AbortController();
-      const tools = new PolicyControlledToolSet(new ToolRegistry([]), {
+      const tools = new PolicyControlledToolSet(new DirectToolSet([]), {
         authorize: async () => {
           await authorized;
           if (outcome === 'error') {
@@ -370,7 +370,7 @@ describe('ToolRegistry', () => {
     const input = JSON.parse('{"__proto__":{"admin":true},"value":1}') as Record<string, unknown>;
     let observedInput: unknown;
     const tools = new PolicyControlledToolSet(
-      new ToolRegistry([
+      new DirectToolSet([
         {
           name: 'inspect',
           description: '检查输入',
@@ -410,7 +410,7 @@ describe('ToolRegistry', () => {
   it('无效策略结果 fail closed，且不执行工具', async () => {
     let executed = false;
     const tools = new PolicyControlledToolSet(
-      new ToolRegistry([
+      new DirectToolSet([
         {
           name: 'write',
           description: '写入',
@@ -681,7 +681,7 @@ describe('ToolRegistry', () => {
 
 describe('CompositeToolSet', () => {
   const registry = (name: string) =>
-    new ToolRegistry([
+    new DirectToolSet([
       {
         name,
         description: name,

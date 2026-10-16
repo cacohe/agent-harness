@@ -1,13 +1,13 @@
 import type {
+  ExecutableTool,
   JsonValue,
   ToolCall,
-  ToolSet,
-  ExecutableTool,
   ToolExecutionContext,
   ToolResult,
+  ToolSet,
 } from '@agent-harness/kernel';
 
-/** 提供独立于 ToolRegistry 的可编程工具集。 */
+/** 提供独立于 DirectToolSet 的可编程工具集。 */
 export class ScriptedToolSet implements ToolSet {
   readonly #definitions: ReturnType<ToolSet['list']>;
   readonly #execute: ToolSet['execute'];
