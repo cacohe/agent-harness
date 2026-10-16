@@ -12,6 +12,25 @@ export interface ToolCall {
   readonly input: JsonValue;
 }
 
+/** 模型流中报告的一次工具调用。 */
+export interface ModelToolCallEvent {
+  readonly type: 'tool.call';
+  readonly call: ToolCall;
+}
+
+/**
+ * 工具的调用契约。
+ *
+ * 它是工具领域的原始定义：名称用于本次运行内的模型调用与路由，schema 用于模型请求，
+ * parseInput 则是执行前处理不可信模型输入的权威边界。
+ */
+export interface ToolContract {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+  parseInput(input: JsonValue): JsonValue;
+}
+
 /** 暴露给模型的工具定义。它是工具契约的只读投影，不包含执行或输入校验行为。 */
 export interface ModelToolDefinition {
   readonly name: string;
@@ -19,10 +38,30 @@ export interface ModelToolDefinition {
   readonly inputSchema: Readonly<Record<string, unknown>>;
 }
 
-/** 模型流中报告的一次工具调用。 */
-export interface ModelToolCallEvent {
-  readonly type: 'tool.call';
-  readonly call: ToolCall;
+/** 从工具调用契约构造模型可见的只读定义。 */
+export function toModelToolDefinition(tool: ToolContract): ModelToolDefinition {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+  };
+}
+
+/** 工具执行上下文。 */
+export interface ToolExecutionContext {
+  readonly signal: AbortSignal;
+  readonly execution?: ExecutionMetadata;
+}
+
+/** 直接附带执行器的工具。执行器可以访问任何由组合方显式注入的外部依赖。 */
+export interface ExecutableTool extends ToolContract {
+  execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>;
+}
+
+/** 一次 Agent 运行中固定的工具目录与执行路由。 */
+export interface ToolSet {
+  list(): readonly ModelToolDefinition[];
+  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>;
 }
 
 /** 工具执行成功。 */
@@ -71,45 +110,6 @@ export interface ToolCompleted {
   readonly result: ToolResult;
 }
 
-/** 工具执行上下文。 */
-export interface ToolExecutionContext {
-  readonly signal: AbortSignal;
-  readonly execution?: ExecutionMetadata;
-}
-
-/**
- * 工具的调用契约。
- *
- * 它是工具领域的原始定义：名称用于本次运行内的模型调用与路由，schema 用于模型请求，
- * parseInput 则是执行前处理不可信模型输入的权威边界。
- */
-export interface ToolContract {
-  readonly name: string;
-  readonly description: string;
-  readonly inputSchema: Readonly<Record<string, unknown>>;
-  parseInput(input: JsonValue): JsonValue;
-}
-
-/** 直接附带执行器的工具。执行器可以访问任何由组合方显式注入的外部依赖。 */
-export interface ExecutableTool extends ToolContract {
-  execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>;
-}
-
-/** 一次 Agent 运行中固定的工具目录与执行路由。 */
-export interface ToolSet {
-  list(): readonly ModelToolDefinition[];
-  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>;
-}
-
-/** 从工具调用契约构造模型可见的只读定义。 */
-export function toModelToolDefinition(tool: ToolContract): ModelToolDefinition {
-  return {
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-  };
-}
-
 /** 工具授权决策。 */
 export type ToolAuthorizationDecision =
   | { readonly status: 'allowed' }
@@ -123,17 +123,17 @@ export interface ToolExecutionPolicy {
   ): Promise<ToolAuthorizationDecision>;
 }
 
+/** 沙盒资源限制。 */
+export interface SandboxResourceLimits {
+  readonly timeoutMs: number;
+  readonly maxOutputBytes: number;
+}
+
 /** 沙盒任务。 */
 export interface SandboxTask {
   readonly call: ToolCall;
   readonly workspace?: string;
   readonly limits?: SandboxResourceLimits;
-}
-
-/** 沙盒资源限制。 */
-export interface SandboxResourceLimits {
-  readonly timeoutMs: number;
-  readonly maxOutputBytes: number;
 }
 
 /** 沙盒调度器。 */
@@ -144,7 +144,7 @@ export interface SandboxDispatcher {
   ): Promise<JsonValue>;
 }
 
-/** 沙盒工具注册选项。 */
+/** 沙盒工具集选项。 */
 export interface SandboxToolSetOptions {
   readonly workspace?: string;
   readonly limits?: SandboxResourceLimits;
