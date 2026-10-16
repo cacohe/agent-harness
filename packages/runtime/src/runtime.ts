@@ -11,7 +11,7 @@ import {
   type Clock,
   type MessageId,
   type ModelProvider,
-  PolicyControlledTools,
+  PolicyControlledToolSet,
   type PromptAssembler,
   type SessionId,
   type SessionLifecycleIdNamespaces,
@@ -19,7 +19,7 @@ import {
   type SessionRepository,
   type SettlementSignalFactory,
   type StepId,
-  type ToolCapability,
+  type ToolSet,
   type ToolExecutionPolicy,
   type TurnId,
 } from '@agent-harness/kernel';
@@ -61,7 +61,7 @@ export class UuidAgentIds implements AgentIdGenerator {
 export interface AgentRuntimeOptions {
   readonly sessions: SessionRepository;
   readonly model: ModelProvider;
-  readonly tools: ToolCapability;
+  readonly tools: ToolSet;
   /** 可选的工具执行策略；由 Runtime 在组合点包裹真实工具。 */
   readonly toolPolicy?: ToolExecutionPolicy;
   readonly maxSteps: number;
@@ -198,7 +198,7 @@ export class AgentRuntime {
           tools:
             this.#options.toolPolicy === undefined
               ? this.#options.tools
-              : new PolicyControlledTools(this.#options.tools, this.#options.toolPolicy),
+              : new PolicyControlledToolSet(this.#options.tools, this.#options.toolPolicy),
           ids: generatedIds,
           maxSteps: this.#options.maxSteps,
           settlementSignals: this.#settlementSignals,

@@ -1,13 +1,13 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { JsonObject, JsonValue, ToolDefinition } from '@agent-harness/kernel';
+import type { ExecutableTool, JsonObject, JsonValue } from '@agent-harness/kernel';
 import { resolveInsideWorkspace } from './workspace.js';
 
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_LIST_ENTRIES = 200;
 
 /** 创建只能在固定工作目录内列目录和读写文件的工具。 */
-export function createWorkspaceTools(workspace: string): readonly ToolDefinition[] {
+export function createWorkspaceTools(workspace: string): readonly ExecutableTool[] {
   return [
     {
       name: 'list_dir',

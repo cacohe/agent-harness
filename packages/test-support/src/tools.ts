@@ -1,23 +1,23 @@
 import type {
   JsonValue,
   ToolCall,
-  ToolCapability,
-  ToolDefinition,
+  ToolSet,
+  ExecutableTool,
   ToolExecutionContext,
   ToolResult,
 } from '@agent-harness/kernel';
 
-/** 提供独立于 ToolRegistry 的可编程工具 capability。 */
-export class ScriptedToolCapability implements ToolCapability {
-  readonly #definitions: ReturnType<ToolCapability['list']>;
-  readonly #execute: ToolCapability['execute'];
+/** 提供独立于 ToolRegistry 的可编程工具集。 */
+export class ScriptedToolSet implements ToolSet {
+  readonly #definitions: ReturnType<ToolSet['list']>;
+  readonly #execute: ToolSet['execute'];
 
-  constructor(definitions: ReturnType<ToolCapability['list']>, execute: ToolCapability['execute']) {
+  constructor(definitions: ReturnType<ToolSet['list']>, execute: ToolSet['execute']) {
     this.#definitions = definitions;
     this.#execute = execute;
   }
 
-  list(): ReturnType<ToolCapability['list']> {
+  list(): ReturnType<ToolSet['list']> {
     return this.#definitions;
   }
 
@@ -30,7 +30,7 @@ export class ScriptedToolCapability implements ToolCapability {
 export function fakeTool(
   name: string,
   execute: (input: JsonValue, context: ToolExecutionContext) => Promise<JsonValue>,
-): ToolDefinition & { readonly calls: JsonValue[] } {
+): ExecutableTool & { readonly calls: JsonValue[] } {
   const calls: JsonValue[] = [];
   return {
     name,

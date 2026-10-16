@@ -21,7 +21,7 @@ import {
   type SessionLog,
   SettlementPersistenceError,
   type SettlementSignalFactory,
-  type ToolCapability,
+  type ToolSet,
   type ToolResult,
   type TurnId,
   type UserMessage,
@@ -52,7 +52,7 @@ const DEFAULT_MAX_QUEUED_RUNS = 32;
 export class Agent {
   readonly #model: ModelProvider;
   readonly #session: SessionLog;
-  readonly #tools: ToolCapability;
+  readonly #tools: ToolSet;
   readonly #ids: AgentIdGenerator;
   readonly #maxSteps: number;
   readonly #settlementSignals: SettlementSignalFactory;

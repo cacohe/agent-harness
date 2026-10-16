@@ -12,7 +12,7 @@ export interface ToolCall {
   readonly input: JsonValue;
 }
 
-/** 暴露给模型的工具定义。 */
+/** 暴露给模型的工具定义。它是工具契约的只读投影，不包含执行或输入校验行为。 */
 export interface ModelToolDefinition {
   readonly name: string;
   readonly description: string;
@@ -77,24 +77,37 @@ export interface ToolExecutionContext {
   readonly execution?: ExecutionMetadata;
 }
 
-/** 工具规格 —— 模型可见描述与 Host 侧输入规范化。 */
-export interface ToolSpecification extends ModelToolDefinition {
+/**
+ * 工具的调用契约。
+ *
+ * 它是工具领域的原始定义：名称用于本次运行内的模型调用与路由，schema 用于模型请求，
+ * parseInput 则是执行前处理不可信模型输入的权威边界。
+ */
+export interface ToolContract {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
   parseInput(input: JsonValue): JsonValue;
 }
 
-/** 本地工具定义 —— 在工具规格上附加进程内执行函数。 */
-export interface ToolDefinition extends ToolSpecification {
+/** 直接附带执行器的工具。执行器可以访问任何由组合方显式注入的外部依赖。 */
+export interface ExecutableTool extends ToolContract {
   execute(input: JsonValue, context: ToolExecutionContext): Promise<JsonValue>;
 }
 
-/** 工具目录。 */
-export interface ToolCatalog {
+/** 一次 Agent 运行中固定的工具目录与执行路由。 */
+export interface ToolSet {
   list(): readonly ModelToolDefinition[];
+  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>;
 }
 
-/** 工具能力 —— 工具的执行能力和目录。 */
-export interface ToolCapability extends ToolCatalog {
-  execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolResult>;
+/** 从工具调用契约构造模型可见的只读定义。 */
+export function toModelToolDefinition(tool: ToolContract): ModelToolDefinition {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+  };
 }
 
 /** 工具授权决策。 */
@@ -132,7 +145,7 @@ export interface SandboxDispatcher {
 }
 
 /** 沙盒工具注册选项。 */
-export interface SandboxToolRegistryOptions {
+export interface SandboxToolSetOptions {
   readonly workspace?: string;
   readonly limits?: SandboxResourceLimits;
 }

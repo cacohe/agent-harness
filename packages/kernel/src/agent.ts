@@ -9,7 +9,7 @@ import type {
 } from './identifiers.js';
 import type { ModelProvider, ModelStreamEvent } from './model.js';
 import type { EventEnvelope, SessionLog, TurnOutcome } from './session/protocol.js';
-import type { ToolCallId, ToolCapability } from './tools/protocol.js';
+import type { ToolCallId, ToolSet } from './tools/protocol.js';
 
 /** 当前 Agent 状态。 */
 export type AgentPhase =
@@ -120,7 +120,7 @@ export interface AgentIdReservationSeed {
 export interface AgentOptions {
   readonly model: ModelProvider;
   readonly session: SessionLog;
-  readonly tools: ToolCapability;
+  readonly tools: ToolSet;
   readonly ids: AgentIdGenerator;
   readonly maxSteps: number;
   readonly settlementSignals: SettlementSignalFactory;

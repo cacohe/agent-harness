@@ -13,9 +13,9 @@ export * from './session/submission.js';
 export * from './skills/protocol.js';
 export * from './tools/protocol.js';
 export {
-  CompositeToolCapability,
+  CompositeToolSet,
   DuplicateToolNameError,
-  PolicyControlledTools,
-  SandboxToolRegistry,
+  PolicyControlledToolSet,
+  SandboxToolSet,
   ToolRegistry,
 } from './tools/runtime.js';
