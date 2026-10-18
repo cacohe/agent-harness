@@ -493,6 +493,7 @@ export class Agent {
         });
       }
       let result: ToolResult;
+      let toolInvocationFinished = false;
       try {
         result = await this.#tools.execute(call, {
           signal: toolSignal,
@@ -500,6 +501,22 @@ export class Agent {
         });
       } catch (error) {
         if (toolSignal.aborted && !signal.aborted) {
+          if (toolStartedAt !== undefined) {
+            this.#notifyObservation({
+              type: 'tool.invocation.finished',
+              sessionId: this.#session.sessionId,
+              turnId,
+              stepId,
+              attemptId: attempt.attemptId,
+              ...executionEvent,
+              toolCallId: call.id,
+              toolName: call.name,
+              ...this.#withDuration(toolStartedAt),
+              termination: 'cancelled',
+              ...(error instanceof Error ? { errorName: error.name } : {}),
+            });
+            toolInvocationFinished = true;
+          }
           result = {
             status: 'cancelled',
             callId: call.id,
@@ -526,7 +543,7 @@ export class Agent {
       }
       result = this.#boundToolResult(result);
       attempt.toolResults.set(call.id, result);
-      if (toolStartedAt !== undefined) {
+      if (toolStartedAt !== undefined && !toolInvocationFinished) {
         this.#notifyObservation({
           type: 'tool.invocation.finished',
           sessionId: this.#session.sessionId,

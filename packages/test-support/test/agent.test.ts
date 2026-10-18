@@ -1150,6 +1150,7 @@ describe('Agent', () => {
   it('工具调用到达独立 deadline 后记录取消结果', async () => {
     const callId = brandId<'ToolCallId'>('call-timeout') as ToolCallId;
     const session = new InMemorySessionLog(sessionId);
+    const observed: ExecutionObservation[] = [];
     const model = new ScriptedModelProvider([
       {
         events: [{ type: 'tool.call', call: { id: callId, name: 'wait', input: {} } }],
@@ -1174,6 +1175,8 @@ describe('Agent', () => {
       toolTimeoutMs: 20,
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
 
     await expect(agent.run(user())).resolves.toMatchObject({ content: '继续执行' });
@@ -1184,6 +1187,14 @@ describe('Agent', () => {
       type: 'tool.completed',
       result: { status: 'cancelled' },
     });
+    expect(observed.filter((observation) => observation.type.startsWith('tool.'))).toEqual([
+      expect.objectContaining({ type: 'tool.invocation.started' }),
+      expect.objectContaining({
+        type: 'tool.invocation.finished',
+        termination: 'cancelled',
+        errorName: 'TimeoutError',
+      }),
+    ]);
   });
 
   it('普通会话 I/O 响应 run signal，并用一个独立信号提交 terminal batch', async () => {
