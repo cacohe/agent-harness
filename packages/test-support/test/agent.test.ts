@@ -7,6 +7,7 @@ import {
   AgentBusyError,
   AgentClosedError,
   AgentIdCollisionError,
+  type AgentObserver,
   analyzeSessionLifecycle,
   brandId,
   DirectToolSet,
@@ -110,6 +111,72 @@ describe('Agent', () => {
         .map((envelope) => (envelope.event as { readonly message: UserMessage }).message.content),
     ).toEqual(['first', 'second']);
     expect(model.requests).toHaveLength(2);
+  });
+
+  it('在输入进入队列时冻结消息、执行上下文与取消信号', async () => {
+    const session = new InMemorySessionLog(sessionId);
+    let firstPrepared!: () => void;
+    let releaseFirst!: () => void;
+    const prepared = new Promise<void>((resolve) => {
+      firstPrepared = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const model = new ScriptedModelProvider([
+      {
+        events: [{ type: 'text.delta', text: 'first reply' }],
+        prepare: async () => {
+          firstPrepared();
+          await release;
+        },
+      },
+      { events: [{ type: 'text.delta', text: 'second reply' }] },
+    ]);
+    const agent = new Agent({
+      model,
+      session,
+      tools: new DirectToolSet([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+    });
+    const first = agent.run(user('first'));
+    await prepared;
+
+    const queuedMessage = {
+      id: brandId<'MessageId'>('user-2') as MessageId,
+      role: 'user' as const,
+      content: 'second',
+    };
+    const acceptedSignal = new AbortController();
+    const replacementSignal = new AbortController();
+    const execution = {
+      id: brandId<'ExecutionId'>('execution-2') as ExecutionId,
+      subject: 'user-2',
+      authorizationVersion: 'v1',
+    };
+    const options = { signal: acceptedSignal.signal, execution };
+    const second = agent.run(queuedMessage, options);
+
+    queuedMessage.content = 'mutated';
+    execution.subject = 'attacker';
+    options.signal = replacementSignal.signal;
+    replacementSignal.abort(new Error('不应影响已接纳输入'));
+    releaseFirst();
+
+    await expect(first).resolves.toMatchObject({ content: 'first reply' });
+    await expect(second).resolves.toMatchObject({ content: 'second reply' });
+    const events = await readEvents(session);
+    expect(
+      events
+        .filter((envelope) => envelope.event.type === 'user.message')
+        .map((envelope) => (envelope.event as { readonly message: UserMessage }).message.content),
+    ).toEqual(['first', 'second']);
+    expect(
+      events.filter((envelope) => envelope.event.type === 'turn.started').at(1)?.event,
+    ).toMatchObject({ execution: { subject: 'user-2' } });
   });
 
   it('输入队列达到上限时拒绝新输入，但不影响已接纳输入', async () => {
@@ -1197,6 +1264,52 @@ describe('Agent', () => {
     ]);
   });
 
+  it('工具在 deadline 后迟返时仍记录取消结果', async () => {
+    const callId = brandId<'ToolCallId'>('call-late-return') as ToolCallId;
+    const session = new InMemorySessionLog(sessionId);
+    const observed: ExecutionObservation[] = [];
+    const tools = new ScriptedToolSet(
+      [{ name: 'wait', description: '等待', inputSchema: {} }],
+      (call, context) =>
+        new Promise((resolve) => {
+          context.signal.addEventListener(
+            'abort',
+            () => resolve({ status: 'success', callId: call.id, output: { late: true } }),
+            { once: true },
+          );
+        }),
+    );
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        { events: [{ type: 'tool.call', call: { id: callId, name: 'wait', input: {} } }] },
+        { events: [{ type: 'text.delta', text: '继续执行' }] },
+      ]),
+      session,
+      tools,
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      toolTimeoutMs: 10,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
+    });
+
+    await expect(agent.run(user())).resolves.toMatchObject({ content: '继续执行' });
+    expect(
+      (await readEvents(session)).find((envelope) => envelope.event.type === 'tool.completed')
+        ?.event,
+    ).toMatchObject({ type: 'tool.completed', result: { status: 'cancelled' } });
+    expect(observed.filter((observation) => observation.type.startsWith('tool.'))).toEqual([
+      expect.objectContaining({ type: 'tool.invocation.started' }),
+      expect.objectContaining({
+        type: 'tool.invocation.finished',
+        termination: 'cancelled',
+        errorName: 'AbortError',
+      }),
+    ]);
+  });
+
   it('普通会话 I/O 响应 run signal，并用一个独立信号提交 terminal batch', async () => {
     let signalReadStarted: (() => void) | undefined;
     const readStarted = new Promise<void>((resolve) => {
@@ -1397,6 +1510,108 @@ describe('Agent', () => {
     expect(seen).toContain('text.delta');
     expect(seen).toContain('turn.started');
     expectClosed(await readEvents(session));
+  });
+
+  it('observer 不能修改 Core 随后消费的模型事件或构造后追加 observer', async () => {
+    const callId = brandId<'ToolCallId'>('call-observer-isolation') as ToolCallId;
+    const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
+    const mutationResults: boolean[] = [];
+    let appendedObserverCalled = false;
+    const observers: AgentObserver[] = [
+      {
+        onStream(event) {
+          if (event.type === 'text.delta') {
+            mutationResults.push(Reflect.set(event, 'text', 'mutated'));
+          }
+          if (event.type === 'tool.call') {
+            mutationResults.push(Reflect.set(event.call, 'name', 'mutated'));
+            mutationResults.push(Reflect.set(event.call.input as object, 'query', 'mutated'));
+          }
+        },
+      },
+    ];
+    const session = new InMemorySessionLog(sessionId);
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        {
+          events: [
+            { type: 'text.delta', text: 'before tool' },
+            {
+              type: 'tool.call',
+              call: { id: callId, name: 'lookup', input: { query: 'original' } },
+            },
+          ],
+        },
+        { events: [{ type: 'text.delta', text: 'done' }] },
+      ]),
+      session,
+      tools: new ScriptedToolSet(
+        [{ name: 'lookup', description: '查询', inputSchema: {} }],
+        async (call) => {
+          calls.push({ name: call.name, input: call.input });
+          return { status: 'success', callId: call.id, output: { ok: true } };
+        },
+      ),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      observers,
+    });
+    observers.push({ onStream: () => (appendedObserverCalled = true) });
+
+    await expect(agent.run(user())).resolves.toMatchObject({ content: 'done' });
+    expect(mutationResults).toEqual([false, false, false, false]);
+    expect(calls).toEqual([{ name: 'lookup', input: { query: 'original' } }]);
+    expect(appendedObserverCalled).toBe(false);
+    const assistantSettlements = (await readEvents(session)).filter(
+      (envelope) => envelope.event.type === 'assistant.settled',
+    );
+    expect(assistantSettlements[0]?.event).toMatchObject({
+      settlement: { message: { content: 'before tool' } },
+    });
+  });
+
+  it('模型流在 deadline 后迟返时按取消结算', async () => {
+    const observed: ExecutionObservation[] = [];
+    const session = new InMemorySessionLog(sessionId);
+    const agent = new Agent({
+      model: {
+        id: 'late-return-model',
+        async prepare() {
+          return {
+            async *stream(_request, signal) {
+              await new Promise<void>((resolve) => {
+                signal.addEventListener('abort', () => resolve(), { once: true });
+              });
+            },
+          };
+        },
+      },
+      session,
+      tools: new DirectToolSet([]),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      modelAttemptTimeoutMs: 10,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
+    });
+
+    await expect(agent.run(user())).rejects.toMatchObject({ name: 'AbortError' });
+    expect(observed.filter((observation) => observation.type.startsWith('model.'))).toEqual([
+      expect.objectContaining({ type: 'model.invocation.started' }),
+      expect.objectContaining({
+        type: 'model.invocation.finished',
+        outcome: 'cancelled',
+        errorName: 'AbortError',
+      }),
+    ]);
+    expect((await readEvents(session)).at(-1)?.event).toMatchObject({
+      type: 'turn.ended',
+      outcome: 'cancelled',
+    });
   });
 
   it('以注入时钟成对报告模型执行的开始与终态', async () => {

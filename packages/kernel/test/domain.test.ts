@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { assertJsonValue, brandId, isAbortError, serializeError } from '../src/index.ts';
+import {
+  assertJsonValue,
+  brandId,
+  freezeJsonValue,
+  isAbortError,
+  serializeError,
+} from '../src/index.ts';
 
 describe('domain', () => {
   describe('brandId', () => {
@@ -36,6 +42,19 @@ describe('domain', () => {
 
       expect(() => assertJsonValue(new Date())).toThrow(TypeError);
       expect(() => assertJsonValue(() => undefined)).toThrow(TypeError);
+    });
+  });
+
+  describe('freezeJsonValue', () => {
+    it('递归复制并冻结 JSON 值', () => {
+      const source = { nested: { values: [1, 2] } };
+      const snapshot = freezeJsonValue(source);
+
+      source.nested.values.push(3);
+
+      expect(snapshot).toEqual({ nested: { values: [1, 2] } });
+      expect(Object.isFrozen(snapshot)).toBe(true);
+      expect(Object.isFrozen((snapshot as { readonly nested: object }).nested)).toBe(true);
     });
   });
 

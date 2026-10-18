@@ -14,6 +14,26 @@ export function assertJsonValue(value: unknown): asserts value is JsonValue {
   assertJsonValueAt(value, '$', new Set<object>());
 }
 
+/** 复制并冻结已校验的 JSON 值，避免跨异步边界共享调用方可变对象。 */
+export function freezeJsonValue(value: JsonValue): JsonValue {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(freezeJsonValue));
+  }
+  const copy: Record<string, JsonValue> = {};
+  for (const [key, child] of Object.entries(value)) {
+    Object.defineProperty(copy, key, {
+      value: freezeJsonValue(child),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+  }
+  return Object.freeze(copy);
+}
+
 function assertJsonValueAt(value: unknown, path: string, ancestors: Set<object>): void {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') {
     return;

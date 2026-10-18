@@ -8,20 +8,26 @@ import {
   type AgentPhase,
   type AgentRunOptions,
   type AssistantMessage,
+  type AttemptId,
+  assertJsonValue,
   assertNever,
   type Clock,
   type EventEnvelope,
   type ExecutionId,
   type ExecutionMetadata,
   type ExecutionObservation,
+  freezeJsonValue,
   isAbortError,
   type ModelProvider,
+  type ModelRequest,
   type ModelStreamEvent,
   type PromptAssembler,
   type SessionEvent,
   type SessionLog,
   SettlementPersistenceError,
   type SettlementSignalFactory,
+  type StepId,
+  type ToolCall,
   type ToolResult,
   type ToolSet,
   type TurnId,
@@ -74,10 +80,7 @@ export class Agent {
   #inboxDrain: Promise<void> | undefined;
 
   constructor(options: AgentOptions) {
-    // 参数校验
-    if (!Number.isInteger(options.maxSteps) || options.maxSteps < 1) {
-      throw new Error('maxSteps must be a positive integer');
-    }
+    assertPositiveInteger('maxSteps', options.maxSteps);
     for (const [name, value] of [
       ['runTimeoutMs', options.runTimeoutMs],
       ['modelAttemptTimeoutMs', options.modelAttemptTimeoutMs],
@@ -86,12 +89,11 @@ export class Agent {
       ['maxToolResultBytes', options.maxToolResultBytes],
       ['maxQueuedRuns', options.maxQueuedRuns],
     ] as const) {
-      if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
-        throw new TypeError(`${name} 必须是正整数`);
+      if (value !== undefined) {
+        assertPositiveInteger(name, value);
       }
     }
 
-    // 赋值参数
     this.#model = options.model;
     this.#session = options.session;
     this.#tools = options.tools;
@@ -106,7 +108,7 @@ export class Agent {
     this.#maxModelOutputBytes = options.maxModelOutputBytes;
     this.#maxToolResultBytes = options.maxToolResultBytes ?? DEFAULT_MAX_TOOL_RESULT_BYTES;
     this.#maxQueuedRuns = options.maxQueuedRuns ?? DEFAULT_MAX_QUEUED_RUNS;
-    this.#observers = options.observers ?? [];
+    this.#observers = Object.freeze([...(options.observers ?? [])]);
     this.#idReservations = new AgentIdReservations(options.reservedIds);
   }
 
@@ -152,34 +154,39 @@ export class Agent {
       return Promise.reject(new AgentClosedError('Agent 已停止接纳新的 run'));
     }
 
+    let accepted: AcceptedRun;
+    try {
+      accepted = acceptRun(message, options);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+
     return new Promise<AssistantMessage>((resolve, reject) => {
-      const externalSignal = isAbortSignal(options)
-        ? options
-        : (options.signal ?? new AbortController().signal);
       let queued: QueuedRun;
       const onAbort = (): void => {
         if (!this.#inbox.remove(queued)) {
           return;
         }
         queued.clearAbortListener();
-        reject(externalSignal.reason);
+        reject(accepted.signal.reason);
       };
       queued = {
-        message,
-        options,
+        message: accepted.message,
+        signal: accepted.signal,
+        ...(accepted.execution === undefined ? {} : { execution: accepted.execution }),
         resolve,
         reject,
-        clearAbortListener: () => externalSignal.removeEventListener('abort', onAbort),
+        clearAbortListener: () => accepted.signal.removeEventListener('abort', onAbort),
       };
-      if (externalSignal.aborted) {
-        reject(externalSignal.reason);
+      if (accepted.signal.aborted) {
+        reject(accepted.signal.reason);
         return;
       }
       if (this.#inbox.size >= this.#maxQueuedRuns) {
         reject(new AgentBusyError(`Agent 输入队列已达到上限 ${this.#maxQueuedRuns}`));
         return;
       }
-      externalSignal.addEventListener('abort', onAbort, { once: true });
+      accepted.signal.addEventListener('abort', onAbort, { once: true });
       this.#inbox.enqueue(queued);
       this.#ensureInboxDraining();
     });
@@ -201,13 +208,13 @@ export class Agent {
   /** 串行领取已接纳输入，并仅结算各自调用，不让单项失败中断后续领取。 */
   async #drainInbox(): Promise<void> {
     for (;;) {
-      const queued = this.#inbox.claim(); // 领取最早尚未执行的输入
+      const queued = this.#inbox.claim();
       if (queued === undefined) {
         return;
       }
       queued.clearAbortListener();
       try {
-        queued.resolve(await this.#runTurn(queued.message, queued.options));
+        queued.resolve(await this.#runTurn(queued.message, queued.signal, queued.execution));
       } catch (error) {
         queued.reject(error);
       }
@@ -217,14 +224,9 @@ export class Agent {
   /** 执行已从 inbox 领取的一条输入。 */
   async #runTurn(
     message: UserMessage,
-    options: AbortSignal | AgentRunOptions,
+    externalSignal: AbortSignal,
+    execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
-    const externalSignal = isAbortSignal(options)
-      ? options
-      : (options.signal ?? new AbortController().signal);
-    const execution = freezeExecutionMetadata(
-      isAbortSignal(options) ? undefined : options.execution,
-    );
     const turn: ActiveTurn = {
       turnId: this.#idReservations.turn(this.#idGenerator.turn()),
       started: false,
@@ -242,7 +244,6 @@ export class Agent {
     this.#phase = { kind: 'running', turnId: turn.turnId };
 
     try {
-      // 提交 turn 开始事件
       await this.#append(
         [
           {
@@ -255,24 +256,19 @@ export class Agent {
       );
       turn.started = true;
 
-      // 提交用户消息事件
       this.#idReservations.message(message.id);
       await this.#append([{ type: 'user.message', message }], signal);
 
-      // 循环执行 step，直至无工具调用或触及步数上限
-      for (let stepNumber = 1; stepNumber <= this.#maxSteps; stepNumber += 1) {
+      for (let stepNumber = 1; ; stepNumber += 1) {
         throwIfAborted(signal);
 
-        // 创建 step 生命周期
         const stepId = this.#idReservations.step(this.#idGenerator.step());
         const step = createStep(stepId);
         turn.activeStep = step;
         this.#phase = { kind: 'running', turnId: turn.turnId, stepId };
 
-        // 执行一步 step，获取返回的 assistant 消息
         const messageFromStep = await this.#runStep(turn.turnId, step, signal, execution);
 
-        // 如果 step 没有工具调用，则提交 turn 结束事件
         if (messageFromStep.toolCalls.length === 0) {
           await this.#append(
             [{ type: 'turn.ended', turnId: turn.turnId, outcome: 'completed' }],
@@ -282,15 +278,11 @@ export class Agent {
           return messageFromStep;
         }
 
-        // 如果 step 数量达到上限，则抛出错误
         if (stepNumber === this.#maxSteps) {
           throw new Error(`agent exceeded maxSteps (${this.#maxSteps})`);
         }
       }
-
-      throw new Error('agent loop ended without a final assistant message');
     } catch (error) {
-      // 构建 terminal settlement 事件
       const outcome = signal.aborted || isAbortError(error) ? 'cancelled' : 'failed';
       const terminalEvents = buildTerminalEvents({
         error,
@@ -298,7 +290,6 @@ export class Agent {
         turn,
       });
 
-      // 如果 terminal settlement 事件不为空，则提交结算事件
       if (terminalEvents.length > 0) {
         try {
           const settlementSignal = this.#settlementSignalFactory.create();
@@ -324,24 +315,64 @@ export class Agent {
     signal: AbortSignal,
     execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
-    const executionEvent = this.#executionEvent(execution);
-    // 提交 step 开始事件
     const stepId = step.stepId;
     await this.#append([{ type: 'step.started', turnId, stepId }], signal);
     step.started = true;
     throwIfAborted(signal);
 
-    // 组装请求
+    const sessionEvents = await this.#session.read({ signal });
     const request = await waitForSignal(
-      this.#promptAssembler.assemble(
-        await this.#session.read({ signal }),
-        this.#tools.list(),
-        signal,
-      ),
+      this.#promptAssembler.assemble(sessionEvents, this.#tools.list(), signal),
       signal,
     );
+    const attempt = await this.#runModelAttempt(request, turnId, step, signal, execution);
+    throwIfAborted(signal);
 
-    // 准备模型；准备失败尚未形成 attempt，保持其不会消耗 attempt 标识符的恢复语义。
+    const assistantMessage: AssistantMessage = {
+      id: this.#idReservations.message(this.#idGenerator.message()),
+      role: 'assistant',
+      content: attempt.partialText,
+      toolCalls: Object.freeze([...attempt.observedToolCalls]),
+    };
+    attempt.settlement = {
+      status: 'completed',
+      attemptId: attempt.attemptId,
+      message: assistantMessage,
+    };
+    await this.#append(
+      [{ type: 'assistant.settled', turnId, stepId, settlement: attempt.settlement }],
+      signal,
+    );
+    attempt.settlementPersisted = true;
+
+    for (const call of attempt.observedToolCalls) {
+      const result = await this.#executeToolCall(
+        call,
+        turnId,
+        stepId,
+        attempt.attemptId,
+        signal,
+        execution,
+      );
+      attempt.toolResults.set(call.id, result);
+      await this.#append([{ type: 'tool.completed', turnId, stepId, result }], signal);
+      attempt.persistedToolResults.add(call.id);
+    }
+
+    await this.#append([{ type: 'step.ended', turnId, stepId, outcome: 'completed' }], signal);
+    step.ended = true;
+    return assistantMessage;
+  }
+
+  /** 准备并消费一次模型调用；prepare 失败时不会创建或消耗 attempt 身份。 */
+  async #runModelAttempt(
+    request: ModelRequest,
+    turnId: TurnId,
+    step: Step,
+    signal: AbortSignal,
+    execution: ExecutionMetadata | undefined,
+  ): Promise<Attempt> {
+    const stepId = step.stepId;
     const modelSignal = this.#deadlineSignal(signal, this.#modelAttemptTimeoutMs);
     const prepared = await this.#model.prepare(modelSignal);
     throwIfAborted(modelSignal);
@@ -354,13 +385,13 @@ export class Agent {
       persistedToolResults: new Set(),
     };
     step.attempt = attempt;
+    const executionScope = this.#executionObservationScope(execution);
     let outputBytes = 0;
     let inputTokens = 0;
     let outputTokens = 0;
     let usageSequence = 0;
     const modelStartedAt = this.#now();
 
-    // 提交模型开始事件
     if (modelStartedAt !== undefined) {
       this.#notifyObservation({
         type: 'model.invocation.started',
@@ -368,25 +399,23 @@ export class Agent {
         turnId,
         stepId,
         attemptId: attempt.attemptId,
-        ...executionEvent,
+        ...executionScope,
         startedAt: modelStartedAt,
       });
     }
 
     try {
-      // 循环获取模型流式生成时的中间输出
-      for await (const event of prepared.stream(request, modelSignal)) {
+      for await (const emittedEvent of prepared.stream(request, modelSignal)) {
         throwIfAborted(modelSignal);
+        const event = snapshotModelStreamEvent(emittedEvent);
         this.#notifyStream(event);
         switch (event.type) {
-          // 文本增量
           case 'text.delta':
             outputBytes += utf8ByteLength(event.text);
             this.#assertOutputBudget(outputBytes);
             attempt.partialText += event.text;
             break;
 
-          // 工具调用
           case 'tool.call':
             outputBytes += utf8ByteLength(JSON.stringify(event.call));
             this.#assertOutputBudget(outputBytes);
@@ -394,7 +423,6 @@ export class Agent {
             attempt.observedToolCalls.push(event.call);
             break;
 
-          // 使用量
           case 'usage':
             assertCumulativeUsage(event.inputTokens, event.outputTokens, inputTokens, outputTokens);
             usageSequence += 1;
@@ -404,7 +432,7 @@ export class Agent {
               turnId,
               stepId,
               attemptId: attempt.attemptId,
-              ...executionEvent,
+              ...executionScope,
               usageSequence,
               inputTokensDelta: event.inputTokens - inputTokens,
               outputTokensDelta: event.outputTokens - outputTokens,
@@ -416,6 +444,7 @@ export class Agent {
             assertNever(event);
         }
       }
+      throwIfAborted(modelSignal);
       if (modelStartedAt !== undefined) {
         this.#notifyObservation({
           type: 'model.invocation.finished',
@@ -423,7 +452,7 @@ export class Agent {
           turnId,
           stepId,
           attemptId: attempt.attemptId,
-          ...executionEvent,
+          ...executionScope,
           ...this.#withDuration(modelStartedAt),
           outcome: 'completed',
         });
@@ -436,7 +465,7 @@ export class Agent {
           turnId,
           stepId,
           attemptId: attempt.attemptId,
-          ...executionEvent,
+          ...executionScope,
           ...this.#withDuration(modelStartedAt),
           outcome: modelSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
           ...(error instanceof Error ? { errorName: error.name } : {}),
@@ -444,113 +473,49 @@ export class Agent {
       }
       throw error;
     }
-    throwIfAborted(signal);
+    return attempt;
+  }
 
-    // 构建 assistant 消息
-    const assistantMessage: AssistantMessage = {
-      id: this.#idReservations.message(this.#idGenerator.message()),
-      role: 'assistant',
-      content: attempt.partialText,
-      toolCalls: attempt.observedToolCalls,
-    };
+  /** 执行并规范化一次工具调用，保证已开始的调用恰好发出一个终态观测。 */
+  async #executeToolCall(
+    call: ToolCall,
+    turnId: TurnId,
+    stepId: StepId,
+    attemptId: AttemptId,
+    signal: AbortSignal,
+    execution: ExecutionMetadata | undefined,
+  ): Promise<ToolResult> {
+    const toolSignal = this.#deadlineSignal(signal, this.#toolTimeoutMs);
+    const executionScope = this.#executionObservationScope(execution);
+    const toolStartedAt = this.#now();
+    if (toolStartedAt !== undefined) {
+      this.#notifyObservation({
+        type: 'tool.invocation.started',
+        sessionId: this.#session.sessionId,
+        turnId,
+        stepId,
+        attemptId,
+        ...executionScope,
+        toolCallId: call.id,
+        toolName: call.name,
+        startedAt: toolStartedAt,
+      });
+    }
 
-    // 构建结算结果
-    attempt.settlement = {
-      status: 'completed',
-      attemptId: attempt.attemptId,
-      message: assistantMessage,
-    };
-
-    // 提交结算事件
-    await this.#append(
-      [
-        {
-          type: 'assistant.settled',
-          turnId,
-          stepId,
-          settlement: attempt.settlement,
-        },
-      ],
-      signal,
-    );
-    attempt.settlementPersisted = true;
-
-    // 执行工具调用
-    for (const call of attempt.observedToolCalls) {
-      const toolSignal = this.#deadlineSignal(signal, this.#toolTimeoutMs);
-      const toolStartedAt = this.#now();
+    try {
+      const result = await this.#tools.execute(call, {
+        signal: toolSignal,
+        ...(execution === undefined ? {} : { execution }),
+      });
+      throwIfAborted(toolSignal);
       if (toolStartedAt !== undefined) {
-        this.#notifyObservation({
-          type: 'tool.invocation.started',
-          sessionId: this.#session.sessionId,
-          turnId,
-          stepId,
-          attemptId: attempt.attemptId,
-          ...executionEvent,
-          toolCallId: call.id,
-          toolName: call.name,
-          startedAt: toolStartedAt,
-        });
-      }
-      let result: ToolResult;
-      let toolInvocationFinished = false;
-      try {
-        result = await this.#tools.execute(call, {
-          signal: toolSignal,
-          ...(execution === undefined ? {} : { execution }),
-        });
-      } catch (error) {
-        if (toolSignal.aborted && !signal.aborted) {
-          if (toolStartedAt !== undefined) {
-            this.#notifyObservation({
-              type: 'tool.invocation.finished',
-              sessionId: this.#session.sessionId,
-              turnId,
-              stepId,
-              attemptId: attempt.attemptId,
-              ...executionEvent,
-              toolCallId: call.id,
-              toolName: call.name,
-              ...this.#withDuration(toolStartedAt),
-              termination: 'cancelled',
-              ...(error instanceof Error ? { errorName: error.name } : {}),
-            });
-            toolInvocationFinished = true;
-          }
-          result = {
-            status: 'cancelled',
-            callId: call.id,
-            reason: `工具调用超过 toolTimeoutMs (${this.#toolTimeoutMs})`,
-          };
-        } else {
-          if (toolStartedAt !== undefined) {
-            this.#notifyObservation({
-              type: 'tool.invocation.finished',
-              sessionId: this.#session.sessionId,
-              turnId,
-              stepId,
-              attemptId: attempt.attemptId,
-              ...executionEvent,
-              toolCallId: call.id,
-              toolName: call.name,
-              ...this.#withDuration(toolStartedAt),
-              termination: toolSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
-              ...(error instanceof Error ? { errorName: error.name } : {}),
-            });
-          }
-          throw error;
-        }
-      }
-      result = this.#boundToolResult(result);
-      attempt.toolResults.set(call.id, result);
-      if (toolStartedAt !== undefined && !toolInvocationFinished) {
         this.#notifyObservation({
           type: 'tool.invocation.finished',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
-          attemptId: attempt.attemptId,
-          ...executionEvent,
+          attemptId,
+          ...executionScope,
           toolCallId: call.id,
           toolName: call.name,
           ...this.#withDuration(toolStartedAt),
@@ -558,15 +523,32 @@ export class Agent {
           resultStatus: result.status,
         });
       }
-      // 提交工具调用完成事件
-      await this.#append([{ type: 'tool.completed', turnId, stepId, result }], signal);
-      attempt.persistedToolResults.add(call.id);
+      return this.#boundToolResult(result);
+    } catch (error) {
+      if (toolStartedAt !== undefined) {
+        this.#notifyObservation({
+          type: 'tool.invocation.finished',
+          sessionId: this.#session.sessionId,
+          turnId,
+          stepId,
+          attemptId,
+          ...executionScope,
+          toolCallId: call.id,
+          toolName: call.name,
+          ...this.#withDuration(toolStartedAt),
+          termination: toolSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
+          ...(error instanceof Error ? { errorName: error.name } : {}),
+        });
+      }
+      if (toolSignal.aborted && !signal.aborted) {
+        return {
+          status: 'cancelled',
+          callId: call.id,
+          reason: `工具调用超过 toolTimeoutMs (${this.#toolTimeoutMs})`,
+        };
+      }
+      throw error;
     }
-
-    // 提交 step 结束事件
-    await this.#append([{ type: 'step.ended', turnId, stepId, outcome: 'completed' }], signal);
-    step.ended = true;
-    return assistantMessage;
   }
 
   /** 控制单次 run 的模型输出预算，避免模型无限输出。 */
@@ -612,7 +594,7 @@ export class Agent {
     }
   }
 
-  #executionEvent(execution: ExecutionMetadata | undefined): {
+  #executionObservationScope(execution: ExecutionMetadata | undefined): {
     readonly executionId?: ExecutionId;
   } {
     return execution === undefined ? {} : { executionId: execution.id };
@@ -652,36 +634,103 @@ export class Agent {
 
   /** 向 observer 派发LLM流事件（模型生成时的中间输出）；用于在 Agent 外部展示模型生成过程，不做持久化。 */
   #notifyStream(event: ModelStreamEvent): void {
-    for (const observer of this.#observers) {
-      try {
-        void Promise.resolve(observer.onStream?.(event)).catch(() => undefined);
-      } catch {
-        // 观察者只接收瞬态通知，其失败不能改变 Agent 生命周期。
-      }
-    }
+    this.#notifyObservers((observer) => observer.onStream?.(event));
   }
 
   /** 向 observer 派发已经成功提交的会话事实。 */
   #notifySessionEvent(envelope: EventEnvelope): void {
-    for (const observer of this.#observers) {
-      try {
-        void Promise.resolve(observer.onSessionEvent?.(envelope)).catch(() => undefined);
-      } catch {
-        // 观察者只接收提交后的通知，其失败不能改变 Agent 生命周期。
-      }
-    }
+    this.#notifyObservers((observer) => observer.onSessionEvent?.(envelope));
   }
 
   /** 向 observer 派发不进入会话日志的模型与工具调用观测信号。 */
   #notifyObservation(observation: ExecutionObservation): void {
+    this.#notifyObservers((observer) => observer.onObservation?.(observation));
+  }
+
+  #notifyObservers(deliver: (observer: AgentObserver) => void | Promise<void>): void {
     for (const observer of this.#observers) {
       try {
-        void Promise.resolve(observer.onObservation?.(observation)).catch(() => undefined);
+        void Promise.resolve(deliver(observer)).catch(() => undefined);
       } catch {
-        // 瞬态观测失败不能改变 Agent 生命周期。
+        // 观察者仅接收通知，其失败不能改变 Agent 生命周期。
       }
     }
   }
+}
+
+interface AcceptedRun {
+  readonly message: UserMessage;
+  readonly signal: AbortSignal;
+  readonly execution?: ExecutionMetadata;
+}
+
+/** 在跨越排队边界前校验并复制调用方输入。 */
+function acceptRun(message: UserMessage, options: AbortSignal | AgentRunOptions): AcceptedRun {
+  const shorthandSignal = isAbortSignal(options);
+  const signal = shorthandSignal ? options : (options.signal ?? new AbortController().signal);
+  const execution = freezeExecutionMetadata(shorthandSignal ? undefined : options.execution);
+  return Object.freeze({
+    message: snapshotUserMessage(message),
+    signal,
+    ...(execution === undefined ? {} : { execution }),
+  });
+}
+
+function snapshotUserMessage(message: UserMessage): UserMessage {
+  if (typeof message !== 'object' || message === null) {
+    throw new TypeError('message 必须是对象');
+  }
+  if (typeof message.id !== 'string' || message.id.length === 0) {
+    throw new TypeError('message.id 必须是非空字符串');
+  }
+  if (message.role !== 'user') {
+    throw new TypeError('message.role 必须是 user');
+  }
+  if (typeof message.content !== 'string') {
+    throw new TypeError('message.content 必须是字符串');
+  }
+  return Object.freeze({ id: message.id, role: message.role, content: message.content });
+}
+
+function assertPositiveInteger(name: string, value: number): void {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new TypeError(`${name} 必须是正整数`);
+  }
+}
+
+/** 在通知 observer 或保存工具调用前取得模型事件的不可变快照。 */
+function snapshotModelStreamEvent(event: ModelStreamEvent): ModelStreamEvent {
+  switch (event.type) {
+    case 'text.delta':
+      if (typeof event.text !== 'string') {
+        throw new TypeError('模型 text.delta.text 必须是字符串');
+      }
+      return Object.freeze({ type: event.type, text: event.text });
+    case 'tool.call':
+      return Object.freeze({ type: event.type, call: snapshotToolCall(event.call) });
+    case 'usage':
+      return Object.freeze({
+        type: event.type,
+        inputTokens: event.inputTokens,
+        outputTokens: event.outputTokens,
+      });
+    default:
+      return assertNever(event);
+  }
+}
+
+function snapshotToolCall(call: ToolCall): ToolCall {
+  if (typeof call !== 'object' || call === null) {
+    throw new TypeError('模型 tool.call.call 必须是对象');
+  }
+  if (typeof call.id !== 'string' || call.id.length === 0) {
+    throw new TypeError('模型 tool.call.call.id 必须是非空字符串');
+  }
+  if (typeof call.name !== 'string' || call.name.length === 0) {
+    throw new TypeError('模型 tool.call.call.name 必须是非空字符串');
+  }
+  assertJsonValue(call.input);
+  return Object.freeze({ id: call.id, name: call.name, input: freezeJsonValue(call.input) });
 }
 
 /** 计算模型事件文本的 UTF-8 字节数，供单次输出预算使用。 */
