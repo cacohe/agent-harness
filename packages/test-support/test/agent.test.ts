@@ -6,13 +6,13 @@ import { Agent } from '@agent-harness/core';
 import {
   AgentBusyError,
   AgentClosedError,
-  type AgentExecutionEvent,
   AgentIdCollisionError,
   analyzeSessionLifecycle,
   brandId,
   DirectToolSet,
   type EventEnvelope,
   type ExecutionId,
+  type ExecutionObservation,
   type MessageId,
   type SessionId,
   type SessionLog,
@@ -1150,6 +1150,7 @@ describe('Agent', () => {
   it('工具调用到达独立 deadline 后记录取消结果', async () => {
     const callId = brandId<'ToolCallId'>('call-timeout') as ToolCallId;
     const session = new InMemorySessionLog(sessionId);
+    const observed: ExecutionObservation[] = [];
     const model = new ScriptedModelProvider([
       {
         events: [{ type: 'tool.call', call: { id: callId, name: 'wait', input: {} } }],
@@ -1174,6 +1175,8 @@ describe('Agent', () => {
       toolTimeoutMs: 20,
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
 
     await expect(agent.run(user())).resolves.toMatchObject({ content: '继续执行' });
@@ -1184,6 +1187,14 @@ describe('Agent', () => {
       type: 'tool.completed',
       result: { status: 'cancelled' },
     });
+    expect(observed.filter((observation) => observation.type.startsWith('tool.'))).toEqual([
+      expect.objectContaining({ type: 'tool.invocation.started' }),
+      expect.objectContaining({
+        type: 'tool.invocation.finished',
+        termination: 'cancelled',
+        errorName: 'TimeoutError',
+      }),
+    ]);
   });
 
   it('普通会话 I/O 响应 run signal，并用一个独立信号提交 terminal batch', async () => {
@@ -1356,8 +1367,11 @@ describe('Agent', () => {
           onStream() {
             throw new Error('sync observer failed');
           },
-          onExecution() {
-            throw new Error('sync execution observer failed');
+          onSessionEvent() {
+            throw new Error('sync session observer failed');
+          },
+          onObservation() {
+            throw new Error('sync observation observer failed');
           },
         },
         {
@@ -1365,9 +1379,13 @@ describe('Agent', () => {
             seen.push(event.type);
             throw new Error('async observer failed');
           },
-          async onExecution(event) {
-            seen.push(event.type);
-            throw new Error('async execution observer failed');
+          async onSessionEvent(envelope) {
+            seen.push(envelope.event.type);
+            throw new Error('async session observer failed');
+          },
+          async onObservation(observation) {
+            seen.push(observation.type);
+            throw new Error('async observation observer failed');
           },
         },
       ],
@@ -1377,12 +1395,12 @@ describe('Agent', () => {
 
     expect(response.content).toBe('ok');
     expect(seen).toContain('text.delta');
-    expect(seen).toContain('session.event');
+    expect(seen).toContain('turn.started');
     expectClosed(await readEvents(session));
   });
 
   it('以注入时钟成对报告模型执行的开始与终态', async () => {
-    const observed: AgentExecutionEvent[] = [];
+    const observed: ExecutionObservation[] = [];
     const timestamps = [new Date('2026-10-13T00:00:00.000Z'), new Date('2026-10-13T00:00:00.025Z')];
     const agent = new Agent({
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
@@ -1393,22 +1411,26 @@ describe('Agent', () => {
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
       clock: { now: () => timestamps.shift() ?? new Date('invalid') },
-      observers: [{ onExecution: (event) => observed.push(event) }],
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
 
     await agent.run(user());
 
     expect(observed.filter((event) => event.type.startsWith('model.'))).toEqual([
       expect.objectContaining({
-        type: 'model.started',
+        type: 'model.invocation.started',
         startedAt: new Date('2026-10-13T00:00:00.000Z'),
       }),
-      expect.objectContaining({ type: 'model.completed', durationMs: 25 }),
+      expect.objectContaining({
+        type: 'model.invocation.finished',
+        outcome: 'completed',
+        durationMs: 25,
+      }),
     ]);
   });
 
   it('模型失败或取消时为已开始的调用报告对应终态', async () => {
-    const failedObserved: AgentExecutionEvent[] = [];
+    const failedObserved: ExecutionObservation[] = [];
     const failedAgent = new Agent({
       model: new ScriptedModelProvider([{ events: [], error: new Error('model failed') }]),
       session: new InMemorySessionLog(sessionId),
@@ -1418,16 +1440,20 @@ describe('Agent', () => {
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
       clock: { now: () => new Date() },
-      observers: [{ onExecution: (event) => failedObserved.push(event) }],
+      observers: [{ onObservation: (observation) => failedObserved.push(observation) }],
     });
 
     await expect(failedAgent.run(user())).rejects.toThrow('model failed');
     expect(failedObserved.filter((event) => event.type.startsWith('model.'))).toEqual([
-      expect.objectContaining({ type: 'model.started' }),
-      expect.objectContaining({ type: 'model.failed', errorName: 'Error' }),
+      expect.objectContaining({ type: 'model.invocation.started' }),
+      expect.objectContaining({
+        type: 'model.invocation.finished',
+        outcome: 'failed',
+        errorName: 'Error',
+      }),
     ]);
 
-    const cancelledObserved: AgentExecutionEvent[] = [];
+    const cancelledObserved: ExecutionObservation[] = [];
     let prepareStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       prepareStarted = resolve;
@@ -1453,7 +1479,7 @@ describe('Agent', () => {
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
       clock: { now: () => new Date() },
-      observers: [{ onExecution: (event) => cancelledObserved.push(event) }],
+      observers: [{ onObservation: (observation) => cancelledObserved.push(observation) }],
     });
     const controller = new AbortController();
     const run = cancelledAgent.run(user(), controller.signal);
@@ -1462,14 +1488,18 @@ describe('Agent', () => {
 
     await expect(run).rejects.toThrow('cancel model');
     expect(cancelledObserved.filter((event) => event.type.startsWith('model.'))).toEqual([
-      expect.objectContaining({ type: 'model.started' }),
-      expect.objectContaining({ type: 'model.cancelled', errorName: 'Error' }),
+      expect.objectContaining({ type: 'model.invocation.started' }),
+      expect.objectContaining({
+        type: 'model.invocation.finished',
+        outcome: 'cancelled',
+        errorName: 'Error',
+      }),
     ]);
   });
 
   it('工具抛错或取消时报告对应终态，终态 ToolResult 仍报告完成', async () => {
     const callId = brandId<'ToolCallId'>('call-1') as ToolCallId;
-    const createAgent = (execute: ScriptedToolSet['execute'], observed: AgentExecutionEvent[]) =>
+    const createAgent = (execute: ScriptedToolSet['execute'], observed: ExecutionObservation[]) =>
       new Agent({
         model: new ScriptedModelProvider([
           { events: [{ type: 'tool.call', call: { id: callId, name: 'lookup', input: {} } }] },
@@ -1485,20 +1515,24 @@ describe('Agent', () => {
         settlementSignals: new TestSettlementSignals(),
         prompts: defaultPrompts(),
         clock: { now: () => new Date() },
-        observers: [{ onExecution: (event) => observed.push(event) }],
+        observers: [{ onObservation: (observation) => observed.push(observation) }],
       });
 
-    const thrownObserved: AgentExecutionEvent[] = [];
+    const thrownObserved: ExecutionObservation[] = [];
     const thrownAgent = createAgent(async () => {
       throw new Error('tool failed');
     }, thrownObserved);
     await expect(thrownAgent.run(user())).rejects.toThrow('tool failed');
     expect(thrownObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
-      expect.objectContaining({ type: 'tool.started' }),
-      expect.objectContaining({ type: 'tool.failed', errorName: 'Error' }),
+      expect.objectContaining({ type: 'tool.invocation.started' }),
+      expect.objectContaining({
+        type: 'tool.invocation.finished',
+        termination: 'failed',
+        errorName: 'Error',
+      }),
     ]);
 
-    const cancelledThrownObserved: AgentExecutionEvent[] = [];
+    const cancelledThrownObserved: ExecutionObservation[] = [];
     let executionStarted!: () => void;
     const executionStartedPromise = new Promise<void>((resolve) => {
       executionStarted = resolve;
@@ -1517,19 +1551,27 @@ describe('Agent', () => {
     controller.abort(new Error('cancel tool'));
     await expect(cancelledRun).rejects.toThrow('cancel tool');
     expect(cancelledThrownObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
-      expect.objectContaining({ type: 'tool.started' }),
-      expect.objectContaining({ type: 'tool.cancelled', errorName: 'Error' }),
+      expect.objectContaining({ type: 'tool.invocation.started' }),
+      expect.objectContaining({
+        type: 'tool.invocation.finished',
+        termination: 'cancelled',
+        errorName: 'Error',
+      }),
     ]);
 
-    const resultObserved: AgentExecutionEvent[] = [];
+    const resultObserved: ExecutionObservation[] = [];
     const resultAgent = createAgent(
       async () => ({ status: 'cancelled', callId, reason: 'tool cancelled' }),
       resultObserved,
     );
     await resultAgent.run(user());
     expect(resultObserved.filter((event) => event.type.startsWith('tool.'))).toEqual([
-      expect.objectContaining({ type: 'tool.started' }),
-      expect.objectContaining({ type: 'tool.completed', status: 'cancelled' }),
+      expect.objectContaining({ type: 'tool.invocation.started' }),
+      expect.objectContaining({
+        type: 'tool.invocation.finished',
+        termination: 'returned',
+        resultStatus: 'cancelled',
+      }),
     ]);
   });
 
@@ -1556,7 +1598,8 @@ describe('Agent', () => {
 
   it('在提交会话事件后发送生命周期通知，并关联模型用量', async () => {
     const session = new InMemorySessionLog(sessionId);
-    const observed: AgentExecutionEvent[] = [];
+    const sessionEvents: EventEnvelope[] = [];
+    const observed: ExecutionObservation[] = [];
     const agent = new Agent({
       model: new ScriptedModelProvider([
         {
@@ -1573,29 +1616,21 @@ describe('Agent', () => {
       maxSteps: 4,
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
-      observers: [{ onExecution: (event) => observed.push(event) }],
+      observers: [
+        {
+          onSessionEvent: (envelope) => sessionEvents.push(envelope),
+          onObservation: (observation) => observed.push(observation),
+        },
+      ],
     });
 
     await agent.run(user());
 
-    expect(observed.map((event) => event.type)).toEqual([
-      'session.event',
-      'session.event',
-      'session.event',
-      'model.usage',
-      'model.usage',
-      'session.event',
-      'session.event',
-      'session.event',
+    expect(observed.map((observation) => observation.type)).toEqual([
+      'model.invocation.usage',
+      'model.invocation.usage',
     ]);
-    expect(
-      observed
-        .filter(
-          (event): event is Extract<AgentExecutionEvent, { type: 'session.event' }> =>
-            event.type === 'session.event',
-        )
-        .map((event) => event.envelope.event.type),
-    ).toEqual([
+    expect(sessionEvents.map((envelope) => envelope.event.type)).toEqual([
       'turn.started',
       'user.message',
       'step.started',
@@ -1603,8 +1638,8 @@ describe('Agent', () => {
       'step.ended',
       'turn.ended',
     ]);
-    expect(observed[3]).toMatchObject({
-      type: 'model.usage',
+    expect(observed[0]).toMatchObject({
+      type: 'model.invocation.usage',
       sessionId: 'session-1',
       turnId: 'turn-1',
       stepId: 'step-2',
@@ -1613,8 +1648,8 @@ describe('Agent', () => {
       inputTokensDelta: 12,
       outputTokensDelta: 3,
     });
-    expect(observed[4]).toMatchObject({
-      type: 'model.usage',
+    expect(observed[1]).toMatchObject({
+      type: 'model.invocation.usage',
       sessionId: 'session-1',
       turnId: 'turn-1',
       stepId: 'step-2',
@@ -1623,20 +1658,13 @@ describe('Agent', () => {
       inputTokensDelta: 0,
       outputTokensDelta: 2,
     });
-    expect(
-      observed
-        .filter(
-          (event): event is Extract<AgentExecutionEvent, { type: 'session.event' }> =>
-            event.type === 'session.event',
-        )
-        .map((event) => event.envelope.sequence),
-    ).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(sessionEvents.map((envelope) => envelope.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it('模型与工具观测事件携带已冻结的 executionId', async () => {
     const callId = brandId<'ToolCallId'>('call-observed-execution') as ToolCallId;
     const executionId = brandId<'ExecutionId'>('execution-observed') as ExecutionId;
-    const observed: AgentExecutionEvent[] = [];
+    const observed: ExecutionObservation[] = [];
     const agent = new Agent({
       model: new ScriptedModelProvider([
         {
@@ -1651,7 +1679,7 @@ describe('Agent', () => {
       settlementSignals: new TestSettlementSignals(),
       prompts: defaultPrompts(),
       clock: { now: () => new Date(0) },
-      observers: [{ onExecution: (event) => observed.push(event) }],
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
 
     await agent.run(user(), {
@@ -1662,16 +1690,15 @@ describe('Agent', () => {
       },
     });
 
-    const runtimeEvents = observed.filter((event) => event.type !== 'session.event');
-    expect(runtimeEvents).not.toHaveLength(0);
-    expect(runtimeEvents).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'model.started' })]),
+    expect(observed).not.toHaveLength(0);
+    expect(observed).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'model.invocation.started' })]),
     );
-    expect(runtimeEvents.every((event) => event.executionId === executionId)).toBe(true);
+    expect(observed.every((observation) => observation.executionId === executionId)).toBe(true);
   });
 
   it('以 sessionId 区分相同 attempt 标识符的不同会话用量', async () => {
-    const observed: AgentExecutionEvent[] = [];
+    const observed: ExecutionObservation[] = [];
     const run = async (id: SessionId): Promise<void> => {
       const agent = new Agent({
         model: new ScriptedModelProvider([
@@ -1685,7 +1712,7 @@ describe('Agent', () => {
         maxSteps: 4,
         settlementSignals: new TestSettlementSignals(),
         prompts: defaultPrompts(),
-        observers: [{ onExecution: (event) => observed.push(event) }],
+        observers: [{ onObservation: (observation) => observed.push(observation) }],
       });
       await agent.run(user());
     };
@@ -1695,14 +1722,16 @@ describe('Agent', () => {
     await run(secondSessionId);
 
     const usage = observed.filter(
-      (event): event is Extract<AgentExecutionEvent, { type: 'model.usage' }> =>
-        event.type === 'model.usage',
+      (
+        observation,
+      ): observation is Extract<ExecutionObservation, { type: 'model.invocation.usage' }> =>
+        observation.type === 'model.invocation.usage',
     );
     expect(usage).toHaveLength(2);
     expect(usage.map((event) => event.sessionId)).toEqual([sessionId, secondSessionId]);
     expect(usage.map(({ sessionId: _sessionId, ...identity }) => identity)).toEqual([
       {
-        type: 'model.usage',
+        type: 'model.invocation.usage',
         turnId: 'turn-1',
         stepId: 'step-2',
         attemptId: 'attempt-3',
@@ -1711,7 +1740,7 @@ describe('Agent', () => {
         outputTokensDelta: 1,
       },
       {
-        type: 'model.usage',
+        type: 'model.invocation.usage',
         turnId: 'turn-1',
         stepId: 'step-2',
         attemptId: 'attempt-3',
