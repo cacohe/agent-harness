@@ -295,12 +295,8 @@ export class SessionRegistry implements WebSessionController {
     const runtime = this.#factory.create(
       {
         onStream: (event) => events.publish('stream', event),
-        onExecution: (event) =>
-          events.publish(
-            'session',
-            event,
-            event.type === 'session.event' ? event.envelope.sequence : undefined,
-          ),
+        onSessionEvent: (envelope) =>
+          events.publish('session', { type: 'session.event', envelope }, envelope.sequence),
       },
       workspace,
     );

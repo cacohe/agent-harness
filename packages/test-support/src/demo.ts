@@ -54,10 +54,8 @@ export async function runDemo(): Promise<DemoRun> {
     clock: { now: () => new Date('2026-10-13T00:00:00.000Z') },
     observers: [
       {
-        onExecution: (event) => {
-          if (event.type !== 'session.event') {
-            executionEvents.push(event.type);
-          }
+        onObservation: (observation) => {
+          executionEvents.push(observation.type);
         },
       },
     ],

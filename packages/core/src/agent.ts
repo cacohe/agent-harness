@@ -2,7 +2,6 @@
 import {
   AgentBusyError,
   AgentClosedError,
-  type AgentExecutionEvent,
   type AgentIdGenerator,
   type AgentObserver,
   type AgentOptions,
@@ -11,8 +10,10 @@ import {
   type AssistantMessage,
   assertNever,
   type Clock,
+  type EventEnvelope,
   type ExecutionId,
   type ExecutionMetadata,
+  type ExecutionObservation,
   isAbortError,
   type ModelProvider,
   type ModelStreamEvent,
@@ -21,8 +22,8 @@ import {
   type SessionLog,
   SettlementPersistenceError,
   type SettlementSignalFactory,
-  type ToolSet,
   type ToolResult,
+  type ToolSet,
   type TurnId,
   type UserMessage,
 } from '@agent-harness/kernel';
@@ -361,8 +362,8 @@ export class Agent {
 
     // 提交模型开始事件
     if (modelStartedAt !== undefined) {
-      this.#notifyExecution({
-        type: 'model.started',
+      this.#notifyObservation({
+        type: 'model.invocation.started',
         sessionId: this.#session.sessionId,
         turnId,
         stepId,
@@ -397,8 +398,8 @@ export class Agent {
           case 'usage':
             assertCumulativeUsage(event.inputTokens, event.outputTokens, inputTokens, outputTokens);
             usageSequence += 1;
-            this.#notifyExecution({
-              type: 'model.usage',
+            this.#notifyObservation({
+              type: 'model.invocation.usage',
               sessionId: this.#session.sessionId,
               turnId,
               stepId,
@@ -416,26 +417,28 @@ export class Agent {
         }
       }
       if (modelStartedAt !== undefined) {
-        this.#notifyExecution({
-          type: 'model.completed',
+        this.#notifyObservation({
+          type: 'model.invocation.finished',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
           attemptId: attempt.attemptId,
           ...executionEvent,
           ...this.#withDuration(modelStartedAt),
+          outcome: 'completed',
         });
       }
     } catch (error) {
       if (modelStartedAt !== undefined) {
-        this.#notifyExecution({
-          type: modelSignal.aborted || isAbortError(error) ? 'model.cancelled' : 'model.failed',
+        this.#notifyObservation({
+          type: 'model.invocation.finished',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
           attemptId: attempt.attemptId,
           ...executionEvent,
           ...this.#withDuration(modelStartedAt),
+          outcome: modelSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
           ...(error instanceof Error ? { errorName: error.name } : {}),
         });
       }
@@ -477,8 +480,8 @@ export class Agent {
       const toolSignal = this.#deadlineSignal(signal, this.#toolTimeoutMs);
       const toolStartedAt = this.#now();
       if (toolStartedAt !== undefined) {
-        this.#notifyExecution({
-          type: 'tool.started',
+        this.#notifyObservation({
+          type: 'tool.invocation.started',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
@@ -504,8 +507,8 @@ export class Agent {
           };
         } else {
           if (toolStartedAt !== undefined) {
-            this.#notifyExecution({
-              type: toolSignal.aborted || isAbortError(error) ? 'tool.cancelled' : 'tool.failed',
+            this.#notifyObservation({
+              type: 'tool.invocation.finished',
               sessionId: this.#session.sessionId,
               turnId,
               stepId,
@@ -514,6 +517,7 @@ export class Agent {
               toolCallId: call.id,
               toolName: call.name,
               ...this.#withDuration(toolStartedAt),
+              termination: toolSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
               ...(error instanceof Error ? { errorName: error.name } : {}),
             });
           }
@@ -523,8 +527,8 @@ export class Agent {
       result = this.#boundToolResult(result);
       attempt.toolResults.set(call.id, result);
       if (toolStartedAt !== undefined) {
-        this.#notifyExecution({
-          type: 'tool.completed',
+        this.#notifyObservation({
+          type: 'tool.invocation.finished',
           sessionId: this.#session.sessionId,
           turnId,
           stepId,
@@ -533,7 +537,8 @@ export class Agent {
           toolCallId: call.id,
           toolName: call.name,
           ...this.#withDuration(toolStartedAt),
-          status: result.status,
+          termination: 'returned',
+          resultStatus: result.status,
         });
       }
       // 提交工具调用完成事件
@@ -624,7 +629,7 @@ export class Agent {
   async #append(events: readonly SessionEvent[], signal: AbortSignal): Promise<void> {
     const appended = await this.#session.append(events, { signal });
     for (const envelope of appended) {
-      this.#notifyExecution({ type: 'session.event', envelope });
+      this.#notifySessionEvent(envelope);
     }
   }
 
@@ -639,13 +644,24 @@ export class Agent {
     }
   }
 
-  /** 向 observer 派发结构化执行事件（模型生成时的使用量、工具调用结果等），与持久化的会话日志一致。 */
-  #notifyExecution(event: AgentExecutionEvent): void {
+  /** 向 observer 派发已经成功提交的会话事实。 */
+  #notifySessionEvent(envelope: EventEnvelope): void {
     for (const observer of this.#observers) {
       try {
-        void Promise.resolve(observer.onExecution?.(event)).catch(() => undefined);
+        void Promise.resolve(observer.onSessionEvent?.(envelope)).catch(() => undefined);
       } catch {
-        // 观察者只接收执行通知，其失败不能改变 Agent 生命周期。
+        // 观察者只接收提交后的通知，其失败不能改变 Agent 生命周期。
+      }
+    }
+  }
+
+  /** 向 observer 派发不进入会话日志的模型与工具调用观测信号。 */
+  #notifyObservation(observation: ExecutionObservation): void {
+    for (const observer of this.#observers) {
+      try {
+        void Promise.resolve(observer.onObservation?.(observation)).catch(() => undefined);
+      } catch {
+        // 瞬态观测失败不能改变 Agent 生命周期。
       }
     }
   }

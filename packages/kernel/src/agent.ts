@@ -1,14 +1,8 @@
 import type { Clock, PromptAssembler } from './context/protocol.js';
-import type {
-  AttemptId,
-  ExecutionId,
-  MessageId,
-  SessionId,
-  StepId,
-  TurnId,
-} from './identifiers.js';
-import type { ModelProvider, ModelStreamEvent } from './model.js';
-import type { EventEnvelope, SessionLog, TurnOutcome } from './session/protocol.js';
+import type { AttemptId, ExecutionId, MessageId, StepId, TurnId } from './identifiers.js';
+import type { ModelProvider } from './model.js';
+import type { AgentObserver } from './observability/protocol.js';
+import type { SessionLog, TurnOutcome } from './session/protocol.js';
 import type { ToolCallId, ToolSet } from './tools/protocol.js';
 
 /** 当前 Agent 状态。 */
@@ -23,84 +17,6 @@ export interface AgentIdGenerator {
   attempt(): AttemptId;
   message(): MessageId;
 }
-
-/** 观察 Agent 生命周期事件的回调。 */
-export interface AgentObserver {
-  onStream?(event: ModelStreamEvent): void | Promise<void>;
-  onExecution?(event: AgentExecutionEvent): void | Promise<void>;
-}
-
-/** Agent 生命周期事件。 */
-export type AgentExecutionEvent =
-  | { readonly type: 'session.event'; readonly envelope: EventEnvelope }
-  | {
-      readonly type: 'model.started';
-      readonly sessionId: SessionId;
-      readonly turnId: TurnId;
-      readonly stepId: StepId;
-      readonly attemptId: AttemptId;
-      readonly executionId?: ExecutionId;
-      readonly startedAt: Date;
-    }
-  | {
-      readonly type: 'model.completed' | 'model.failed' | 'model.cancelled';
-      readonly sessionId: SessionId;
-      readonly turnId: TurnId;
-      readonly stepId: StepId;
-      readonly attemptId: AttemptId;
-      readonly executionId?: ExecutionId;
-      /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
-      readonly durationMs?: number;
-      readonly errorName?: string;
-    }
-  | {
-      readonly type: 'tool.started';
-      readonly sessionId: SessionId;
-      readonly turnId: TurnId;
-      readonly stepId: StepId;
-      readonly attemptId: AttemptId;
-      readonly executionId?: ExecutionId;
-      readonly toolCallId: ToolCallId;
-      readonly toolName: string;
-      readonly startedAt: Date;
-    }
-  | {
-      readonly type: 'tool.completed';
-      readonly sessionId: SessionId;
-      readonly turnId: TurnId;
-      readonly stepId: StepId;
-      readonly attemptId: AttemptId;
-      readonly executionId?: ExecutionId;
-      readonly toolCallId: ToolCallId;
-      readonly toolName: string;
-      /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
-      readonly durationMs?: number;
-      readonly status: 'success' | 'failure' | 'cancelled' | 'unknown';
-    }
-  | {
-      readonly type: 'tool.failed' | 'tool.cancelled';
-      readonly sessionId: SessionId;
-      readonly turnId: TurnId;
-      readonly stepId: StepId;
-      readonly attemptId: AttemptId;
-      readonly executionId?: ExecutionId;
-      readonly toolCallId: ToolCallId;
-      readonly toolName: string;
-      /** 时钟不可用时省略，不能影响已开始的观测生命周期。 */
-      readonly durationMs?: number;
-      readonly errorName?: string;
-    }
-  | {
-      readonly type: 'model.usage';
-      readonly sessionId: SessionId;
-      readonly turnId: TurnId;
-      readonly stepId: StepId;
-      readonly attemptId: AttemptId;
-      readonly executionId?: ExecutionId;
-      readonly usageSequence: number;
-      readonly inputTokensDelta: number;
-      readonly outputTokensDelta: number;
-    };
 
 /** 创建一个用于结算的 AbortSignal。 */
 export interface SettlementSignalFactory {

@@ -6,6 +6,7 @@ export * from './exhaustiveness.js';
 export * from './identifiers.js';
 export * from './memory/protocol.js';
 export * from './model.js';
+export * from './observability/protocol.js';
 export * from './serialization.js';
 export { analyzeSessionLifecycle } from './session/lifecycle.js';
 export * from './session/protocol.js';
