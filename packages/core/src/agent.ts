@@ -375,7 +375,7 @@ export class Agent {
     const stepId = step.stepId;
     const modelSignal = this.#deadlineSignal(signal, this.#modelAttemptTimeoutMs);
     const prepared = await this.#model.prepare(modelSignal);
-    throwIfAborted(modelSignal);
+    this.#throwIfDeadlineAborted(signal, modelSignal);
     const attempt: Attempt = {
       attemptId: this.#idReservations.attempt(this.#idGenerator.attempt()),
       partialText: '',
@@ -406,7 +406,7 @@ export class Agent {
 
     try {
       for await (const emittedEvent of prepared.stream(request, modelSignal)) {
-        throwIfAborted(modelSignal);
+        this.#throwIfDeadlineAborted(signal, modelSignal);
         const event = snapshotModelStreamEvent(emittedEvent);
         this.#notifyStream(event);
         switch (event.type) {
@@ -444,7 +444,7 @@ export class Agent {
             assertNever(event);
         }
       }
-      throwIfAborted(modelSignal);
+      this.#throwIfDeadlineAborted(signal, modelSignal);
       if (modelStartedAt !== undefined) {
         this.#notifyObservation({
           type: 'model.invocation.finished',
@@ -458,6 +458,7 @@ export class Agent {
         });
       }
     } catch (error) {
+      const terminalError = this.#deadlineError(error, signal, modelSignal);
       if (modelStartedAt !== undefined) {
         this.#notifyObservation({
           type: 'model.invocation.finished',
@@ -467,11 +468,11 @@ export class Agent {
           attemptId: attempt.attemptId,
           ...executionScope,
           ...this.#withDuration(modelStartedAt),
-          outcome: modelSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
-          ...(error instanceof Error ? { errorName: error.name } : {}),
+          outcome: modelSignal.aborted || isAbortError(terminalError) ? 'cancelled' : 'failed',
+          ...(terminalError instanceof Error ? { errorName: terminalError.name } : {}),
         });
       }
-      throw error;
+      throw terminalError;
     }
     return attempt;
   }
@@ -503,11 +504,12 @@ export class Agent {
     }
 
     try {
-      const result = await this.#tools.execute(call, {
+      const returned = await this.#tools.execute(call, {
         signal: toolSignal,
         ...(execution === undefined ? {} : { execution }),
       });
-      throwIfAborted(toolSignal);
+      this.#throwIfDeadlineAborted(signal, toolSignal);
+      const result = this.#boundToolResult(this.#snapshotToolResult(call, returned));
       if (toolStartedAt !== undefined) {
         this.#notifyObservation({
           type: 'tool.invocation.finished',
@@ -523,8 +525,9 @@ export class Agent {
           resultStatus: result.status,
         });
       }
-      return this.#boundToolResult(result);
+      return result;
     } catch (error) {
+      const terminalError = this.#deadlineError(error, signal, toolSignal);
       if (toolStartedAt !== undefined) {
         this.#notifyObservation({
           type: 'tool.invocation.finished',
@@ -536,8 +539,8 @@ export class Agent {
           toolCallId: call.id,
           toolName: call.name,
           ...this.#withDuration(toolStartedAt),
-          termination: toolSignal.aborted || isAbortError(error) ? 'cancelled' : 'failed',
-          ...(error instanceof Error ? { errorName: error.name } : {}),
+          termination: toolSignal.aborted || isAbortError(terminalError) ? 'cancelled' : 'failed',
+          ...(terminalError instanceof Error ? { errorName: terminalError.name } : {}),
         });
       }
       if (toolSignal.aborted && !signal.aborted) {
@@ -547,7 +550,7 @@ export class Agent {
           reason: `工具调用超过 toolTimeoutMs (${this.#toolTimeoutMs})`,
         };
       }
-      throw error;
+      throw terminalError;
     }
   }
 
@@ -561,6 +564,66 @@ export class Agent {
   /** 局部 deadline 只能缩短父 turn 的有效期，不能延长或绕过取消。 */
   #deadlineSignal(parent: AbortSignal, timeoutMs: number): AbortSignal {
     return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)]);
+  }
+
+  /** 父取消统一为 AbortError；局部 deadline 保留原始 TimeoutError。 */
+  #throwIfDeadlineAborted(parent: AbortSignal, deadline: AbortSignal): void {
+    if (parent.aborted) {
+      throwIfAborted(parent);
+    }
+    if (deadline.aborted) {
+      throw deadline.reason;
+    }
+  }
+
+  #deadlineError(error: unknown, parent: AbortSignal, deadline: AbortSignal): unknown {
+    try {
+      this.#throwIfDeadlineAborted(parent, deadline);
+      return error;
+    } catch (deadlineError) {
+      return deadlineError;
+    }
+  }
+
+  /** 校验 ToolSet 返回值与当前调用关联，并隔离实现方仍可修改的载荷。 */
+  #snapshotToolResult(call: ToolCall, result: ToolResult): ToolResult {
+    if (typeof result !== 'object' || result === null) {
+      throw new TypeError('工具结果必须是对象');
+    }
+    if (result.callId !== call.id) {
+      throw new TypeError(`工具结果 callId 必须匹配当前调用 (${call.id})`);
+    }
+    switch (result.status) {
+      case 'success':
+        assertJsonValue(result.output);
+        return Object.freeze({
+          status: result.status,
+          callId: call.id,
+          output: freezeJsonValue(result.output),
+        });
+      case 'failure':
+        if (
+          typeof result.error !== 'object' ||
+          result.error === null ||
+          typeof result.error.name !== 'string' ||
+          typeof result.error.message !== 'string'
+        ) {
+          throw new TypeError('工具失败结果必须包含字符串 name 与 message');
+        }
+        return Object.freeze({
+          status: result.status,
+          callId: call.id,
+          error: Object.freeze({ name: result.error.name, message: result.error.message }),
+        });
+      case 'cancelled':
+      case 'unknown':
+        if (typeof result.reason !== 'string') {
+          throw new TypeError(`工具 ${result.status} 结果必须包含字符串 reason`);
+        }
+        return Object.freeze({ status: result.status, callId: call.id, reason: result.reason });
+      default:
+        return assertNever(result);
+    }
   }
 
   /** 限制工具返回的可变载荷，避免其无限写入会话与后续 prompt。 */

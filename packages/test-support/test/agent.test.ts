@@ -19,6 +19,7 @@ import {
   type SessionLog,
   SettlementPersistenceError,
   type ToolCallId,
+  type ToolResult,
   type UserMessage,
 } from '@agent-harness/kernel';
 import {
@@ -1305,9 +1306,78 @@ describe('Agent', () => {
       expect.objectContaining({
         type: 'tool.invocation.finished',
         termination: 'cancelled',
-        errorName: 'AbortError',
+        errorName: 'TimeoutError',
       }),
     ]);
+  });
+
+  it('工具返回错误 callId 时在写入会话前拒绝结果', async () => {
+    const callId = brandId<'ToolCallId'>('call-expected') as ToolCallId;
+    const wrongCallId = brandId<'ToolCallId'>('call-wrong') as ToolCallId;
+    const session = new InMemorySessionLog(sessionId);
+    const observed: ExecutionObservation[] = [];
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        { events: [{ type: 'tool.call', call: { id: callId, name: 'lookup', input: {} } }] },
+      ]),
+      session,
+      tools: new ScriptedToolSet(
+        [{ name: 'lookup', description: '查询', inputSchema: {} }],
+        async () => ({ status: 'success', callId: wrongCallId, output: { ok: true } }),
+      ),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
+    });
+
+    await expect(agent.run(user())).rejects.toThrow('工具结果 callId 必须匹配当前调用');
+    const toolCompleted = (await readEvents(session)).find(
+      (envelope) => envelope.event.type === 'tool.completed',
+    )?.event;
+    expect(toolCompleted).toMatchObject({
+      type: 'tool.completed',
+      result: { status: 'failure', callId },
+    });
+    expect(toolCompleted).not.toMatchObject({ result: { callId: wrongCallId } });
+    expect(
+      observed.filter((observation) => observation.type === 'tool.invocation.finished'),
+    ).toEqual([expect.objectContaining({ termination: 'failed', errorName: 'TypeError' })]);
+  });
+
+  it('工具返回非法载荷时只发送一个调用终态观测', async () => {
+    const callId = brandId<'ToolCallId'>('call-invalid-result') as ToolCallId;
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const invalidResult = {
+      status: 'success',
+      callId,
+      output: cyclic,
+    } as unknown as ToolResult;
+    const observed: ExecutionObservation[] = [];
+    const agent = new Agent({
+      model: new ScriptedModelProvider([
+        { events: [{ type: 'tool.call', call: { id: callId, name: 'lookup', input: {} } }] },
+      ]),
+      session: new InMemorySessionLog(sessionId),
+      tools: new ScriptedToolSet(
+        [{ name: 'lookup', description: '查询', inputSchema: {} }],
+        async () => invalidResult,
+      ),
+      ids: new SequentialAgentIds(),
+      maxSteps: 4,
+      settlementSignals: new TestSettlementSignals(),
+      prompts: defaultPrompts(),
+      clock: { now: () => new Date(0) },
+      observers: [{ onObservation: (observation) => observed.push(observation) }],
+    });
+
+    await expect(agent.run(user())).rejects.toThrow('包含循环引用');
+    expect(
+      observed.filter((observation) => observation.type === 'tool.invocation.finished'),
+    ).toEqual([expect.objectContaining({ termination: 'failed', errorName: 'TypeError' })]);
   });
 
   it('普通会话 I/O 响应 run signal，并用一个独立信号提交 terminal batch', async () => {
@@ -1572,7 +1642,7 @@ describe('Agent', () => {
     });
   });
 
-  it('模型流在 deadline 后迟返时按取消结算', async () => {
+  it('模型流在 deadline 后迟返时按局部超时失败结算', async () => {
     const observed: ExecutionObservation[] = [];
     const session = new InMemorySessionLog(sessionId);
     const agent = new Agent({
@@ -1599,18 +1669,18 @@ describe('Agent', () => {
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
 
-    await expect(agent.run(user())).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(agent.run(user())).rejects.toMatchObject({ name: 'TimeoutError' });
     expect(observed.filter((observation) => observation.type.startsWith('model.'))).toEqual([
       expect.objectContaining({ type: 'model.invocation.started' }),
       expect.objectContaining({
         type: 'model.invocation.finished',
         outcome: 'cancelled',
-        errorName: 'AbortError',
+        errorName: 'TimeoutError',
       }),
     ]);
     expect((await readEvents(session)).at(-1)?.event).toMatchObject({
       type: 'turn.ended',
-      outcome: 'cancelled',
+      outcome: 'failed',
     });
   });
 
@@ -1707,7 +1777,7 @@ describe('Agent', () => {
       expect.objectContaining({
         type: 'model.invocation.finished',
         outcome: 'cancelled',
-        errorName: 'Error',
+        errorName: 'AbortError',
       }),
     ]);
   });
@@ -1770,7 +1840,7 @@ describe('Agent', () => {
       expect.objectContaining({
         type: 'tool.invocation.finished',
         termination: 'cancelled',
-        errorName: 'Error',
+        errorName: 'AbortError',
       }),
     ]);
 
