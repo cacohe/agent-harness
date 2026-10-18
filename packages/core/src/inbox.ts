@@ -1,11 +1,12 @@
-import type { AgentRunOptions, AssistantMessage, UserMessage } from '@agent-harness/kernel';
+import type { AssistantMessage, ExecutionMetadata, UserMessage } from '@agent-harness/kernel';
 
 /** 尚未开始的 turn；每个调用者只会收到自己消息对应的结果。 */
 export interface QueuedRun {
   readonly message: UserMessage;
-  readonly options: AbortSignal | AgentRunOptions;
-  readonly resolve: (message: AssistantMessage) => void; // 执行成功时，调用 resolve 通知调用者
-  readonly reject: (error: unknown) => void; // 执行失败时，调用 reject 通知调用者
+  readonly signal: AbortSignal;
+  readonly execution?: ExecutionMetadata;
+  readonly resolve: (message: AssistantMessage) => void;
+  readonly reject: (error: unknown) => void;
   readonly clearAbortListener: () => void;
 }
 

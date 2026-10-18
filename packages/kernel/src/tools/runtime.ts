@@ -1,6 +1,11 @@
 import type { ExecutionMetadata } from '../agent.js';
 import type { JsonValue } from '../serialization.js';
-import { assertJsonValue, isAbortError, serializeError } from '../serialization.js';
+import {
+  assertJsonValue,
+  freezeJsonValue,
+  isAbortError,
+  serializeError,
+} from '../serialization.js';
 import type {
   ExecutableTool,
   ModelToolDefinition,
@@ -68,7 +73,7 @@ export class SandboxToolSet implements ToolSet {
     return settleRegisteredCall(call, context, this.#definitions, (_tool, input) => {
       assertJsonValue(input);
       const task = Object.freeze({
-        call: Object.freeze({ ...call, input: freezeJson(input) }),
+        call: Object.freeze({ ...call, input: freezeJsonValue(input) }),
         ...(this.#workspace === undefined ? {} : { workspace: this.#workspace }),
         ...(this.#limits === undefined ? {} : { limits: this.#limits }),
       });
@@ -139,7 +144,7 @@ export class CompositeToolSet implements ToolSet {
           Object.freeze({
             name: definition.name,
             description: definition.description,
-            inputSchema: freezeJson(definition.inputSchema as JsonValue) as Readonly<
+            inputSchema: freezeJsonValue(definition.inputSchema as JsonValue) as Readonly<
               Record<string, unknown>
             >,
           }),
@@ -318,7 +323,7 @@ function denialReason(decision: unknown): string {
 
 function freezeToolCall(call: ToolCall): ToolCall {
   assertJsonValue(call.input);
-  return Object.freeze({ id: call.id, name: call.name, input: freezeJson(call.input) });
+  return Object.freeze({ id: call.id, name: call.name, input: freezeJsonValue(call.input) });
 }
 
 function freezeExecutionContext(
@@ -332,23 +337,4 @@ function freezeExecutionContext(
       authorizationVersion: context.execution.authorizationVersion,
     }),
   });
-}
-
-function freezeJson(value: JsonValue): JsonValue {
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map(freezeJson));
-  }
-  const copy: Record<string, JsonValue> = {};
-  for (const [key, child] of Object.entries(value)) {
-    Object.defineProperty(copy, key, {
-      value: freezeJson(child),
-      enumerable: true,
-      writable: false,
-      configurable: false,
-    });
-  }
-  return Object.freeze(copy);
 }
