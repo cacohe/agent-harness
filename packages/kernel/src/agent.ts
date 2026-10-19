@@ -37,13 +37,13 @@ export interface AgentOptions {
   readonly model: ModelProvider;
   readonly session: SessionLog;
   readonly tools: ToolSet;
-  readonly ids: AgentIdGenerator;
+  readonly idGenerator: AgentIdGenerator;
   readonly maxSteps: number;
-  readonly settlementSignals: SettlementSignalFactory;
+  readonly settlementSignalFactory: SettlementSignalFactory;
   /** 由组合方注入；执行观测不读取进程全局时间。 */
   readonly clock?: Clock;
   /** 由 Runtime 或 Host 显式注入；Core 不拥有默认 prompt 策略。 */
-  readonly prompts: PromptAssembler;
+  readonly promptAssembler: PromptAssembler;
   readonly runTimeoutMs?: number;
   /** 单次模型 prepare 与流式调用的协作式 deadline。 */
   readonly modelAttemptTimeoutMs?: number;
@@ -55,7 +55,7 @@ export interface AgentOptions {
   /** 等待 FIFO 领取的输入上限；不包含当前活动 turn。 */
   readonly maxQueuedRuns?: number;
   readonly observers?: readonly AgentObserver[];
-  readonly reservedIds?: AgentIdReservationSeed;
+  readonly idReservations?: AgentIdReservationSeed;
 }
 
 /** Agent 运行选项。 */

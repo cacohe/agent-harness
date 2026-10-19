@@ -88,10 +88,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const first = agent.run(user('first'));
     await firstStarted;
@@ -138,10 +138,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const first = agent.run(user('first'));
     await prepared;
@@ -204,11 +204,11 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       maxQueuedRuns: 1,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     const first = agent.run(user('first'));
@@ -254,10 +254,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const first = agent.run(user('first'));
     await firstStarted;
@@ -302,10 +302,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const first = agent.run(user('first'));
     await firstStarted;
@@ -348,10 +348,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const first = agent.run(user('first'));
     const second = first.then(() =>
@@ -377,10 +377,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: new BoundedPromptAssembler({
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: new BoundedPromptAssembler({
         maxInputBytes: 4096,
         contributors: [
           new RetrievedMemoryContext({
@@ -497,10 +497,10 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: new BoundedPromptAssembler({
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: new BoundedPromptAssembler({
         maxInputBytes: 4096,
         contributors: [
           new RetrievedMemoryContext({
@@ -529,10 +529,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: new BoundedPromptAssembler({
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: new BoundedPromptAssembler({
         maxInputBytes: 4096,
         contributors: [
           new EnabledSkillsContext({
@@ -601,10 +601,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: new BoundedPromptAssembler({
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: new BoundedPromptAssembler({
         maxInputBytes: 4096,
         systemPrompt: '基础人格与安全边界',
         contributors: [
@@ -638,10 +638,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 2,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await agent.run(user('执行'), {
@@ -713,10 +713,10 @@ describe('Agent', () => {
       model,
       session,
       tools,
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 3,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const execution = {
       id: brandId<'ExecutionId'>('execution-1') as ExecutionId,
@@ -740,11 +740,11 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'too large' }] }]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       maxModelOutputBytes: 1,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).rejects.toThrow('模型输出超过 maxModelOutputBytes');
@@ -773,11 +773,11 @@ describe('Agent', () => {
       ]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       modelAttemptTimeoutMs: 20,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     const running = agent.run(user());
@@ -801,11 +801,11 @@ describe('Agent', () => {
       ]),
       session,
       tools: new DirectToolSet([fakeTool('large', async () => ({ value: 'x'.repeat(128) }))]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       maxToolResultBytes: 32,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).resolves.toMatchObject({ content: '已处理' });
@@ -829,10 +829,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     const response = await agent.run(user());
@@ -872,10 +872,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([tool]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     const response = await agent.run(user('double it'));
@@ -930,10 +930,10 @@ describe('Agent', () => {
       model,
       session,
       tools,
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).resolves.toMatchObject({
@@ -953,10 +953,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     await agent.run(user('first'));
 
@@ -997,10 +997,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     await agent.run({
       id: brandId<'MessageId'>('first-user') as MessageId,
@@ -1045,10 +1045,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).rejects.toThrow('provider disconnected');
@@ -1084,10 +1084,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids,
+      idGenerator: ids,
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).rejects.toThrow('prepare failed');
@@ -1130,10 +1130,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids,
+      idGenerator: ids,
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const controller = new AbortController();
 
@@ -1185,10 +1185,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([tool]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
     const controller = new AbortController();
 
@@ -1238,11 +1238,11 @@ describe('Agent', () => {
       model,
       session,
       tools,
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       toolTimeoutMs: 20,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date(0) },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1287,11 +1287,11 @@ describe('Agent', () => {
       ]),
       session,
       tools,
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       toolTimeoutMs: 10,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date(0) },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1325,10 +1325,10 @@ describe('Agent', () => {
         [{ name: 'lookup', description: '查询', inputSchema: {} }],
         async () => ({ status: 'success', callId: wrongCallId, output: { ok: true } }),
       ),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date(0) },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1366,10 +1366,10 @@ describe('Agent', () => {
         [{ name: 'lookup', description: '查询', inputSchema: {} }],
         async () => invalidResult,
       ),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date(0) },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1406,10 +1406,10 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals,
-      prompts: defaultPrompts(),
+      settlementSignalFactory: settlementSignals,
+      promptAssembler: defaultPrompts(),
     });
     const controller = new AbortController();
 
@@ -1460,10 +1460,10 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals,
-      prompts: defaultPrompts(),
+      settlementSignalFactory: settlementSignals,
+      promptAssembler: defaultPrompts(),
     });
     const controller = new AbortController();
 
@@ -1504,10 +1504,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([fakeTool('lookup', async () => ({ ok: true }))]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 1,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).rejects.toThrow('agent exceeded maxSteps (1)');
@@ -1541,10 +1541,10 @@ describe('Agent', () => {
       model,
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       observers: [
         {
           onStream() {
@@ -1622,10 +1622,10 @@ describe('Agent', () => {
           return { status: 'success', callId: call.id, output: { ok: true } };
         },
       ),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       observers,
     });
     observers.push({ onStream: () => (appendedObserverCalled = true) });
@@ -1660,11 +1660,11 @@ describe('Agent', () => {
       },
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
       modelAttemptTimeoutMs: 10,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date(0) },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1691,10 +1691,10 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
       session: new InMemorySessionLog(sessionId),
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => timestamps.shift() ?? new Date('invalid') },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1720,10 +1720,10 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([{ events: [], error: new Error('model failed') }]),
       session: new InMemorySessionLog(sessionId),
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date() },
       observers: [{ onObservation: (observation) => failedObserved.push(observation) }],
     });
@@ -1759,10 +1759,10 @@ describe('Agent', () => {
       },
       session: new InMemorySessionLog(sessionId),
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date() },
       observers: [{ onObservation: (observation) => cancelledObserved.push(observation) }],
     });
@@ -1795,10 +1795,10 @@ describe('Agent', () => {
           [{ name: 'lookup', description: '查询', inputSchema: {} }],
           execute,
         ),
-        ids: new SequentialAgentIds(),
+        idGenerator: new SequentialAgentIds(),
         maxSteps: 4,
-        settlementSignals: new TestSettlementSignals(),
-        prompts: defaultPrompts(),
+        settlementSignalFactory: new TestSettlementSignals(),
+        promptAssembler: defaultPrompts(),
         clock: { now: () => new Date() },
         observers: [{ onObservation: (observation) => observed.push(observation) }],
       });
@@ -1866,10 +1866,10 @@ describe('Agent', () => {
       model: new ScriptedModelProvider([{ events: [{ type: 'text.delta', text: 'ok' }] }]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: {
         now: () => {
           throw new Error('clock failed');
@@ -1897,10 +1897,10 @@ describe('Agent', () => {
       ]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       observers: [
         {
           onSessionEvent: (envelope) => sessionEvents.push(envelope),
@@ -1959,10 +1959,10 @@ describe('Agent', () => {
       ]),
       session: new InMemorySessionLog(sessionId),
       tools: new DirectToolSet([fakeTool('lookup', async () => ({ ok: true }))]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
       clock: { now: () => new Date(0) },
       observers: [{ onObservation: (observation) => observed.push(observation) }],
     });
@@ -1993,10 +1993,10 @@ describe('Agent', () => {
         ]),
         session: new InMemorySessionLog(id),
         tools: new DirectToolSet([]),
-        ids: new SequentialAgentIds(),
+        idGenerator: new SequentialAgentIds(),
         maxSteps: 4,
-        settlementSignals: new TestSettlementSignals(),
-        prompts: defaultPrompts(),
+        settlementSignalFactory: new TestSettlementSignals(),
+        promptAssembler: defaultPrompts(),
         observers: [{ onObservation: (observation) => observed.push(observation) }],
       });
       await agent.run(user());
@@ -2049,10 +2049,10 @@ describe('Agent', () => {
       ]),
       session,
       tools: new DirectToolSet([]),
-      ids: new SequentialAgentIds(),
+      idGenerator: new SequentialAgentIds(),
       maxSteps: 4,
-      settlementSignals: new TestSettlementSignals(),
-      prompts: defaultPrompts(),
+      settlementSignalFactory: new TestSettlementSignals(),
+      promptAssembler: defaultPrompts(),
     });
 
     await expect(agent.run(user())).rejects.toThrow('inputTokens 必须是单调不减');

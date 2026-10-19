@@ -97,11 +97,11 @@ export class Agent {
     this.#model = options.model;
     this.#session = options.session;
     this.#tools = options.tools;
-    this.#idGenerator = options.ids;
+    this.#idGenerator = options.idGenerator;
     this.#maxSteps = options.maxSteps;
-    this.#settlementSignalFactory = options.settlementSignals;
+    this.#settlementSignalFactory = options.settlementSignalFactory;
     this.#clock = options.clock;
-    this.#promptAssembler = options.prompts;
+    this.#promptAssembler = options.promptAssembler;
     this.#runTimeoutMs = options.runTimeoutMs;
     this.#modelAttemptTimeoutMs = options.modelAttemptTimeoutMs ?? DEFAULT_MODEL_ATTEMPT_TIMEOUT_MS;
     this.#toolTimeoutMs = options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
@@ -109,7 +109,7 @@ export class Agent {
     this.#maxToolResultBytes = options.maxToolResultBytes ?? DEFAULT_MAX_TOOL_RESULT_BYTES;
     this.#maxQueuedRuns = options.maxQueuedRuns ?? DEFAULT_MAX_QUEUED_RUNS;
     this.#observers = Object.freeze([...(options.observers ?? [])]);
-    this.#idReservations = new AgentIdReservations(options.reservedIds);
+    this.#idReservations = new AgentIdReservations(options.idReservations);
   }
 
   get phase(): AgentPhase {
