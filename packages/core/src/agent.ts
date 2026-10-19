@@ -244,7 +244,7 @@ export class Agent {
     this.#phase = { kind: 'running', turnId: turn.turnId };
 
     try {
-      await this.#append(
+      await this.#persistAndNotifySessionEvents(
         [
           {
             type: 'turn.started',
@@ -257,7 +257,7 @@ export class Agent {
       turn.started = true;
 
       this.#idReservations.message(message.id);
-      await this.#append([{ type: 'user.message', message }], signal);
+      await this.#persistAndNotifySessionEvents([{ type: 'user.message', message }], signal);
 
       for (let stepNumber = 1; ; stepNumber += 1) {
         throwIfAborted(signal);
@@ -270,7 +270,7 @@ export class Agent {
         const messageFromStep = await this.#runStep(turn.turnId, step, signal, execution);
 
         if (messageFromStep.toolCalls.length === 0) {
-          await this.#append(
+          await this.#persistAndNotifySessionEvents(
             [{ type: 'turn.ended', turnId: turn.turnId, outcome: 'completed' }],
             signal,
           );
@@ -293,7 +293,7 @@ export class Agent {
       if (terminalEvents.length > 0) {
         try {
           const settlementSignal = this.#settlementSignalFactory.create();
-          await this.#append(terminalEvents, settlementSignal);
+          await this.#persistAndNotifySessionEvents(terminalEvents, settlementSignal);
         } catch (persistenceError) {
           throw new SettlementPersistenceError(error, persistenceError, outcome);
         }
@@ -316,7 +316,7 @@ export class Agent {
     execution: ExecutionMetadata | undefined,
   ): Promise<AssistantMessage> {
     const stepId = step.stepId;
-    await this.#append([{ type: 'step.started', turnId, stepId }], signal);
+    await this.#persistAndNotifySessionEvents([{ type: 'step.started', turnId, stepId }], signal);
     step.started = true;
     throwIfAborted(signal);
 
@@ -339,7 +339,7 @@ export class Agent {
       attemptId: attempt.attemptId,
       message: assistantMessage,
     };
-    await this.#append(
+    await this.#persistAndNotifySessionEvents(
       [{ type: 'assistant.settled', turnId, stepId, settlement: attempt.settlement }],
       signal,
     );
@@ -355,11 +355,17 @@ export class Agent {
         execution,
       );
       attempt.toolResults.set(call.id, result);
-      await this.#append([{ type: 'tool.completed', turnId, stepId, result }], signal);
+      await this.#persistAndNotifySessionEvents(
+        [{ type: 'tool.completed', turnId, stepId, result }],
+        signal,
+      );
       attempt.persistedToolResults.add(call.id);
     }
 
-    await this.#append([{ type: 'step.ended', turnId, stepId, outcome: 'completed' }], signal);
+    await this.#persistAndNotifySessionEvents(
+      [{ type: 'step.ended', turnId, stepId, outcome: 'completed' }],
+      signal,
+    );
     step.ended = true;
     return assistantMessage;
   }
@@ -509,7 +515,7 @@ export class Agent {
         ...(execution === undefined ? {} : { execution }),
       });
       this.#throwIfDeadlineAborted(signal, toolSignal);
-      const result = this.#boundToolResult(this.#snapshotToolResult(call, returned));
+      const result = this.#limitToolResultSize(this.#snapshotToolResult(call, returned));
       if (toolStartedAt !== undefined) {
         this.#notifyObservation({
           type: 'tool.invocation.finished',
@@ -627,7 +633,7 @@ export class Agent {
   }
 
   /** 限制工具返回的可变载荷，避免其无限写入会话与后续 prompt。 */
-  #boundToolResult(result: ToolResult): ToolResult {
+  #limitToolResultSize(result: ToolResult): ToolResult {
     const bytes = utf8ByteLength(JSON.stringify(this.#toolResultPayload(result)));
     if (bytes <= this.#maxToolResultBytes) {
       return result;
@@ -688,7 +694,10 @@ export class Agent {
   }
 
   /** 提交会话事件，并向 observer 发送与持久化事实一致的通知。 */
-  async #append(events: readonly SessionEvent[], signal: AbortSignal): Promise<void> {
+  async #persistAndNotifySessionEvents(
+    events: readonly SessionEvent[],
+    signal: AbortSignal,
+  ): Promise<void> {
     const appended = await this.#session.append(events, { signal });
     for (const envelope of appended) {
       this.#notifySessionEvent(envelope);
