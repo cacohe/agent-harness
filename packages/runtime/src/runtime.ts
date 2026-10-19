@@ -199,11 +199,11 @@ export class AgentRuntime {
             this.#options.toolPolicy === undefined
               ? this.#options.tools
               : new PolicyControlledToolSet(this.#options.tools, this.#options.toolPolicy),
-          ids: generatedIds,
+          idGenerator: generatedIds,
           maxSteps: this.#options.maxSteps,
-          settlementSignals: this.#settlementSignals,
+          settlementSignalFactory: this.#settlementSignals,
           clock: this.#options.clock ?? new SystemClock(),
-          prompts:
+          promptAssembler:
             this.#options.prompts ??
             new BoundedPromptAssembler({
               maxInputBytes: this.#options.maxInputBytes ?? DEFAULT_MAX_INPUT_BYTES,
@@ -219,7 +219,7 @@ export class AgentRuntime {
           maxToolResultBytes: this.#options.maxToolResultBytes ?? DEFAULT_MAX_TOOL_RESULT_BYTES,
           maxQueuedRuns: this.#options.maxQueuedRuns ?? DEFAULT_MAX_QUEUED_RUNS,
           ...(this.#options.observers === undefined ? {} : { observers: this.#options.observers }),
-          reservedIds: usedIds,
+          idReservations: usedIds,
         });
         const handle = new OwnedAgentHandle(agent, session, this.#options.settlementTimeoutMs, () =>
           this.#handles.delete(handle),

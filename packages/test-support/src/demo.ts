@@ -47,10 +47,10 @@ export async function runDemo(): Promise<DemoRun> {
     model,
     session,
     tools: new DirectToolSet([lookupRelease]),
-    ids: new SequentialAgentIds(),
+    idGenerator: new SequentialAgentIds(),
     maxSteps: 4,
-    settlementSignals: new TestSettlementSignals(),
-    prompts: new BoundedPromptAssembler({ maxInputBytes: 1_048_576 }),
+    settlementSignalFactory: new TestSettlementSignals(),
+    promptAssembler: new BoundedPromptAssembler({ maxInputBytes: 1_048_576 }),
     clock: { now: () => new Date('2026-10-13T00:00:00.000Z') },
     observers: [
       {
